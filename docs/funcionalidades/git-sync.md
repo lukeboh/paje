@@ -49,8 +49,10 @@ A TUI é iniciada ao executar `paje` sem parâmetros e selecionar **Sincronizar 
 2. Aplica filtros de repositórios (`filter`, `noPublicRepos`, `noArchivedRepos`).
 3. Calcula estado local e pré-seleção automática na árvore TUI (baseado em clones existentes).
 4. Renderiza árvore consolidada na TUI ou imprime árvore na CLI.
-5. Sincroniza os itens selecionados respeitando paralelismo e `dry-run`.
-6. Exibe resumo final e status por repositório.
+5. Na TUI, a confirmação é feita com **S** (não Enter) e dispara sincronização completa.
+6. Remove diretórios locais recém desmarcados (com confirmação quando há alterações locais).
+7. Sincroniza os itens selecionados respeitando paralelismo e `dry-run`.
+8. Exibe resumo final e status por repositório.
 
 ## Requisitos funcionais
 
@@ -71,12 +73,13 @@ A TUI é iniciada ao executar `paje` sem parâmetros e selecionar **Sincronizar 
 - `--sync-repos` aceita padrão `path_with_namespace[.git]#branch`.
 - `--parallels` aceita `AUTO`, `0` ou número ≥ 1.
 - `--dry-run` evita alterações reais, apenas reporta ações.
+- Diretórios desmarcados na TUI são removidos; a confirmação é exibida apenas para estados `UNCOMMITTED`, `AHEAD` e `DIVERGED`.
 - Logs são centralizados no LoggerBroker, com níveis configuráveis por transport (console/painel/arquivo).
 - O painel de logs da TUI deve espelhar o mesmo texto e ordem das mensagens da CLI, incluindo logs HTTP em modo `--verbose`.
 
 ## Saídas
 
-- Resumo final com estados: `SYNCED`, `BEHIND`, `AHEAD`, `REMOTE`, `EMPTY`, `LOCAL`, `UNCOMMITTED`.
+- Resumo final com estados: `SYNCED`, `BEHIND`, `AHEAD`, `DIVERGED`, `REMOTE`, `EMPTY`, `LOCAL`, `UNCOMMITTED`.
 - Logs detalhados quando `--verbose` está ativo.
 
 ## Erros conhecidos

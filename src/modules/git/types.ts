@@ -22,7 +22,15 @@ export type GitLabProject = {
   pajeServerName?: string;
 };
 
-export type RepoSyncState = "SYNCED" | "BEHIND" | "AHEAD" | "REMOTE" | "EMPTY" | "LOCAL" | "UNCOMMITTED";
+export type RepoSyncState =
+  | "SYNCED"
+  | "BEHIND"
+  | "AHEAD"
+  | "REMOTE"
+  | "EMPTY"
+  | "LOCAL"
+  | "UNCOMMITTED"
+  | "DIVERGED";
 
 export type RepoSyncStatus = {
   branch: string;

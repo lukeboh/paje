@@ -44,6 +44,9 @@ const resolveShortcutKey = (input: string, key: Key): string | null => {
   if (key.ctrl && input.toLowerCase() === "c") {
     return "Ctrl+C";
   }
+  if (key.ctrl && input.toLowerCase() === "s") {
+    return "Ctrl+S";
+  }
   if (key.return) {
     return "Enter";
   }
@@ -147,7 +150,8 @@ const buildGroups = (options: { logMaximized: boolean; workspaceMaximized: boole
         { id: "tree-nav-page", key: "PgUp/PgDn", description: t("helpModal.shortcuts.tree.navPage"), contexts: ["tree"] },
         { id: "tree-nav-edge", key: "Home/End", description: t("helpModal.shortcuts.tree.navEdge"), contexts: ["tree"] },
         { id: "tree-toggle", key: "Espaço", description: t("helpModal.shortcuts.tree.toggle"), contexts: ["tree"] },
-        { id: "tree-confirm", key: "Enter", description: t("helpModal.shortcuts.tree.confirm"), contexts: ["tree"] },
+        { id: "tree-confirm", key: "S", description: t("helpModal.shortcuts.tree.confirm"), contexts: ["tree"] },
+        { id: "tree-confirm-single", key: "Ctrl+S", description: t("helpModal.shortcuts.tree.confirmSingle"), contexts: ["tree"] },
         { id: "tree-filter", key: "C", description: t("helpModal.shortcuts.tree.filter"), contexts: ["tree"] },
         { id: "tree-branch", key: "B", description: t("helpModal.shortcuts.tree.branch"), contexts: ["tree"] },
       ],

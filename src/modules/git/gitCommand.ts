@@ -22,7 +22,7 @@ import {
   recomputeTreeSelection,
   toggleTreeNode,
 } from "./treeBuilder.js";
-import { renderLoadingScreen, renderRepositoryTree, type TuiTreeProgress } from "./tui.js";
+import { renderLoadingScreen, renderRepositoryTree, type TuiSelectionResult, type TuiTreeProgress } from "./tui.js";
 import {
   getAheadBehind,
   getStatusPorcelain,
@@ -40,7 +40,7 @@ import {
   RepoSyncStatus,
   RepoSyncState,
 } from "./types.js";
-import { parallelSync, runGit, type ProgressEvent, resolveConcurrency } from "./parallelSync.js";
+import { parallelSync, runGit, type ProgressEvent, type SyncResult, resolveConcurrency } from "./parallelSync.js";
 import { LoggerBroker } from "./core/loggerBroker.js";
 import {
   createConsoleTransport,
@@ -246,6 +246,7 @@ const STATUS_COLOR: Record<RepoSyncState, string> = {
   SYNCED: "green",
   BEHIND: "red",
   AHEAD: "blue",
+  DIVERGED: "magenta",
   REMOTE: "orange",
   EMPTY: "magenta",
   LOCAL: "red",
@@ -303,6 +304,7 @@ const createSummary = (): RepoSummary => ({
     SYNCED: 0,
     BEHIND: 0,
     AHEAD: 0,
+    DIVERGED: 0,
     REMOTE: 0,
     EMPTY: 0,
     LOCAL: 0,
@@ -318,6 +320,7 @@ const renderSummaryLines = (summary: RepoSummary): string[] => {
     [t("cli.summary.synced"), summary.byStatus.SYNCED],
     [t("cli.summary.behind"), summary.byStatus.BEHIND],
     [t("cli.summary.ahead"), summary.byStatus.AHEAD],
+    [t("cli.summary.diverged"), summary.byStatus.DIVERGED],
     [t("cli.summary.remote"), summary.byStatus.REMOTE],
     [t("cli.summary.empty"), summary.byStatus.EMPTY],
     [t("cli.summary.local"), summary.byStatus.LOCAL],
@@ -591,7 +594,7 @@ const resolveRepoStatus = async (options: {
   if (ahead > 0 && behind === 0) {
     return { branch, state: "AHEAD", delta: `+${ahead}` };
   }
-  return { branch, state: "AHEAD", delta: `+${ahead}/-${behind}` };
+  return { branch, state: "DIVERGED", delta: `+${ahead}/-${behind}` };
 };
 
 const buildLocalStatusMap = async (
@@ -616,6 +619,50 @@ const buildLocalStatusMap = async (
     localPaths,
     statusMap: Object.fromEntries(statusEntries),
   };
+};
+
+export const shouldConfirmRemoval = (status?: RepoSyncStatus): boolean => {
+  if (!status) {
+    return false;
+  }
+  if (status.state === "UNCOMMITTED") {
+    return true;
+  }
+  if (status.state === "AHEAD") {
+    return true;
+  }
+  if (status.state === "DIVERGED") {
+    return true;
+  }
+  return false;
+};
+
+const confirmRemoval = async (options: {
+  repoLabel: string;
+  status?: RepoSyncStatus;
+  session?: TuiSession;
+}): Promise<boolean> => {
+  if (!shouldConfirmRemoval(options.status)) {
+    return true;
+  }
+  const message = t("cli.progress.removeConfirm", { repo: options.repoLabel });
+  if (options.session) {
+    const confirmed = await options.session.promptConfirm({
+      title: t("app.gitSyncTitle"),
+      message,
+      defaultValue: false,
+    });
+    return Boolean(confirmed);
+  }
+  const response = (await inquirer.prompt([
+    {
+      type: "confirm",
+      name: "confirm",
+      message,
+      default: false,
+    },
+  ])) as { confirm: boolean };
+  return Boolean(response.confirm);
 };
 
 type SshKeyStoreCliOptions = {
@@ -2646,10 +2693,11 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
       }
 
       const defaultBaseDir = mergedOptions.baseDir ?? "repos";
+      const resolvedPaths = resolveLocalPathConflicts(filteredProjects);
       await ensureLocalDirsIfNeeded(filteredProjects, defaultBaseDir, mergedOptions.prepareLocalDirs ?? false);
       const statusEntries = await Promise.all(
         filteredProjects.map(async (project) => {
-          const targetPath = path.join(defaultBaseDir, resolveProjectLocalPath(project));
+          const targetPath = path.join(defaultBaseDir, resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project));
           const status = await resolveRepoStatus({
             targetPath,
             defaultBranch: project.default_branch,
@@ -2660,7 +2708,9 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
       );
       const statusMap = Object.fromEntries(statusEntries) as Record<number, RepoSyncStatus>;
       const knownPaths = new Set(
-        filteredProjects.map((project) => path.join(defaultBaseDir, resolveProjectLocalPath(project)))
+        filteredProjects.map((project) =>
+          path.join(defaultBaseDir, resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project))
+        )
       );
       const localScan = mergedOptions.noSummary
         ? { localPaths: [], statusMap: {} as Record<string, RepoSyncStatus> }
@@ -2674,10 +2724,15 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
         });
         renderSummaryLines(summary).forEach((line) => logInfo(line));
       }
+      const projectNodeMap = new Map<number, string>();
       const applyStatusToTree = (node: GitLabTreeNode): void => {
         if (node.type === "project" && node.project) {
           node.status = statusMap[node.project.id];
-          node.localPath = path.join(defaultBaseDir, resolveProjectLocalPath(node.project));
+          node.localPath = path.join(
+            defaultBaseDir,
+            resolvedPaths.get(node.project.id) ?? resolveProjectLocalPath(node.project)
+          );
+          projectNodeMap.set(node.project.id, node.id);
           return;
         }
         node.children?.forEach((child) => applyStatusToTree(child));
@@ -2686,7 +2741,33 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
       applyInitialSelectionFromStatusMap(tree, statusMap);
 
       let treeProgress: TuiTreeProgress | null = null;
-      const tuiResult = await renderRepositoryTree(tree, (id) => toggleById(tree, id), session, {
+      const treeProgressRef = (): TuiTreeProgress | null => treeProgress;
+      const resolveResultLabel = (status: SyncResult["status"]): string => {
+        if (status === "cloned") {
+          return t("cli.sync.resultStatus.cloned");
+        }
+        if (status === "pulled") {
+          return t("cli.sync.resultStatus.pulled");
+        }
+        if (status === "pushed") {
+          return t("cli.sync.resultStatus.pushed");
+        }
+        if (status === "failed") {
+          return t("cli.sync.resultStatus.failed");
+        }
+        return t("cli.sync.resultStatus.skipped");
+      };
+      const buildProgressLabel = (event: ProgressEvent): string => {
+        const percent = Math.round(event.percent ?? 0);
+        const bar = renderProgressBar(percent, 100);
+        const percentLabel = `${percent.toString().padStart(3, " ")}%`;
+        const volumeLabel = parseMiB(event.transferred).padStart(9, " ");
+        const speedLabel = parseMiB(event.speed, true).padStart(10, " ");
+        const objectsLabel = formatObjects({ objectsReceived: event.objectsReceived, objectsTotal: event.objectsTotal }).padStart(9, " ");
+        return `${bar} ${percentLabel} ${volumeLabel} ${speedLabel} ${objectsLabel}`;
+      };
+
+      await renderRepositoryTree(tree, (id) => toggleById(tree, id), session, {
         header,
         footer: t("tui.tree.orientationConfirm"),
         parameters: session?.getParameters() ?? parametersSummary,
@@ -2694,22 +2775,188 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
           treeProgress = handlers.progress;
           handlers.render();
         },
+        onConfirm: async (selection: TuiSelectionResult) => {
+          if (!session) {
+            logBroker.warn(t("session.errorPrefix", { error: t("cli.log.tuiUnavailable") }));
+            return;
+          }
+
+          const selectionMode = selection.mode ?? "all";
+          let selected: GitLabProject[] = [];
+          if (selectionMode === "single") {
+            const targetNode = selection.selectedNodeId ? findNodeById(tree, selection.selectedNodeId) : undefined;
+            if (!targetNode || targetNode.type !== "project" || !targetNode.project) {
+              logBroker.warn(t("tui.tree.singleInvalid"));
+              return;
+            }
+            selected = [targetNode.project];
+          } else {
+            selected = collectSelectedProjects(tree);
+            if (selected.length === 0) {
+              logBroker.warn(t("tui.tree.empty"));
+              return;
+            }
+          }
+
+          if (selectionMode === "all") {
+            const selectedIds = new Set(selected.map((project) => project.id));
+            const removalCandidates = filteredProjects.filter((project) => !selectedIds.has(project.id));
+            for (const project of removalCandidates) {
+              const status = statusMap[project.id];
+              if (!status || status.state === "EMPTY") {
+                continue;
+              }
+              const localPath = path.join(defaultBaseDir, resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project));
+              if (!fs.existsSync(localPath)) {
+                continue;
+              }
+              const confirmed = await confirmRemoval({
+                repoLabel: project.path_with_namespace,
+                status,
+                session,
+              });
+              if (!confirmed) {
+                logBroker.warn(t("cli.sync.removeSkip", { repo: project.path_with_namespace }));
+                continue;
+              }
+              if (mergedOptions.dryRun) {
+                logBroker.info(t("cli.sync.removeDryRun", { repo: project.path_with_namespace }));
+                continue;
+              }
+              const nodeId = projectNodeMap.get(project.id);
+              const treeProgressInstance = treeProgressRef();
+              if (nodeId && treeProgressInstance) {
+                treeProgressInstance.updateProgress(nodeId, t("cli.sync.removeProgress"));
+              }
+              try {
+                await fs.promises.rm(localPath, { recursive: true, force: true });
+                if (nodeId) {
+                  const treeProgressInstance = treeProgressRef();
+                  treeProgressInstance?.clearProgress(nodeId);
+                  treeProgressInstance?.updateStatus(nodeId, {
+                    branch: project.default_branch ?? "main",
+                    state: "EMPTY",
+                  });
+                }
+                logBroker.info(t("cli.sync.removeDone", { repo: project.path_with_namespace }));
+              } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                if (nodeId) {
+                  treeProgressRef()?.clearProgress(nodeId);
+                }
+                logBroker.error(t("cli.sync.removeFail", { repo: project.path_with_namespace, message }));
+              }
+            }
+          }
+
+          const resolvedUserName = mergedOptions.username?.trim() || undefined;
+          const resolvedUserEmail = mergedOptions.userEmail?.trim() || undefined;
+          const syncSpecs = selectionMode === "single" ? [] : resolveSyncReposSpecs(mergedOptions.syncRepos);
+          const syncTargets = syncSpecs.length > 0
+            ? resolveSyncTargets(selected, syncSpecs).map((target) => ({
+                ...target,
+                localPath: path.join(defaultBaseDir, resolvedPaths.get(target.id) ?? target.pathWithNamespace),
+                gitUserName: resolvedUserName,
+                gitUserEmail: resolvedUserEmail,
+              }))
+            : prepareTargets(selected, defaultBaseDir, resolvedUserName, resolvedUserEmail).map((target) => ({
+                ...target,
+                localPath: path.join(defaultBaseDir, resolvedPaths.get(target.id) ?? target.pathWithNamespace),
+              }));
+
+          if (syncTargets.length === 0) {
+            logBroker.warn(t("cli.sync.noSyncMatches"));
+            return;
+          }
+
+          const concurrency = resolveParallels(mergedOptions.parallels);
+          const dryRunBadge = mergedOptions.dryRun ? "DRY-RUN" : "";
+          logBroker.info(
+            t("cli.sync.start", {
+              title: t("cli.sync.title"),
+              total: String(syncTargets.length),
+              concurrency: concurrency === "auto" ? t("cli.sync.concurrencyAuto") : String(concurrency),
+              dryRun: dryRunBadge,
+            })
+          );
+
+          const startedTargets = new Set<number>();
+          const syncResults = await parallelSync(
+            syncTargets,
+            {
+              concurrency,
+              shallow: false,
+              dryRun: mergedOptions.dryRun ?? false,
+              logger: (message, level) => logBroker.log(level ?? "info", message),
+            },
+            async (result) => {
+              logBroker.info(
+                t("cli.sync.repoDone", {
+                  repo: result.target.pathWithNamespace,
+                  status: resolveResultLabel(result.status),
+                })
+              );
+              const nodeId = projectNodeMap.get(result.target.id);
+              if (nodeId) {
+                treeProgressRef()?.clearProgress(nodeId);
+              }
+              const status = await resolveRepoStatus({
+                targetPath: result.target.localPath,
+                defaultBranch: result.target.defaultBranch,
+                knownRemote: true,
+              }).catch(() => undefined);
+              if (status && nodeId) {
+                treeProgressRef()?.updateStatus(nodeId, status);
+              }
+            },
+            (event) => {
+              if (!startedTargets.has(event.target.id)) {
+                startedTargets.add(event.target.id);
+                const phaseLabel = event.phase === "check" ? t("cli.sync.phaseCheck") : event.phase.toUpperCase();
+                logBroker.info(
+                  t("cli.sync.repoStart", {
+                    repo: event.target.pathWithNamespace,
+                    phase: phaseLabel,
+                  })
+                );
+              }
+              const nodeId = projectNodeMap.get(event.target.id);
+              if (!nodeId) {
+                return;
+              }
+              treeProgressRef()?.updateProgress(nodeId, buildProgressLabel(event));
+            }
+          );
+
+          const counts = syncResults.reduce(
+            (acc, result) => {
+              acc.total += 1;
+              if (result.status === "cloned") {
+                acc.cloned += 1;
+              } else if (result.status === "pulled") {
+                acc.pulled += 1;
+              } else if (result.status === "pushed") {
+                acc.pushed += 1;
+              } else if (result.status === "skipped") {
+                acc.skipped += 1;
+              } else if (result.status === "failed") {
+                acc.failed += 1;
+              }
+              return acc;
+            },
+            { total: 0, cloned: 0, pulled: 0, pushed: 0, skipped: 0, failed: 0 }
+          );
+          logBroker.info(t("cli.sync.summaryTitle"));
+          logBroker.info(
+            `${t("cli.sync.summary.total")} ${counts.total}  ` +
+              `${t("cli.sync.summary.cloned")} ${counts.cloned}  ` +
+              `${t("cli.sync.summary.pulled")} ${counts.pulled}  ` +
+              `${t("cli.sync.summary.pushed")} ${counts.pushed}  ` +
+              `${t("cli.sync.summary.skipped")} ${counts.skipped}  ` +
+              `${t("cli.sync.summary.failed")} ${counts.failed}`
+          );
+        },
       });
-      if (!tuiResult.confirmed) {
-        logBroker.warn(t("tui.tree.filterAll"));
-        return;
-      }
-
-      const selected = collectSelectedProjects(tree);
-      if (selected.length === 0) {
-        logBroker.warn(t("tui.tree.empty"));
-        return;
-      }
-
-      if (!session) {
-        logBroker.warn(t("session.errorPrefix", { error: t("cli.log.tuiUnavailable") }));
-        return;
-      }
 
       return;
     });

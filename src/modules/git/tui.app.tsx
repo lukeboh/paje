@@ -11,8 +11,12 @@ import { filterTreeBySelection } from "./treeBuilder.js";
 import { t } from "../../i18n/index.js";
 import { checkoutBranch, createBranchAndPush, listLocalBranches, resolveRepoStatus } from "./core/gitBranchService.js";
 
+export type TuiSelectionMode = "all" | "single";
+
 export type TuiSelectionResult = {
   confirmed: boolean;
+  mode?: TuiSelectionMode;
+  selectedNodeId?: string;
   nodes: GitLabTreeNode[];
 };
 
@@ -52,6 +56,7 @@ const STATUS_COLOR: Record<RepoSyncState, string> = {
   EMPTY: "magenta",
   LOCAL: "red",
   UNCOMMITTED: "red",
+  DIVERGED: "red",
 };
 
 const BRANCH_COLOR: Record<string, string> = {
@@ -125,7 +130,7 @@ const TreeRowComponent: React.FC<{ item: FlatTreeItem; selected: boolean }> = (
   const indicator = item.partiallySelected ? "[~]" : item.selected ? "[x]" : "[ ]";
   const indent = "  ".repeat(item.depth);
   const statusLabel = item.status ? renderStatusLabel(item.status) : null;
-  const progressLabel = item.progress ? ` ${item.progress}` : "";
+  const progressLabel = item.progress ? item.progress : "";
   const textColor = selected ? "white" : undefined;
   const backgroundColor = selected ? "blue" : undefined;
 
@@ -135,19 +140,21 @@ const TreeRowComponent: React.FC<{ item: FlatTreeItem; selected: boolean }> = (
         {indent}
         {indicator} {item.label}
       </Text>
-      {statusLabel && (
-        <Text color={textColor} backgroundColor={backgroundColor}>
-          {" "}[
-          <Text color={statusLabel.branchColor ?? textColor}>{statusLabel.branch}</Text>
-          {", "}
-          <Text color={statusLabel.stateColor ?? textColor}>{statusLabel.state}</Text>]
-        </Text>
-      )}
-      {progressLabel && (
-        <Text color={textColor} backgroundColor={backgroundColor}>
-          {progressLabel}
-        </Text>
-      )}
+      <Box flexGrow={1} justifyContent="flex-end">
+        {statusLabel && (
+          <Text color={textColor} backgroundColor={backgroundColor}>
+            {" "}[
+            <Text color={statusLabel.branchColor ?? textColor}>{statusLabel.branch}</Text>
+            {", "}
+            <Text color={statusLabel.stateColor ?? textColor}>{statusLabel.state}</Text>]
+          </Text>
+        )}
+        {progressLabel && (
+          <Text color={textColor} backgroundColor={backgroundColor}>
+            {" "}{progressLabel}
+          </Text>
+        )}
+      </Box>
     </Box>
   );
 };
@@ -261,6 +268,7 @@ export const renderRepositoryTree = async (
         setOrientation: (message: string) => void;
       };
     }) => void;
+    onConfirm?: (selection: TuiSelectionResult) => void | Promise<void>;
   }
 ): Promise<TuiSelectionResult> => {
   return new Promise((resolve) => {
@@ -283,6 +291,7 @@ export const renderRepositoryTree = async (
       const [branchModalTargetPath, setBranchModalTargetPath] = useState<string | null>(null);
       const [branchModalDefaultBranch, setBranchModalDefaultBranch] = useState<string | undefined>(undefined);
       const resolvedRef = useRef(false);
+      const syncInProgressRef = useRef(false);
 
       const items = useMemo(() => {
         const visibleNodes = showOnlySelected ? filterTreeBySelection(nodes) : nodes;
@@ -325,9 +334,22 @@ export const renderRepositoryTree = async (
       );
 
       const commitResolve = useCallback(
-        (confirmed: boolean) => {
-          debugLogger.info(`[TUI][TREE] commitResolve confirmed=${confirmed} resolved=${resolvedRef.current}`);
-          if (resolvedRef.current) {
+        (confirmed: boolean, mode?: TuiSelectionMode) => {
+          const selectedNodeId = items[selectedIndex]?.id;
+          debugLogger.info(
+            `[TUI][TREE] commitResolve confirmed=${confirmed} mode=${mode ?? "-"} resolved=${resolvedRef.current}`
+          );
+          if (!confirmed && resolvedRef.current) {
+            return;
+          }
+          if (confirmed && options?.onConfirm) {
+            if (syncInProgressRef.current) {
+              return;
+            }
+            syncInProgressRef.current = true;
+            Promise.resolve(options.onConfirm({ confirmed, mode, selectedNodeId, nodes })).finally(() => {
+              syncInProgressRef.current = false;
+            });
             return;
           }
           resolvedRef.current = true;
@@ -335,9 +357,9 @@ export const renderRepositoryTree = async (
             debugLogger.info("[TUI][TREE] unmount called");
             unmountRef.current();
           }
-          resolve({ confirmed, nodes });
+          resolve({ confirmed, mode, selectedNodeId, nodes });
         },
-        [nodes, debugLogger]
+        [nodes, debugLogger, items, selectedIndex, options]
       );
 
       const toggleSelected = useCallback(() => {
@@ -398,11 +420,16 @@ export const renderRepositoryTree = async (
         (input: string, key: Key) => {
           const navigationKey = key as Key & { home?: boolean; end?: boolean };
           const lower = input.toLowerCase();
+          const isCtrlS = key.ctrl && (lower === "s" || input === "\u0013");
           if (lower === "p") {
             return;
           }
           if (lower === "b") {
             openBranchModal();
+            return;
+          }
+          if (isCtrlS) {
+            commitResolve(true, "single");
             return;
           }
           if (key.upArrow) {
@@ -440,8 +467,8 @@ export const renderRepositoryTree = async (
           if (lower === "c") {
             toggleSelectionFilter();
           }
-          if (key.return) {
-            commitResolve(true);
+          if (lower === "s") {
+            commitResolve(true, "all");
           }
         },
         { isActive: !modalState.modalOpen }
@@ -491,12 +518,17 @@ export const renderRepositoryTree = async (
           helpContext="tree"
           onHelpShortcut={(input, key) => {
             const lower = input.toLowerCase();
+            const isCtrlS = key.ctrl && (lower === "s" || input === "\u0013");
             if (lower === "b") {
               openBranchModal();
               return;
             }
             if (lower === "c") {
               toggleSelectionFilter();
+              return;
+            }
+            if (isCtrlS) {
+              commitResolve(true, "single");
               return;
             }
             if (key.upArrow) {
@@ -531,8 +563,8 @@ export const renderRepositoryTree = async (
             if (input === " ") {
               toggleSelected();
             }
-            if (key.return) {
-              commitResolve(true);
+            if (lower === "s") {
+              commitResolve(true, "all");
             }
           }}
           branchModal={{

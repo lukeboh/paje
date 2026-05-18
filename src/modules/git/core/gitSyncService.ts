@@ -280,7 +280,7 @@ const resolveRepoStatus = async (options: {
   if (ahead > 0 && behind === 0) {
     return { branch, state: "AHEAD", delta: `+${ahead}` };
   }
-  return { branch, state: "AHEAD", delta: `+${ahead}/-${behind}` };
+  return { branch, state: "DIVERGED", delta: `+${ahead}/-${behind}` };
 };
 
 const resolveProjectLocalPath = (project: GitLabProject): string => {

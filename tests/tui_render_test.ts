@@ -97,7 +97,7 @@ const tree = React.createElement(
   Layout,
   {
     title: "PAJÉ - Teste TUI",
-    orientation: "Use Enter para confirmar",
+    orientation: "Use S para confirmar",
     logEntries: logs,
     parameters,
     initialLogMaximized: false,
@@ -127,7 +127,7 @@ pressKey("\u001B");
 await waitNextTick();
 
 assert.ok(output.includes("PAJÉ - Teste TUI"), "Deve renderizar o título no layout");
-assert.ok(output.includes("Use Enter para confirmar"), "Deve renderizar a orientação");
+assert.ok(output.includes("Use S para confirmar"), "Deve renderizar a orientação");
 assert.ok(output.includes("Evento inicial"), "Deve renderizar entradas do log");
 assert.ok(output.includes("Falha ao autenticar"), "Deve renderizar mensagens de erro");
 const modalShown =
