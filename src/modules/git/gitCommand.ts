@@ -2785,7 +2785,7 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
           let selected: GitLabProject[] = [];
           if (selectionMode === "single") {
             const targetNode = selection.selectedNodeId ? findNodeById(tree, selection.selectedNodeId) : undefined;
-            if (!targetNode || targetNode.type !== "project" || !targetNode.project) {
+            if (!targetNode || targetNode.type !== "project" || !targetNode.project || !targetNode.selected) {
               logBroker.warn(t("tui.tree.singleInvalid"));
               return;
             }
