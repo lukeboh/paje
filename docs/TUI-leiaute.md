@@ -30,6 +30,8 @@ Padronizar a experiência de navegação e mensagens da TUI em um layout de 4 pa
 - **P**: abre/fecha a modal de parâmetros carregados na execução atual.
 - **Ctrl+C**: encerra a TUI imediatamente.
 - **C**: alterna filtro para exibir apenas itens marcados na árvore (quando aplicável).
+- **S**: confirma a seleção e inicia a sincronização na árvore de repositórios (quando aplicável).
+- **Ctrl+S**: sincroniza apenas o repositório selecionado (quando aplicável).
 - **W**: alterna a área de trabalho entre modo padrão e tela cheia.
 - **L**: alterna o painel de log entre modo padrão e tela cheia.
 
@@ -38,6 +40,7 @@ Padronizar a experiência de navegação e mensagens da TUI em um layout de 4 pa
 - Cada linha deve conter timestamp no formato **YYYY-MM-DD HH:mm:ss**.
 - Mensagens de erro devem aparecer em vermelho.
 - O log deve manter auto-scroll, exibindo sempre as últimas linhas.
+- Ao sincronizar repositórios, o log deve registrar o início e o fim de cada repositório sincronizado.
 
 ## Observações de implementação
 
