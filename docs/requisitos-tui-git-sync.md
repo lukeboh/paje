@@ -15,10 +15,11 @@ Este documento define os requisitos da funcionalidade **Sincronizar repositório
 4. Cabeçalho consolidado é exibido com contagem de servidores (ex.: `GitLab (2 servidores)`), seguido da árvore agrupada por servidor.
 5. Árvore de repositórios é exibida com estados, branchs e caminhos consolidados (um único `base-dir`).
 6. Usuário seleciona itens (grupos/projetos) via checkbox.
-7. Usuário confirma com **Enter** para sincronizar.
-8. Sistema sincroniza respeitando paralelismo configurado.
-9. Progresso aparece na linha de cada repositório.
-10. Ao final, modal de resumo é exibido.
+7. Usuário confirma com **S** para sincronizar.
+8. Sistema remove diretórios recém desmarcados (com confirmação quando houver alterações locais).
+9. Sistema sincroniza respeitando paralelismo configurado.
+10. Progresso aparece na linha de cada repositório.
+11. Ao final, modal de resumo é exibido.
 
 ## Requisitos funcionais
 
@@ -64,8 +65,9 @@ Este documento define os requisitos da funcionalidade **Sincronizar repositório
 
 ### RF-06 — Confirmação e execução
 
-- O texto de orientação deve indicar `Enter para sincronizar`.
+- O texto de orientação deve indicar `S para sincronizar`.
 - Ao confirmar, a sincronização deve se comportar como CLI:
+  - Remover diretórios locais recém desmarcados, com confirmação apenas para estados `UNCOMMITTED`, `AHEAD` e `DIVERGED`.
   - Respeitar paralelismo configurado.
   - Respeitar `dry-run` quando definido.
 
