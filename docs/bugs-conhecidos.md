@@ -83,6 +83,34 @@ Corrigido.
 
 ---
 
+## BUG-004 — Remoção de repositórios locais desmarcados com comportamento inconsistente
+
+**Descrição:**
+Ao confirmar a sincronização na TUI, o comportamento de remoção de repositórios locais desmarcados não respeita corretamente o escopo (linha/grupo destacado com **Ctrl+S** versus todas as linhas com **S**) nem as regras esperadas para exclusão segura. O resultado é que a remoção pode ocorrer fora do escopo ou sem seguir a lógica de confirmação adequada.
+
+**Regras esperadas (referência do produto):**
+1. A diferença entre o **S** e o **Ctrl+S** é o escopo: o **Ctrl+S** trabalha apenas na linha destacada (em azul) na TUI. E o **S** trabalha em TODAS as linhas. Ou seja, as regras abaixo valem tanto para o **S** como para o **Ctrl+S**, vc só tem que decidir em quantos repositórios fazer;
+2. Se a linha esta selecionada com **X**: vc vai fazer um clone, se ainda não houver diretório local. Se tiver, vc vai fazer pull e push para sincronizar.
+3. Se a linha não está selecionada, mas existe diretório local e não existe nada para fazer push (não pode estar **AHEAD** ou **UNCOMMITTED**) você pode deletar o diretório local.
+4. Se a linha não está selecionada e está **UNCOMMITTED** ou **AHEAD**, você vai fazer a pergunta que te passei antes para o usuário confirmar antes que quer deletar o diretório local.
+
+**Impacto:**
+- Risco de remoção de diretórios locais fora do escopo pretendido.
+- Fluxo inconsistente para exclusão segura, com possibilidade de perda de alterações locais.
+
+**Como reproduzir:**
+1. Abrir `git-sync` na TUI e selecionar/deselecionar repositórios.
+2. Usar **Ctrl+S** sobre um grupo/linha destacada e observar remoções fora do escopo.
+3. Usar **S** com repositórios desmarcados e observar que a remoção não segue as regras acima.
+
+**Status:**
+Aberto.
+
+**Workaround:**
+Evitar remover repositórios locais via TUI até correção; fazer limpeza manual com conferência de status.
+
+---
+
 ## Como registrar novos bugs
 
 1. Descreva o comportamento esperado e o comportamento atual.
