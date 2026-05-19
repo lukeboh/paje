@@ -78,7 +78,7 @@ const ptBR = {
         navEdge: "ir ao início/fim",
         toggle: "marcar/desmarcar repositório",
         confirm: "sincronizar seleção",
-        confirmSingle: "sincronizar apenas o repositório selecionado",
+        confirmSingle: "sincronizar apenas o escopo destacado (linha/grupo)",
         filter: "filtrar selecionados",
         branch: "selecionar branch",
       },
@@ -88,9 +88,9 @@ const ptBR = {
     tree: {
       empty: "(Nenhum repositório encontrado)",
       orientationDefault:
-        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | S para sincronizar | Esc para cancelar | C para filtrar selecionados | B para branch | W para ampliar área de trabalho | L para ampliar log | H para ajuda",
+        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | S para sincronizar tudo | Ctrl+S para sincronizar apenas o escopo destacado | Esc para cancelar | C para filtrar selecionados | B para branch | W para ampliar área de trabalho | L para ampliar log | H para ajuda",
       orientationConfirm:
-        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | S para confirmar seleção | Esc para cancelar | C para filtrar selecionados | B para branch | W para ampliar área de trabalho | L para ampliar log | H para ajuda",
+        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | S para confirmar seleção (tudo) | Ctrl+S para confirmar seleção (escopo) | Esc para cancelar | C para filtrar selecionados | B para branch | W para ampliar área de trabalho | L para ampliar log | H para ajuda",
       filterAll: "[DEBUG] Exibindo todos os repositórios.",
       filterSelected: "[DEBUG] Exibindo apenas repositórios marcados.",
       singleInvalid: "Selecione um repositório válido para sincronizar apenas um item.",

@@ -30,8 +30,8 @@ Padronizar a experiência de navegação e mensagens da TUI em um layout de 4 pa
 - **P**: abre/fecha a modal de parâmetros carregados na execução atual.
 - **Ctrl+C**: encerra a TUI imediatamente.
 - **C**: alterna filtro para exibir apenas itens marcados na árvore (quando aplicável).
-- **S**: confirma a seleção e inicia a sincronização na árvore de repositórios (quando aplicável).
-- **Ctrl+S**: sincroniza apenas o repositório selecionado (quando aplicável).
+- **S**: confirma a seleção e sincroniza todos os repositórios marcados na árvore.
+- **Ctrl+S**: confirma a seleção e sincroniza apenas o escopo destacado (linha/grupo).
 - **W**: alterna a área de trabalho entre modo padrão e tela cheia.
 - **L**: alterna o painel de log entre modo padrão e tela cheia.
 

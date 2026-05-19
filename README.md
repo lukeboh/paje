@@ -176,7 +176,7 @@ A TUI segue o padrão de quatro quadros:
 3. **Barra de orientações** (1 linha) com comandos possíveis.
 4. **Painel de log**: ~15% da tela na parte inferior, com timestamp por linha e erros em vermelho.
 
-Atalho `F12` alterna o log em tela cheia e retorna ao layout padrão. `H` abre a modal de ajuda (shortcuts). `P` abre/fecha a modal de parâmetros carregados. `B` abre a modal de seleção de branch para o repositório selecionado na árvore. `Esc` retorna à tela anterior ou fecha a modal e `Ctrl+C` encerra a aplicação. Ao iniciar `git-sync` pelo menu, um spinner central "Carregando repositórios..." é exibido enquanto o PAJÉ consulta os servidores, com logs em tempo real no painel inferior.
+Atalho `F12` alterna o log em tela cheia e retorna ao layout padrão. `H` abre a modal de ajuda (shortcuts). `P` abre/fecha a modal de parâmetros carregados. `B` abre a modal de seleção de branch para o repositório selecionado na árvore. `S` confirma a seleção e sincroniza todos os repositórios marcados; `Ctrl+S` confirma a seleção e sincroniza apenas o escopo destacado (linha/grupo). `Esc` retorna à tela anterior ou fecha a modal e `Ctrl+C` encerra a aplicação. Ao iniciar `git-sync` pelo menu, um spinner central "Carregando repositórios..." é exibido enquanto o PAJÉ consulta os servidores, com logs em tempo real no painel inferior.
 
 Consulte o layout detalhado em [`docs/TUI-leiaute.md`](docs/TUI-leiaute.md:1).
 

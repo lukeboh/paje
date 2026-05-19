@@ -18,6 +18,7 @@ import {
 import {
   applyInitialSelectionFromStatusMap,
   buildGitLabTree,
+  collectProjectNodesFromNode,
   collectSelectedProjects,
   recomputeTreeSelection,
   toggleTreeNode,
@@ -2782,70 +2783,88 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
           }
 
           const selectionMode = selection.mode ?? "all";
-          let selected: GitLabProject[] = [];
+          let selectionNodes: GitLabTreeNode[] = [];
           if (selectionMode === "single") {
             const targetNode = selection.selectedNodeId ? findNodeById(tree, selection.selectedNodeId) : undefined;
-            if (!targetNode || targetNode.type !== "project" || !targetNode.project || !targetNode.selected) {
+            if (!targetNode) {
               logBroker.warn(t("tui.tree.singleInvalid"));
               return;
             }
-            selected = [targetNode.project];
-          } else {
-            selected = collectSelectedProjects(tree);
-            if (selected.length === 0) {
-              logBroker.warn(t("tui.tree.empty"));
+            selectionNodes = collectProjectNodesFromNode(targetNode);
+            if (selectionNodes.length === 0) {
+              logBroker.warn(t("tui.tree.singleInvalid"));
               return;
             }
+          } else {
+            selectionNodes = collectProjectNodesFromNode({
+              id: "root",
+              label: "root",
+              type: "group",
+              children: tree,
+            });
           }
 
-          if (selectionMode === "all") {
-            const selectedIds = new Set(selected.map((project) => project.id));
-            const removalCandidates = filteredProjects.filter((project) => !selectedIds.has(project.id));
-            for (const project of removalCandidates) {
-              const status = statusMap[project.id];
-              if (!status || status.state === "EMPTY") {
-                continue;
+          const selectedNodes = selectionNodes.filter((node) => node.selected);
+          const selected = selectedNodes
+            .map((node) => node.project)
+            .filter((project): project is GitLabProject => Boolean(project));
+
+          if (selected.length === 0) {
+            logBroker.warn(t("tui.tree.empty"));
+            return;
+          }
+
+          const selectedIds = new Set(selected.map((project) => project.id));
+          const removalCandidates = selectionNodes
+            .filter((node) => node.type === "project" && node.project)
+            .map((node) => node.project)
+            .filter((project): project is GitLabProject => Boolean(project))
+            .filter((project) => !selectedIds.has(project.id));
+
+          for (const project of removalCandidates) {
+            const status = statusMap[project.id];
+            if (!status || status.state === "EMPTY") {
+              continue;
+            }
+            const localPath = path.join(defaultBaseDir, resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project));
+            if (!fs.existsSync(localPath)) {
+              continue;
+            }
+            const confirmed = await confirmRemoval({
+              repoLabel: project.path_with_namespace,
+              status,
+              session,
+            });
+            if (!confirmed) {
+              logBroker.warn(t("cli.sync.removeSkip", { repo: project.path_with_namespace }));
+              continue;
+            }
+            if (mergedOptions.dryRun) {
+              logBroker.info(t("cli.sync.removeDryRun", { repo: project.path_with_namespace }));
+              continue;
+            }
+            const nodeId = projectNodeMap.get(project.id);
+            const treeProgressInstance = treeProgressRef();
+            if (nodeId && treeProgressInstance) {
+              treeProgressInstance.updateProgress(nodeId, t("cli.sync.removeProgress"));
+            }
+            try {
+              await fs.promises.rm(localPath, { recursive: true, force: true });
+              if (nodeId) {
+                const treeProgressInstance = treeProgressRef();
+                treeProgressInstance?.clearProgress(nodeId);
+                treeProgressInstance?.updateStatus(nodeId, {
+                  branch: project.default_branch ?? "main",
+                  state: "EMPTY",
+                });
               }
-              const localPath = path.join(defaultBaseDir, resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project));
-              if (!fs.existsSync(localPath)) {
-                continue;
+              logBroker.info(t("cli.sync.removeDone", { repo: project.path_with_namespace }));
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              if (nodeId) {
+                treeProgressRef()?.clearProgress(nodeId);
               }
-              const confirmed = await confirmRemoval({
-                repoLabel: project.path_with_namespace,
-                status,
-                session,
-              });
-              if (!confirmed) {
-                logBroker.warn(t("cli.sync.removeSkip", { repo: project.path_with_namespace }));
-                continue;
-              }
-              if (mergedOptions.dryRun) {
-                logBroker.info(t("cli.sync.removeDryRun", { repo: project.path_with_namespace }));
-                continue;
-              }
-              const nodeId = projectNodeMap.get(project.id);
-              const treeProgressInstance = treeProgressRef();
-              if (nodeId && treeProgressInstance) {
-                treeProgressInstance.updateProgress(nodeId, t("cli.sync.removeProgress"));
-              }
-              try {
-                await fs.promises.rm(localPath, { recursive: true, force: true });
-                if (nodeId) {
-                  const treeProgressInstance = treeProgressRef();
-                  treeProgressInstance?.clearProgress(nodeId);
-                  treeProgressInstance?.updateStatus(nodeId, {
-                    branch: project.default_branch ?? "main",
-                    state: "EMPTY",
-                  });
-                }
-                logBroker.info(t("cli.sync.removeDone", { repo: project.path_with_namespace }));
-              } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                if (nodeId) {
-                  treeProgressRef()?.clearProgress(nodeId);
-                }
-                logBroker.error(t("cli.sync.removeFail", { repo: project.path_with_namespace, message }));
-              }
+              logBroker.error(t("cli.sync.removeFail", { repo: project.path_with_namespace, message }));
             }
           }
 

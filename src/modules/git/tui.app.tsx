@@ -416,15 +416,6 @@ export const renderRepositoryTree = async (
         appendLogEntry(showOnlySelected ? t("tui.tree.filterAll") : t("tui.tree.filterSelected"), "debug");
       }, [showOnlySelected]);
 
-      const confirmSingleSelection = useCallback(() => {
-        const currentItem = items[selectedIndex];
-        if (!currentItem?.selected) {
-          appendLogEntry(t("tui.tree.singleInvalid"), "warn");
-          return;
-        }
-        commitResolve(true, "single");
-      }, [items, selectedIndex, commitResolve]);
-
       useInput(
         (input: string, key: Key) => {
           const navigationKey = key as Key & { home?: boolean; end?: boolean };
@@ -438,7 +429,7 @@ export const renderRepositoryTree = async (
             return;
           }
           if (isCtrlS) {
-            confirmSingleSelection();
+            commitResolve(true, "single");
             return;
           }
           if (key.upArrow) {
@@ -537,7 +528,7 @@ export const renderRepositoryTree = async (
               return;
             }
             if (isCtrlS) {
-              confirmSingleSelection();
+              commitResolve(true, "single");
               return;
             }
             if (key.upArrow) {

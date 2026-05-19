@@ -49,9 +49,9 @@ A TUI é iniciada ao executar `paje` sem parâmetros e selecionar **Sincronizar 
 2. Aplica filtros de repositórios (`filter`, `noPublicRepos`, `noArchivedRepos`).
 3. Calcula estado local e pré-seleção automática na árvore TUI (baseado em clones existentes).
 4. Renderiza árvore consolidada na TUI ou imprime árvore na CLI.
-5. Na TUI, a confirmação é feita com **S** (não Enter) e dispara sincronização completa.
-6. Remove diretórios locais recém desmarcados (com confirmação quando há alterações locais).
-7. Sincroniza os itens selecionados respeitando paralelismo e `dry-run`.
+5. Na TUI, a confirmação é feita com **S** (escopo total) ou **Ctrl+S** (escopo da linha/grupo destacado).
+6. Remove diretórios locais recém desmarcados dentro do escopo selecionado (com confirmação quando há alterações locais).
+7. Sincroniza os itens marcados `[x]` respeitando paralelismo e `dry-run`.
 8. Exibe resumo final e status por repositório.
 
 ## Requisitos funcionais

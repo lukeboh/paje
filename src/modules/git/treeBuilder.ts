@@ -137,6 +137,30 @@ export const filterTreeBySelection = (nodes: GitLabTreeNode[]): GitLabTreeNode[]
     .filter((node): node is GitLabTreeNode => node !== null);
 };
 
+export const collectProjectNodesFromNode = (node: GitLabTreeNode): GitLabTreeNode[] => {
+  if (node.type === "project") {
+    return [node];
+  }
+  const projects: GitLabTreeNode[] = [];
+  const visit = (current: GitLabTreeNode): void => {
+    if (current.type === "project") {
+      projects.push(current);
+      return;
+    }
+    current.children?.forEach((child) => visit(child));
+  };
+  node.children?.forEach((child) => visit(child));
+  return projects;
+};
+
+export const collectProjectNodes = (nodes: GitLabTreeNode[]): GitLabTreeNode[] => {
+  const projects: GitLabTreeNode[] = [];
+  nodes.forEach((current) => {
+    projects.push(...collectProjectNodesFromNode(current));
+  });
+  return projects;
+};
+
 export const collectSelectedProjects = (nodes: GitLabTreeNode[]): GitLabProject[] => {
   const projects: GitLabProject[] = [];
 

@@ -49,8 +49,8 @@ Centralizar o comportamento da modal de **Help** e a tabela de atalhos do PAJÉ,
 | PgUp/PgDn | Rolar página | somente na árvore |
 | Home/End | Ir ao início/fim | somente na árvore |
 | Espaço | Marcar/desmarcar repositório | somente na árvore |
-| S | Sincronizar seleção | somente na árvore |
-| Ctrl+S | Sincronizar apenas o repositório selecionado | somente na árvore |
+| S | Sincronizar seleção (todos os repositórios marcados) | somente na árvore |
+| Ctrl+S | Sincronizar seleção no escopo destacado (linha/grupo) | somente na árvore |
 | C | Filtrar selecionados | somente na árvore |
 | B | Selecionar branch | somente na árvore |
 

@@ -78,7 +78,7 @@ const enUS = {
         navEdge: "go to start/end",
         toggle: "select/deselect repository",
         confirm: "sync selection",
-        confirmSingle: "sync only the selected repository",
+        confirmSingle: "sync only the highlighted scope (row/group)",
         filter: "filter selected",
         branch: "select branch",
       },
@@ -88,9 +88,9 @@ const enUS = {
     tree: {
       empty: "(No repositories found)",
       orientationDefault:
-        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | S to sync | Esc to cancel | C to filter selected | B to branch | W to expand workspace | L to expand log | H for help",
+        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | S to sync all | Ctrl+S to sync highlighted scope | Esc to cancel | C to filter selected | B to branch | W to expand workspace | L to expand log | H for help",
       orientationConfirm:
-        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | S to confirm selection | Esc to cancel | C to filter selected | B to branch | W to expand workspace | L to expand log | H for help",
+        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | S to confirm selection (all) | Ctrl+S to confirm selection (scope) | Esc to cancel | C to filter selected | B to branch | W to expand workspace | L to expand log | H for help",
       filterAll: "[DEBUG] Showing all repositories.",
       filterSelected: "[DEBUG] Showing only selected repositories.",
       singleInvalid: "Select a valid repository to sync a single item.",
