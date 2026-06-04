@@ -580,14 +580,11 @@ export const createGitSyncCore = (): GitSyncCore => {
             await ensureSshKey(api, logger, config);
           }
 
-          const [groups, userProjects, publicProjects] = await Promise.all([
+          const [groups, userProjects] = await Promise.all([
             wrapRequest(server, t("cli.http.listGroups"), () => api.listGroups()),
             wrapRequest(server, t("cli.http.listUserProjects"), () => api.listUserProjects()),
-            config.noPublicRepos
-              ? Promise.resolve([])
-              : wrapRequest(server, t("cli.http.listPublicProjects"), () => api.listPublicProjects()),
           ]);
-          const projects = [...userProjects, ...publicProjects].filter((project, index, all) => {
+          const projects = userProjects.filter((project, index, all) => {
             return all.findIndex((item) => item.id === project.id) === index;
           });
 
