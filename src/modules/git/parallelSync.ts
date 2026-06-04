@@ -243,7 +243,8 @@ export const syncRepository = async (
     log?.(t("cli.parallel.targetPath", { path: target.localPath }));
 
     if (!snapshot.hasRepo) {
-      const args = ["clone", target.sshUrl, target.localPath];
+      const cloneUrl = target.httpUrl ?? target.sshUrl;
+      const args = ["clone", cloneUrl, target.localPath];
       if (target.branch) {
         args.splice(1, 0, "--branch", target.branch);
       }
@@ -273,6 +274,13 @@ export const syncRepository = async (
       }
       log?.(t("cli.parallel.noRemote"));
       return { target, status: "skipped", message: t("cli.parallel.noRemote") };
+    }
+
+    if (target.httpUrl) {
+      const currentRemote = await runGitQuiet(["-C", target.localPath, "remote", "get-url", "origin"]).catch(() => "");
+      if (currentRemote.trim().startsWith("git@") || currentRemote.trim().startsWith("ssh://")) {
+        await runGit(["-C", target.localPath, "remote", "set-url", "origin", target.httpUrl]);
+      }
     }
 
     if (snapshot.behind > 0 && snapshot.ahead === 0) {

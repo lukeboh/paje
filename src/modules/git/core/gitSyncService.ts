@@ -466,6 +466,7 @@ const prepareTargets = (
     name: project.name,
     pathWithNamespace: resolveProjectLocalPath(project),
     sshUrl: project.ssh_url_to_repo,
+    httpUrl: project.pajeHttpUrl,
     localPath: path.join(baseDir, resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project)),
     defaultBranch: project.default_branch,
     gitUserName: username,
@@ -590,7 +591,20 @@ export const createGitSyncCore = (): GitSyncCore => {
             return all.findIndex((item) => item.id === project.id) === index;
           });
 
-          return { server, groups, projects };
+          const projectsWithHttpUrl: GitLabProject[] = server.token
+            ? projects.map((project) => {
+                try {
+                  const url = new URL(project.http_url_to_repo);
+                  url.username = "oauth2";
+                  url.password = server.token as string;
+                  return { ...project, pajeHttpUrl: url.toString() };
+                } catch {
+                  return project;
+                }
+              })
+            : projects;
+
+          return { server, groups, projects: projectsWithHttpUrl };
         })
       );
 

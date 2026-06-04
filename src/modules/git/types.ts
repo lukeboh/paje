@@ -20,6 +20,7 @@ export type GitLabProject = {
   };
   pajeOriginalPathWithNamespace?: string;
   pajeServerName?: string;
+  pajeHttpUrl?: string;
 };
 
 export type RepoSyncState =
@@ -58,6 +59,7 @@ export type GitRepositoryTarget = {
   name: string;
   pathWithNamespace: string;
   sshUrl: string;
+  httpUrl?: string;
   localPath: string;
   defaultBranch?: string;
   branch?: string;
