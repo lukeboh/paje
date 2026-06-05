@@ -389,9 +389,7 @@ const ensureKnownHost = async (server: string, logger: LoggerBroker, verbose?: b
     logger: (message) => logger.debug(message),
   });
   if (!added) {
-    logger.warn(
-      `Não foi possível adicionar ${server} ao ~/.ssh/known_hosts via ssh-keyscan. Verifique conectividade e permissões.`
-    );
+    logger.warn(t("cli.prompt.trust.cannotAddHost", { server }));
   }
 };
 
@@ -401,7 +399,7 @@ const ensureSshKey = async (api: GitLabApi, logger: LoggerBroker, config: GitSyn
   if (associatedIdentityPath) {
     const resolved = resolveSshIdentityPath(associatedIdentityPath);
     if (!fs.existsSync(resolved)) {
-      logger.warn(`A chave vinculada em ~/.ssh/config para ${server} não existe (${associatedIdentityPath}).`);
+      logger.warn(t("cli.prompt.sshKey.missingKey", { server, path: associatedIdentityPath ?? "" }));
       associatedIdentityPath = null;
     }
   }
@@ -414,7 +412,7 @@ const ensureSshKey = async (api: GitLabApi, logger: LoggerBroker, config: GitSyn
   if (config.publicKeyPath) {
     const selectedKey = config.publicKeyPath;
     if (!fs.existsSync(selectedKey)) {
-      logger.warn(`Chave pública informada não existe: ${selectedKey}`);
+      logger.warn(t("cli.prompt.sshKey.missingProvidedKey", { path: selectedKey }));
       return;
     }
     const key = sanitizePublicKey(readPublicKey(selectedKey));
@@ -424,8 +422,8 @@ const ensureSshKey = async (api: GitLabApi, logger: LoggerBroker, config: GitSyn
       try {
         await registerKeyInGitLab(api, `paje-existing-${Date.now()}`, key);
       } catch (error) {
-        const message = error instanceof Error ? error.message : "erro desconhecido";
-        logger.warn(`Falha ao registrar chave no GitLab: ${message}`);
+        const message = error instanceof Error ? error.message : t("cli.errors.unknown");
+        logger.warn(t("cli.errors.gitlab.registerKeyFail", { message }));
       }
     }
     return;
@@ -433,7 +431,7 @@ const ensureSshKey = async (api: GitLabApi, logger: LoggerBroker, config: GitSyn
 
   const existingKeys = listSshPublicKeys();
   if (existingKeys.length === 0) {
-    logger.warn("Nenhuma chave SSH configurada em ~/.ssh. Configure uma chave para continuar.");
+    logger.warn(t("cli.prompt.sshKey.noKeyInSsh"));
   }
 };
 
@@ -531,7 +529,7 @@ export const createGitSyncCore = (): GitSyncCore => {
       }
 
       if (servers.length === 0) {
-        logger.warn("Nenhum servidor GitLab configurado.");
+        logger.warn(t("cli.prompt.gitlab.noServerConfigured"));
         return [];
       }
 
@@ -558,14 +556,14 @@ export const createGitSyncCore = (): GitSyncCore => {
       const wrapRequest = async <T,>(server: GitServerEntry, label: string, fn: () => Promise<T>): Promise<T> => {
         listRequestCount += 1;
         onRequestStart?.(server.name, listRequestCount);
-        logger.info(`HTTP: ${server.name} - ${label} (requisição ${listRequestCount})`);
+        logger.info(t("cli.http.start", { server: server.name, label, count: String(listRequestCount) }));
         try {
           const result = await fn();
-          logger.info(`HTTP: ${server.name} - ${label} concluído`);
+          logger.info(t("cli.http.success", { server: server.name, label }));
           return result;
         } catch (error) {
-          const message = error instanceof Error ? error.message : "erro desconhecido";
-          logger.error(`HTTP: ${server.name} - ${label} falhou: ${message}`);
+          const message = error instanceof Error ? error.message : t("cli.errors.unknown");
+          logger.error(t("cli.http.fail", { server: server.name, label, message }));
           throw error;
         }
       };
@@ -580,7 +578,7 @@ export const createGitSyncCore = (): GitSyncCore => {
             const username = server.username?.trim();
             const resolvedUsername = username && username.length > 0 ? username : "";
             if (!resolvedUsername) {
-              logger.warn(`Usuário não informado para autenticação básica em ${server.name}.`);
+              logger.warn(t("cli.sync.usernameMissingBasicAuth", { server: server.name }));
               return null;
             }
             const password = onBasicAuthRequired

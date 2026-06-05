@@ -285,6 +285,7 @@ const enUS = {
         passphrasePrompt: "Passphrase (optional)",
         passphraseDesc: "Protects the private key with a password. It can be empty.",
         keyExists: "A key named \"{{label}}\" already exists. Choose another name.",
+        noKeyInSsh: "No SSH key configured in ~/.ssh. Configure a key to continue.",
       },
       trust: {
         title: "SSH Trust",
@@ -338,6 +339,9 @@ const enUS = {
     errors: {
       unknown: "Unknown error.",
       inline: "Error",
+      gitlab: {
+        registerKeyFail: "Failed to register SSH key in GitLab: {{message}}",
+      },
     },
     parallel: {
       errorExecute: "Failed to execute command: {{message}}",
@@ -358,6 +362,7 @@ const enUS = {
       listDuration: "Listing completed in {{seconds}}s.",
       noneSelected: "No repositories selected.",
       noSyncMatches: "No repositories match the filters.",
+      usernameMissingBasicAuth: "Username not provided for basic authentication on {{server}}.",
       singleModeSyncReposIgnored: "Single-selection mode active: --sync-repos parameter will be ignored.",
       defaultServerLabel: "GitLab",
       serverSingle: "server",

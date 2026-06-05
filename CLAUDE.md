@@ -112,6 +112,12 @@ npm test        # suite completa — nenhum teste existente pode quebrar
 - Todo texto exibido ao usuário deve usar `t("chave")` do sistema i18n.
 - Adicionar a chave em `src/i18n/pt_BR.ts` **e** `src/i18n/en_US.ts`.
 - Nunca usar string literal hardcoded em mensagens de log, orientações ou erros.
+- **Esta regra vale para todas as camadas, inclusive o core** (`src/modules/git/core/`).
+  Erros, warnings e mensagens de progresso em `gitSyncService.ts`, `gitSyncConfig.ts` e
+  demais arquivos do core devem usar `t()` — nunca strings em português ou qualquer outro
+  idioma embutidas diretamente no código.
+- Antes de criar uma nova chave, verifique se uma chave semanticamente equivalente já
+  existe. Reuse sempre que possível; crie apenas quando não houver correspondência.
 
 ---
 

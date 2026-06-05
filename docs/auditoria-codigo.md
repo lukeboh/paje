@@ -308,10 +308,10 @@ Resolvido com a correção do BUG-06 e atualização do teste. Ver `docs/bugs-co
 
 ---
 
-### UX-08 — `gitSyncService.ts` tem ~15 strings hardcoded em português, ignorando i18n
-**Severidade: MÉDIO** | **Status: ABERTO**
+### ~~UX-08~~ — `gitSyncService.ts` tem ~15 strings hardcoded em português, ignorando i18n
+**Severidade: MÉDIO** | **Status: RESOLVIDO**
 
-Mensagens de erro SSH, log HTTP e warnings em `gitSyncService.ts` são strings literais em português. Não serão traduzidas para `en_US`.
+Todas as strings hardcoded substituídas por `t()`. 8 reaproveitam chaves existentes; 3 chaves novas criadas: `cli.prompt.sshKey.noKeyInSsh`, `cli.errors.gitlab.registerKeyFail`, `cli.sync.usernameMissingBasicAuth`. Regra adicionada ao `CLAUDE.md` para prevenir recorrência.
 
 ---
 
@@ -328,9 +328,9 @@ Substituído por `"https://gitlab.com"` em `gitCommand.ts`.
 |---|---|---|
 | **CRÍTICO** | 0 | — |
 | **ALTO** | 4 | BUG-02, INC-06, REQ-02, REQ-03, UX-04 |
-| **MÉDIO** | 6 | BUG-03, BUG-07, I18N-03, DC-04, REQ-06, UX-08 |
+| **MÉDIO** | 5 | BUG-03, BUG-07, I18N-03, DC-04, REQ-06 |
 | **BAIXO** | 9 | BUG-05, BUG-10, INC-05, INC-08, I18N-02, DC-01, DC-02, REQ-05, UX-05, UX-07 |
 
 ### Itens resolvidos desde a auditoria inicial
 
-BUG-04, BUG-06, BUG-08, BUG-09, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-03, I18N-04, REQ-04, UX-01, UX-02, UX-06, UX-09, REQ-01/UX-03 (18 itens)
+BUG-04, BUG-06, BUG-08, BUG-09, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-03, I18N-04, REQ-04, UX-01, UX-02, UX-06, UX-08, UX-09, REQ-01/UX-03 (19 itens)

@@ -285,6 +285,7 @@ const ptBR = {
         passphrasePrompt: "Passphrase (opcional)",
         passphraseDesc: "Protege a chave privada com uma senha. Pode ficar em branco.",
         keyExists: "Já existe uma chave com o nome \"{{label}}\". Escolha outro nome.",
+        noKeyInSsh: "Nenhuma chave SSH configurada em ~/.ssh. Configure uma chave para continuar.",
       },
       trust: {
         title: "Confiança SSH",
@@ -339,6 +340,9 @@ const ptBR = {
     errors: {
       unknown: "Erro desconhecido.",
       inline: "Erro",
+      gitlab: {
+        registerKeyFail: "Falha ao registrar chave SSH no GitLab: {{message}}",
+      },
     },
     parallel: {
       errorExecute: "Erro ao executar comando: {{message}}",
@@ -359,6 +363,7 @@ const ptBR = {
       listDuration: "Listagem concluída em {{seconds}}s.",
       noneSelected: "Nenhum repositório selecionado.",
       noSyncMatches: "Nenhum repositório corresponde aos filtros.",
+      usernameMissingBasicAuth: "Usuário não informado para autenticação básica em {{server}}.",
       singleModeSyncReposIgnored: "Modo de seleção individual ativo: o parâmetro --sync-repos será ignorado.",
       defaultServerLabel: "GitLab",
       serverSingle: "servidor",
