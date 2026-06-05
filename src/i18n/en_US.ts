@@ -1,4 +1,6 @@
-const enUS = {
+import type { PtBrTranslations } from "./pt_BR.js";
+
+const enUS: PtBrTranslations = {
   app: {
     name: "PAJE",
     description: "PAJE - Engineer Journey Support Platform",
@@ -191,6 +193,7 @@ const enUS = {
       skipRemoteToken: "Skipping remote token creation/validation (PAJE_SKIP_SSH_STORE=1).",
       skipRemoteStore: "Skipping remote SSH key registration (PAJE_SKIP_SSH_STORE=1).",
       notInformed: "not informed",
+      tuiUnavailable: "TUI session unavailable.",
     },
     command: {
       gitSync: {
@@ -305,6 +308,9 @@ const enUS = {
         noAuthConfigured: "No authentication configured for {{server}}. Configure a token or basic authentication to continue.",
         userMissingBasicAuth: "Basic auth username missing for {{server}}. Register the server again with a username.",
         noValidServer: "No server with valid authentication found.",
+      },
+      verbose: {
+        title: "SSH - Details",
       },
     },
     summary: {

@@ -13,17 +13,17 @@ Data: 2026-06-05 (revisada 2026-06-05 pós refatoração)
 
 ---
 
-### BUG-02 — `gitCommand.ts:705,796,908` — Chaves i18n `cli.errors.gitlab.registerKey*` inexistentes
-**Severidade: ALTO** | **Status: ABERTO**
+### ~~BUG-02~~ — `gitCommand.ts` — Chaves i18n `cli.errors.gitlab.registerKey*` inexistentes
+**Severidade: ALTO** | **Status: RESOLVIDO**
 
-`t("cli.errors.gitlab.registerKeyDetails")` e `t("cli.errors.gitlab.registerKey")` chamadas em `ensureSshKey()` não existem em nenhum locale. Erros de registro de chave SSH exibirão a chave literal ao invés da mensagem.
+A função `ensureSshKey()` que chamava `t("cli.errors.gitlab.registerKeyDetails")` e `t("cli.errors.gitlab.registerKey")` foi removida na refatoração para separação de camadas. O código atual usa `cli.errors.gitlab.registerKeyFail` (adicionado em UX-08), que existe em ambos os locales.
 
 ---
 
-### BUG-03 — `gitCommand.ts:958` — Chave i18n `cli.prompt.verbose.title` inexistente
-**Severidade: MÉDIO** | **Status: ABERTO**
+### ~~BUG-03~~ — `gitCommand.ts` — Chave i18n `cli.prompt.verbose.title` inexistente
+**Severidade: MÉDIO** | **Status: RESOLVIDO**
 
-Título de modal exibirá `"cli.prompt.verbose.title"` literal.
+Chave adicionada a `pt_BR.ts` e `en_US.ts` como `cli.prompt.verbose.title` ("SSH - Detalhes" / "SSH - Details"). Usada como título do modal que exibe saída verbose do `addHostToKnownHosts` na TUI.
 
 ---
 
@@ -74,8 +74,10 @@ Corrigido em `parallelSync.ts:135–136`: usa `fs.promises.mkdir(..., { recursiv
 
 ---
 
-### BUG-10 — `gitCommand.ts:2470` — Chave i18n `cli.log.tuiUnavailable` inexistente
-**Severidade: BAIXO** | **Status: ABERTO** (código raramente alcançado em runtime)
+### ~~BUG-10~~ — `gitCommand.ts` — Chave i18n `cli.log.tuiUnavailable` inexistente
+**Severidade: BAIXO** | **Status: RESOLVIDO**
+
+Chave adicionada a `pt_BR.ts` e `en_US.ts` como `cli.log.tuiUnavailable` ("Sessão TUI indisponível." / "TUI session unavailable.").
 
 ---
 
@@ -173,10 +175,10 @@ Presente em `pt_BR.ts:181` e `en_US.ts:181`. Nenhuma ocorrência em `src/`. Chav
 
 ---
 
-### I18N-03 — `en_US.ts` não é verificado pelo compilador
-**Severidade: MÉDIO** | **Status: ABERTO**
+### ~~I18N-03~~ — `en_US.ts` não era verificado pelo compilador
+**Severidade: MÉDIO** | **Status: RESOLVIDO**
 
-`types.ts` usa apenas `PtBrTranslations`. Chaves adicionadas a `pt_BR` e omitidas em `en_US` não causam erro de compilação.
+`en_US.ts` agora importa e usa `PtBrTranslations` como anotação de tipo (`const enUS: PtBrTranslations = {...}`). Qualquer chave adicionada a `pt_BR` e omitida em `en_US` passa a causar erro de compilação.
 
 ---
 
@@ -354,13 +356,13 @@ Ao selecionar S para sincronizar, a mensagem genérica exibida no painel de log 
 | Severidade | Qtd | Itens principais |
 |---|---|---|
 | **CRÍTICO** | 0 | — |
-| **ALTO** | 4 | BUG-02, INC-06, REQ-02, REQ-03, UX-04 |
-| **MÉDIO** | 5 | BUG-03, BUG-07, I18N-03, DC-04, REQ-06 |
-| **BAIXO** | 9 | BUG-05, BUG-10, INC-05, INC-08, I18N-02, DC-01, DC-02, REQ-05, UX-05, UX-07 |
+| **ALTO** | 3 | REQ-02, REQ-03, UX-04 |
+| **MÉDIO** | 3 | BUG-07, DC-04, REQ-06 |
+| **BAIXO** | 9 | BUG-05, INC-05, INC-08, I18N-02, DC-01, DC-02, REQ-05, UX-05, UX-07 |
 
 ### Itens resolvidos desde a auditoria inicial
 
-BUG-04, BUG-06, BUG-08, BUG-09, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-03, I18N-04, REQ-04, UX-01, UX-02, UX-06, UX-08, UX-09, UX-10, UX-11, REQ-01/UX-03 (21 itens)
+BUG-02, BUG-03, BUG-04, BUG-06, BUG-08, BUG-09, BUG-10, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-03, I18N-03, I18N-04, REQ-04, UX-01, UX-02, UX-06, UX-08, UX-09, UX-10, UX-11, REQ-01/UX-03 (25 itens)
 
 ---
 

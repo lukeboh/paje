@@ -191,6 +191,7 @@ const ptBR = {
       skipRemoteToken: "Pulo de criação/validação de token remoto (PAJE_SKIP_SSH_STORE=1).",
       skipRemoteStore: "Pulo de registro remoto de chave SSH (PAJE_SKIP_SSH_STORE=1).",
       notInformed: "não informado",
+      tuiUnavailable: "Sessão TUI indisponível.",
     },
     command: {
       gitSync: {
@@ -306,6 +307,9 @@ const ptBR = {
         userMissingBasicAuth:
           "Usuário não informado para autenticação básica em {{server}}. Cadastre o servidor novamente informando o usuário.",
         noValidServer: "Nenhum servidor com autenticação válida encontrado.",
+      },
+      verbose: {
+        title: "SSH - Detalhes",
       },
     },
     summary: {
