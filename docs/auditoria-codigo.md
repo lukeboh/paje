@@ -209,10 +209,10 @@ Bug documentado em `docs/bugs-conhecidos.md` como aberto (BUG-004). Remoção n�
 
 ---
 
-### REQ-04 — README cita `F12` para log em tela cheia; código usa `Ctrl+L`
-**Severidade: MÉDIO** | **Status: ABERTO**
+### ~~REQ-04~~ — README cita `F12` para log em tela cheia; código usa `Ctrl+L`
+**Severidade: MÉDIO** | **Status: RESOLVIDO**
 
-`F12` não aparece em nenhum handler de input. O atalho real é `Ctrl+L` em `layout.tsx`.
+README, `TUI-leiaute.md` e `requisitos-tui-git-sync.md` atualizados com `Ctrl+L`. Todos os atalhos agora refletem o código.
 
 ---
 
@@ -333,9 +333,9 @@ Todo usuário que não seja do TSE verá esse URL como sugestão padrão no moda
 |---|---|---|
 | **CRÍTICO** | 0 | — |
 | **ALTO** | 5 | BUG-02, INC-06, REQ-02, REQ-03, UX-04, UX-09 |
-| **MÉDIO** | 7 | BUG-03, BUG-07, I18N-03, DC-04, REQ-06, UX-08 |
-| **BAIXO** | 10 | BUG-05, BUG-10, INC-05, INC-08, I18N-02, DC-01, DC-02, REQ-04, REQ-05, UX-05, UX-07 |
+| **MÉDIO** | 6 | BUG-03, BUG-07, I18N-03, DC-04, REQ-06, UX-08 |
+| **BAIXO** | 9 | BUG-05, BUG-10, INC-05, INC-08, I18N-02, DC-01, DC-02, REQ-05, UX-05, UX-07 |
 
 ### Itens resolvidos desde a auditoria inicial
 
-BUG-04, BUG-06, BUG-08, BUG-09, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-03, I18N-04, UX-01, UX-02, UX-06, REQ-01/UX-03 (16 itens)
+BUG-04, BUG-06, BUG-08, BUG-09, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-03, I18N-04, REQ-04, UX-01, UX-02, UX-06, REQ-01/UX-03 (17 itens)

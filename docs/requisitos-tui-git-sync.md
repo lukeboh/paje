@@ -73,7 +73,7 @@ Quando um repositório está **divergido** (`ahead > 0` e `behind > 0`), o siste
 
 ### RF-06 — Confirmação e execução
 
-- O texto de orientação deve indicar `S para sincronizar`.
+- O texto de orientação deve indicar `Ctrl+S` para sincronizar todos e `Enter` para sincronizar o escopo destacado.
 - Ao confirmar, a sincronização deve se comportar como CLI:
   - Remover diretórios locais recém desmarcados, com confirmação apenas para estados `UNCOMMITTED`, `AHEAD` e `DIVERGED`.
   - Respeitar paralelismo configurado.
@@ -108,8 +108,9 @@ Quando um repositório está **divergido** (`ahead > 0` e `behind > 0`), o siste
 ### RU-02 — Orientações
 
 - A linha de orientações deve indicar ações básicas: navegar, selecionar, sincronizar, cancelar.
-- Deve exibir o atalho `C` para alternar o filtro de itens marcados.
-- Deve exibir os atalhos `W` para maximizar/restaurar a área de trabalho e `L` para maximizar/restaurar o log.
+- Deve exibir o atalho `Ctrl+M` para alternar o filtro de itens marcados.
+- Deve exibir os atalhos `Ctrl+W` para maximizar/restaurar a área de trabalho e `Ctrl+L` para maximizar/restaurar o log.
+- Deve exibir `Ctrl+B` para a modal de branch e `Ctrl+H` para a modal de ajuda.
 
 ### RU-03 — Log de operações
 
@@ -117,16 +118,16 @@ Quando um repositório está **divergido** (`ahead > 0` e `behind > 0`), o siste
 - Cada linha deve ter data/hora com precisão de segundos.
 - Mensagens de erro devem aparecer em vermelho.
 - Scroll do log deve ser automático.
-- Ao pressionar `L`, o log deve ocupar a tela inteira e retornar ao layout padrão ao pressionar `L` novamente.
-- Ao pressionar `W`, a área de trabalho deve ocupar a tela inteira e retornar ao layout padrão ao pressionar `W` novamente.
+- Ao pressionar `Ctrl+L`, o log deve ocupar a tela inteira e retornar ao layout padrão ao pressionar `Ctrl+L` novamente.
+- Ao pressionar `Ctrl+W`, a área de trabalho deve ocupar a tela inteira e retornar ao layout padrão ao pressionar `Ctrl+W` novamente.
 - O pipeline de log deve usar LoggerBroker com transport dedicado ao painel.
 - O painel deve iniciar em nível `warn` (erros em vermelho).
 
 ### RU-04 — Filtro de selecionados
 
-- Ao pressionar `C`, a árvore deve alternar entre exibir todos os itens e apenas os itens marcados.
+- Ao pressionar `Ctrl+M`, a árvore deve alternar entre exibir todos os itens e apenas os itens marcados.
 - Quando o filtro estiver ativo, os ancestrais dos itens marcados devem permanecer visíveis.
-- Ao pressionar `C` novamente, a árvore completa deve ser restaurada.
+- Ao pressionar `Ctrl+M` novamente, a árvore completa deve ser restaurada.
 
 ### RU-05 — Esc
 

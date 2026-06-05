@@ -26,14 +26,15 @@ Padronizar a experiência de navegação e mensagens da TUI em um layout de 4 pa
 ## Atalhos globais
 
 - **Esc**: fecha a modal de parâmetros/ajuda quando aberta; se algum painel estiver maximizado, restaura o layout; caso contrário, volta para a tela anterior (sem confirmação adicional) e, no menu principal, encerra a aplicação.
-- **H**: abre/fecha a modal de ajuda (shortcuts).
-- **P**: abre/fecha a modal de parâmetros carregados na execução atual.
+- **Ctrl+H**: abre/fecha a modal de ajuda (shortcuts).
+- **Ctrl+P**: abre/fecha a modal de parâmetros carregados na execução atual.
 - **Ctrl+C**: encerra a TUI imediatamente.
-- **C**: alterna filtro para exibir apenas itens marcados na árvore (quando aplicável).
-- **S**: confirma a seleção e sincroniza todos os repositórios marcados na árvore.
-- **Ctrl+S**: confirma a seleção e sincroniza apenas o escopo destacado (linha/grupo).
-- **W**: alterna a área de trabalho entre modo padrão e tela cheia.
-- **L**: alterna o painel de log entre modo padrão e tela cheia.
+- **Ctrl+M**: alterna filtro para exibir apenas itens marcados na árvore (quando aplicável).
+- **Ctrl+S**: confirma a seleção e sincroniza todos os repositórios marcados na árvore (contexto: menu → seleciona git-sync; contexto: árvore → sincroniza tudo).
+- **Enter**: confirma seleção e sincroniza apenas o escopo destacado (linha/grupo) na árvore.
+- **Ctrl+G**: seleciona git-server-store no menu.
+- **Ctrl+W**: alterna a área de trabalho entre modo padrão e tela cheia.
+- **Ctrl+L**: alterna o painel de log entre modo padrão e tela cheia.
 
 ## Log
 
@@ -44,7 +45,7 @@ Padronizar a experiência de navegação e mensagens da TUI em um layout de 4 pa
 
 ## Observações de implementação
 
-- O layout deve manter o título e a linha de orientação visíveis ao maximizar o log via F12.
+- O layout deve manter o título e a linha de orientação visíveis ao maximizar o log via **Ctrl+L**.
 - A área de trabalho pode ser ocultada quando o log estiver maximizado.
 - O log pode ser ocultado quando a área de trabalho estiver maximizada via W.
 - A modal de parâmetros e a modal de ajuda devem ser sobrepostas ao layout, centralizadas e bloquear atalhos globais enquanto estiverem abertas.

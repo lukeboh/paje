@@ -91,9 +91,9 @@ npm test        # suite completa — nenhum teste existente pode quebrar
 - Se `npm run build` falhar, **não faça commit**.
 - Se `npm test` introduzir novas falhas (além das falhas pré-existentes de
   infraestrutura — git signing server / ssh-keygen ausente), **não faça commit**.
-- Falhas pré-existentes conhecidas: `git_branch_service_test` e
-  `ssh_key_store_command_test` — causadas por ausência de infraestrutura no
-  container, não por código.
+- Falhas pré-existentes conhecidas (infraestrutura de container, não código):
+  - `git_branch_service_test` — servidor de assinatura git retorna 400.
+  - `ssh_key_store_command_test` — segunda etapa requer `ssh-keygen` ausente no container; a primeira etapa (token) passou a imprimir `OK`.
 
 ---
 
@@ -101,6 +101,7 @@ npm test        # suite completa — nenhum teste existente pode quebrar
 
 - Branch de correções gerais: `claude/paje-issues-Rr4np`
 - Branch de refatoração TUI/CLI/core: `refactor/tui-cli-core-separation`
+- Branch de issue #5 (config por servidor): `feature/issue-5-server-config`
 - Mensagens de commit em inglês, formato `tipo(escopo): descrição`.
 - **Nunca** incluir identificadores de modelo nos commits, PRs ou comentários de código.
 
