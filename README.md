@@ -245,7 +245,6 @@ Falhas pré-existentes (infraestrutura do container, não código):
 | [`docs/arquitetura.md`](docs/arquitetura.md) | Separação de camadas, tabela de parâmetros, propriedades de servidor, ordem de prioridade |
 | [`docs/TUI-leiaute.md`](docs/TUI-leiaute.md) | Layout obrigatório da TUI, atalhos e componentes |
 | [`docs/requisitos-tui-git-sync.md`](docs/requisitos-tui-git-sync.md) | Requisitos funcionais e de usabilidade da TUI git-sync |
-| [`docs/bugs-conhecidos.md`](docs/bugs-conhecidos.md) | Bugs conhecidos com status e workaround |
-| [`docs/auditoria-codigo.md`](docs/auditoria-codigo.md) | Bugs, inconsistências e débitos técnicos identificados |
+| [`docs/auditoria-codigo.md`](docs/auditoria-codigo.md) | Bugs, inconsistências e débitos técnicos — abertos e resolvidos, com workarounds |
 | [`docs/auditoria-arquitetura.md`](docs/auditoria-arquitetura.md) | Histórico de problemas arquiteturais e status de resolução |
 | [`CLAUDE.md`](CLAUDE.md) | Regras obrigatórias para agentes (arquitetura, testes, i18n, commits) |

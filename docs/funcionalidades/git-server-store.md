@@ -57,4 +57,4 @@ Pode ser iniciado pelo menu TUI ao executar `paje` sem parâmetros.
 
 ## Erros conhecidos
 
-Consulte [bugs conhecidos](../bugs-conhecidos.md).
+Consulte [auditoria de código](../auditoria-codigo.md).

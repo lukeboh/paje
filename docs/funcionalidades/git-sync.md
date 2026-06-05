@@ -84,4 +84,4 @@ A TUI é iniciada ao executar `paje` sem parâmetros e selecionar **Sincronizar 
 
 ## Erros conhecidos
 
-Consulte [bugs conhecidos](../bugs-conhecidos.md) e requisitos detalhados da TUI em [requisitos-tui-git-sync](../requisitos-tui-git-sync.md).
+Consulte [auditoria de código](../auditoria-codigo.md) e requisitos detalhados da TUI em [requisitos-tui-git-sync](../requisitos-tui-git-sync.md).

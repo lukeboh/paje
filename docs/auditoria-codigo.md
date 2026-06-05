@@ -44,7 +44,10 @@ Função `resolveParallelOptions` continua dead code (ver DC-01). Enquanto não 
 ### ~~BUG-06~~ — `gitCommand.ts` — `useBasicAuth` padrão `true` em `git-server-store`
 **Severidade: CRÍTICO** | **Status: RESOLVIDO**
 
-Corrigido para `useBasicAuth: options.useBasicAuth ?? false`. O fluxo SSH é agora o padrão correto.
+O fluxo `storeSshKeyOnly()` podia deixar de exibir detalhes do token existente porque `useBasicAuth`
+defaultava incorretamente para `true`. Corrigido para `useBasicAuth: options.useBasicAuth ?? false`.
+O fluxo SSH é agora o padrão correto. Teste `ssh_key_store_command_test.ts` atualizado para incluir
+`--use-basic-auth`. Ver também UX-06.
 
 ---
 
@@ -205,7 +208,17 @@ Requisito pede modal com tempo total, contagem de ações e lista ordenada de re
 ### REQ-03 — `docs/requisitos-tui-git-sync.md` RF-06: Remoção de repositórios desmarcados inconsistente
 **Severidade: ALTO** | **Status: ABERTO**
 
-Bug documentado em `docs/bugs-conhecidos.md` como aberto (BUG-004). Remoção não respeita escopo correto (linha vs grupo) nem as regras de exclusão segura para estados UNCOMMITTED/AHEAD/DIVERGED.
+Remoção não respeita escopo correto (linha vs grupo) nem as regras de exclusão segura para estados UNCOMMITTED/AHEAD/DIVERGED.
+
+**Regras esperadas (referência do produto):**
+1. A diferença entre **Ctrl+S** (escopo da linha/grupo destacado) e **S** (todas as linhas) é apenas a quantidade de repositórios afetados; as regras de seleção/remoção são idênticas.
+2. Linha selecionada com **X**: clone se não existir diretório local; pull+push se já existir.
+3. Linha não selecionada com diretório local e sem pendências de push (não AHEAD nem UNCOMMITTED): pode deletar o diretório local.
+4. Linha não selecionada com status UNCOMMITTED ou AHEAD: pedir confirmação explícita antes de deletar.
+
+**Impacto:** Risco de remoção de diretórios fora do escopo pretendido; possibilidade de perda de alterações locais.
+
+**Workaround:** Evitar remover repositórios locais via TUI até correção; fazer limpeza manual com verificação de status.
 
 ---
 
@@ -296,10 +309,10 @@ const visibleLines = lines.slice(0, contentHeight);
 
 ---
 
-### ~~UX-06~~ — BUG-001 documentado ainda aberto: senha ausente em `git-server-store`
+### ~~UX-06~~ — Senha ausente no fluxo `git-server-store`
 **Severidade: ALTO** | **Status: RESOLVIDO**
 
-Resolvido com a correção do BUG-06 e atualização do teste. Ver `docs/bugs-conhecidos.md` BUG-001.
+Resolvido com a correção do BUG-06 e atualização do teste. Ver BUG-06 acima.
 
 ---
 
@@ -322,6 +335,20 @@ Substituído por `"https://gitlab.com"` em `gitCommand.ts`.
 
 ---
 
+### ~~UX-10~~ — Comportamento do Esc inconsistente entre telas
+**Severidade: ALTO** | **Status: RESOLVIDO**
+
+O Esc deveria respeitar a hierarquia: (1) fechar modal ativa; (2) restaurar painel maximizado; (3) voltar para a tela anterior; (4) sair da aplicação se já no menu principal. O handler foi centralizado no layout para aplicar exatamente essa ordem de prioridade.
+
+---
+
+### ~~UX-11~~ — Mensagens de log da sincronização fora do padrão
+**Severidade: MÉDIO** | **Status: RESOLVIDO**
+
+Ao selecionar S para sincronizar, a mensagem genérica exibida no painel de log e o texto estático na área de trabalho ("Acessando servidores e carregando repositórios - requisições: N") não espelhavam os logs do CLI nem transmitiam progresso real. Corrigido: logs de carregamento HTTP e progresso do sync agora são direcionados ao painel TUI com o mesmo texto e ordem do CLI; mensagens genéricas removidas; logs verbose da API passam a aparecer no painel TUI.
+
+---
+
 ## Resumo por Severidade
 
 | Severidade | Qtd | Itens principais |
@@ -333,4 +360,15 @@ Substituído por `"https://gitlab.com"` em `gitCommand.ts`.
 
 ### Itens resolvidos desde a auditoria inicial
 
-BUG-04, BUG-06, BUG-08, BUG-09, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-03, I18N-04, REQ-04, UX-01, UX-02, UX-06, UX-08, UX-09, REQ-01/UX-03 (19 itens)
+BUG-04, BUG-06, BUG-08, BUG-09, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-03, I18N-04, REQ-04, UX-01, UX-02, UX-06, UX-08, UX-09, UX-10, UX-11, REQ-01/UX-03 (21 itens)
+
+---
+
+## Como registrar novos itens
+
+1. Escolha a seção adequada (BUGS, INCONSISTÊNCIAS, I18N, REQUISITOS, DEAD CODE ou UX/FLUXO) e atribua o próximo número sequencial dentro da seção (ex.: BUG-12, UX-12).
+2. Indique severidade (CRÍTICO / ALTO / MÉDIO / BAIXO) e status (ABERTO / RESOLVIDO).
+3. Descreva o comportamento esperado e o comportamento atual.
+4. Inclua passos de reprodução, impacto e workaround (se existir).
+5. Ao resolver, atualize o status, registre a solução aplicada e mova o identificador para a lista de itens resolvidos no Resumo.
+6. Execute `npm run build && npm test` antes de fechar o item.

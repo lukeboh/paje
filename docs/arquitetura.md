@@ -285,6 +285,5 @@ Não redeclarar tipos que já existem em outro arquivo.
 | Documento | Conteúdo |
 |---|---|
 | `auditoria-arquitetura.md` | 16 problemas arquiteturais conhecidos com localização exata |
-| `auditoria-codigo.md` | 36 bugs e inconsistências de código identificados |
+| `auditoria-codigo.md` | Bugs, inconsistências e débitos técnicos — abertos e resolvidos |
 | `requisitos-tui-git-sync.md` | Requisitos funcionais e de usabilidade da TUI git-sync |
-| `bugs-conhecidos.md` | Bugs conhecidos pendentes de correção |

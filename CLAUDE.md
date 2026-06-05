@@ -136,6 +136,5 @@ npm test        # suite completa — nenhum teste existente pode quebrar
 |---|---|
 | `docs/arquitetura.md` | Visão geral e regras de camadas para desenvolvedores |
 | `docs/auditoria-arquitetura.md` | 16 problemas arquiteturais conhecidos com arquivo:linha |
-| `docs/auditoria-codigo.md` | 36 bugs e inconsistências de código identificados |
+| `docs/auditoria-codigo.md` | Bugs, inconsistências e itens de UX conhecidos (abertos e resolvidos) |
 | `docs/requisitos-tui-git-sync.md` | Requisitos funcionais e de usabilidade da TUI git-sync |
-| `docs/bugs-conhecidos.md` | Bugs conhecidos não corrigidos |

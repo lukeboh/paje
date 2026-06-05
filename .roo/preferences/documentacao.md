@@ -6,7 +6,7 @@
 - `docs/funcionalidades/<func>.md` contém requisitos detalhados por funcionalidade.
 - `docs/arquitetura.md` descreve organização do código e fluxos principais.
 - `docs/TUI-leiaute.md` padroniza a interface TUI.
-- `docs/bugs-conhecidos.md` registra problemas pendentes e soluções.
+- `docs/auditoria-codigo.md` registra bugs, inconsistências e itens de UX — abertos e resolvidos.
 
 ## Regras de atualização
 
