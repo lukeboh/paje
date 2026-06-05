@@ -140,12 +140,32 @@ gitCommand.ts:3034  ❌ parallelSync() direto            ← deveria ser core.sy
 
 ## 5. Impacto do estado atual
 
+### 5.1 Impacto na TUI
+
+A TUI é o ponto mais crítico: ela deveria ser exclusivamente uma camada de apresentação,
+mas todo o processamento que ela exibe é feito fora do core e fora dela — fica
+embutido no handler de comando em `gitCommand.ts`.
+
+**Consequências específicas para a TUI:**
+
+| Consequência | Detalhe |
+|---|---|
+| **TUI não tem controle do carregamento** | `loadTree()` do core nunca é chamado. A TUI recebe a árvore já pronta, sem poder reagir a progresso de carregamento, erros por servidor ou recargas parciais. O spinner de "acessando servidores" (RF-01) precisa ser implementado fora do core, duplicando lógica. |
+| **Sincronização desacoplada do core** | Após a seleção do usuário, a TUI (via `gitCommand.ts:3034`) chama `parallelSync()` diretamente. Isso significa que `core.syncSelected()` — que consolida preparação de alvos, resolução de paths e paralelização — é completamente ignorado. Qualquer melhoria no core não chega à TUI. |
+| **Progresso por linha não usa contrato do core** | Os eventos de progresso (`ProgressEvent`) chegam à TUI via callback direto de `parallelSync`, não via `handlers` do `core.syncSelected()`. Se o core mudar o contrato de progresso, a TUI não é automaticamente afetada — e vice-versa. |
+| **Filtros da TUI divergem do core** | A filtragem de projetos antes de montar a árvore é feita inline em `gitCommand.ts:2282` usando `matchesAntPatterns` (glob). O core usa `includes()` (substring). A árvore que o usuário vê na TUI pode diferir do que o core processaria. |
+| **Resumo final não usa `GitSyncSummary` do core** | O modal de resumo pós-sincronização (RF-08) é montado a partir de contagem manual em `gitCommand.ts`, não a partir do `summary` retornado por `core.syncSelected()`. O tipo `GitSyncSummary` com `byStatus: Record<RepoSyncState, number>` existe no core mas a TUI nunca o recebe. |
+| **TUI não é testável isoladamente** | Como a lógica de negócio está misturada ao handler Commander em `gitCommand.ts`, não é possível testar o comportamento da TUI (seleção → sincronização → resumo) sem instanciar toda a infraestrutura de comando CLI. |
+| **Componentes TUI (`tui.app.tsx`, `tuiSession.tsx`) são apresentação pura** | Estes arquivos fazem apenas renderização React/Ink — estão corretos. O problema não está neles, mas no fato de que o código que os alimenta (`gitCommand.ts`) mistura lógica de negócio com orquestração de apresentação. |
+
+### 5.2 Impacto geral
+
 | Consequência | Descrição |
 |---|---|
-| **Bugs assimétricos** | Uma correção no core não afeta a CLI nem a TUI, e vice-versa. Exemplo: `filterProjects` usa glob na CLI e substring no core — comportamentos diferentes dependendo da camada de entrada. |
-| **Testes fracos** | O core tem testes (`tests/`), mas a lógica real de produção não passa por ele. Os testes cobrem código que não é executado no fluxo real. |
-| **Manutenção multiplicada** | Qualquer mudança de regra de negócio (ex: novo estado de repo, nova flag de filtro) precisa ser aplicada no mínimo em dois lugares. |
-| **`gitCommand.ts` inchado** | 2 844 linhas de código misturando apresentação, lógica de negócio, acesso a API e parsing de parâmetros. |
+| **Bugs assimétricos** | Uma correção no core não afeta a TUI automaticamente. Exemplo: `filterProjects` usa glob na CLI/TUI e substring no core — a árvore exibida na TUI pode conter projetos diferentes do que o core processaria. |
+| **Testes cobrem código morto** | O core tem testes (`tests/`), mas a lógica real de produção não passa por ele. Os testes cobrem código que nunca é executado em produção. |
+| **Manutenção multiplicada** | Qualquer nova regra de negócio (ex: novo estado de repo, nova flag de filtro) precisa ser aplicada em `gitCommand.ts` e em `gitSyncService.ts` separadamente. |
+| **`gitCommand.ts` inchado** | 2 844 linhas misturando apresentação, lógica de negócio, acesso a API e parsing de parâmetros. Refatorar qualquer coisa nele exige entender o arquivo inteiro. |
 
 ---
 
