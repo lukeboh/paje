@@ -238,13 +238,10 @@ O spinner existe apenas no caminho `gitCommand.ts`. O `gitSyncService.loadTree()
 
 ---
 
-### REQ-06 — `docs/requisitos-tui-git-sync.md` RU-03: Painel de log deve iniciar em nível `warn`; inicia em `info`
-**Severidade: MÉDIO** | **Status: ABERTO**
+### ~~REQ-06~~ — `logStore.ts` — Painel de log iniciava em nível `info`; RU-03 exige `warn`
+**Severidade: MÉDIO** | **Status: RESOLVIDO**
 
-```typescript
-// logStore.ts:17
-private minLevel: LogLevel = "info";  // deveria ser "warn" conforme RU-03
-```
+`logStore.ts:17` corrigido de `"info"` para `"warn"`. O painel TUI agora filtra mensagens de nível `info` por padrão, reduzindo o ruído visual e alinhando com RU-03.
 
 ---
 
@@ -357,12 +354,12 @@ Ao selecionar S para sincronizar, a mensagem genérica exibida no painel de log 
 |---|---|---|
 | **CRÍTICO** | 0 | — |
 | **ALTO** | 3 | REQ-02, REQ-03, UX-04 |
-| **MÉDIO** | 3 | BUG-07, DC-04, REQ-06 |
+| **MÉDIO** | 2 | BUG-07, DC-04 |
 | **BAIXO** | 9 | BUG-05, INC-05, INC-08, I18N-02, DC-01, DC-02, REQ-05, UX-05, UX-07 |
 
 ### Itens resolvidos desde a auditoria inicial
 
-BUG-02, BUG-03, BUG-04, BUG-06, BUG-08, BUG-09, BUG-10, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-03, I18N-03, I18N-04, REQ-04, UX-01, UX-02, UX-06, UX-08, UX-09, UX-10, UX-11, REQ-01/UX-03 (25 itens)
+BUG-02, BUG-03, BUG-04, BUG-06, BUG-08, BUG-09, BUG-10, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-03, I18N-03, I18N-04, REQ-04, REQ-06, UX-01, UX-02, UX-06, UX-08, UX-09, UX-10, UX-11, REQ-01/UX-03 (26 itens)
 
 ---
 
