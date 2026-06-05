@@ -139,10 +139,10 @@ Ver BUG-07. Dois `mergeServer` separados: `gitCommand.ts:527` e `gitSyncService.
 
 ---
 
-### INC-08 — `parallelSync`: parâmetro `onProgress` tem duas semânticas diferentes
-**Severidade: BAIXO** | **Status: ABERTO**
+### ~~INC-08~~ — `parallelSync`: parâmetro `onProgress` tem duas semânticas diferentes
+**Severidade: BAIXO** | **Status: RESOLVIDO**
 
-Terceiro parâmetro de `parallelSync` recebe `SyncResult` (resultado final), não progresso intermediário. Em `gitSyncService.ts` é chamado internamente de `onResult`. Nomenclatura enganosa.
+Terceiro parâmetro renomeado de `onProgress` para `onResult` em `parallelSync.ts` e em todos os call sites. Nomenclatura agora reflete corretamente o recebimento de `SyncResult`.
 
 ---
 
@@ -152,19 +152,19 @@ Terceiro parâmetro de `parallelSync` recebe `SyncResult` (resultado final), nã
 
 | Chave | Arquivo:Linha | Status |
 |---|---|---|
-| `cli.errors.gitlab.registerKeyDetails` | `gitCommand.ts:705,796,908` | ABERTO |
-| `cli.errors.gitlab.registerKey` | `gitCommand.ts:711,802,914` | ABERTO |
-| `cli.prompt.verbose.title` | `gitCommand.ts:958` | ABERTO |
-| `cli.log.tuiUnavailable` | `gitCommand.ts:2470` | ABERTO |
-| `cli.prompt.parallel.title` | `gitCommand.ts:1492` | ABERTO (dead code) |
-| `cli.prompt.parallel.level` | `gitCommand.ts:1493` | ABERTO (dead code) |
-| `cli.prompt.parallel.auto` | `gitCommand.ts:1495` | ABERTO (dead code) |
-| `cli.prompt.parallel.autoDesc` | `gitCommand.ts:1495` | ABERTO (dead code) |
-| `cli.prompt.parallel.oneDesc` | `gitCommand.ts:1496` | ABERTO (dead code) |
-| `cli.prompt.parallel.twoDesc` | `gitCommand.ts:1497` | ABERTO (dead code) |
-| `cli.prompt.parallel.fourDesc` | `gitCommand.ts:1498` | ABERTO (dead code) |
-| `cli.prompt.parallel.eightDesc` | `gitCommand.ts:1499` | ABERTO (dead code) |
-| `cli.prompt.parallel.shallow` | `gitCommand.ts:1504` | ABERTO (dead code) |
+| `cli.errors.gitlab.registerKeyDetails` | `gitCommand.ts:705,796,908` | RESOLVIDO — código removido |
+| `cli.errors.gitlab.registerKey` | `gitCommand.ts:711,802,914` | RESOLVIDO — código removido |
+| `cli.prompt.verbose.title` | `gitCommand.ts:958` | RESOLVIDO — chave adicionada |
+| `cli.log.tuiUnavailable` | `gitCommand.ts:2470` | RESOLVIDO — chave adicionada |
+| `cli.prompt.parallel.title` | `gitCommand.ts:1492` | RESOLVIDO — função removida (DC-01) |
+| `cli.prompt.parallel.level` | `gitCommand.ts:1493` | RESOLVIDO — função removida (DC-01) |
+| `cli.prompt.parallel.auto` | `gitCommand.ts:1495` | RESOLVIDO — função removida (DC-01) |
+| `cli.prompt.parallel.autoDesc` | `gitCommand.ts:1495` | RESOLVIDO — função removida (DC-01) |
+| `cli.prompt.parallel.oneDesc` | `gitCommand.ts:1496` | RESOLVIDO — função removida (DC-01) |
+| `cli.prompt.parallel.twoDesc` | `gitCommand.ts:1497` | RESOLVIDO — função removida (DC-01) |
+| `cli.prompt.parallel.fourDesc` | `gitCommand.ts:1498` | RESOLVIDO — função removida (DC-01) |
+| `cli.prompt.parallel.eightDesc` | `gitCommand.ts:1499` | RESOLVIDO — função removida (DC-01) |
+| `cli.prompt.parallel.shallow` | `gitCommand.ts:1504` | RESOLVIDO — função removida (DC-01) |
 
 ---
 
@@ -231,10 +231,10 @@ README, `TUI-leiaute.md` e `requisitos-tui-git-sync.md` atualizados com `Ctrl+L`
 
 ---
 
-### REQ-05 — `docs/requisitos-tui-git-sync.md` RF-01: Spinner de loading não disponível no caminho `gitSyncService`
-**Severidade: BAIXO** | **Status: ABERTO**
+### ~~REQ-05~~ — `docs/requisitos-tui-git-sync.md` RF-01: Spinner de loading não disponível no caminho `gitSyncService`
+**Severidade: BAIXO** | **Status: RESOLVIDO**
 
-O spinner existe apenas no caminho `gitCommand.ts`. O `gitSyncService.loadTree()` não emite eventos de progresso HTTP para consumidores externos.
+`GitSyncLoadOptions` expõe `onRequestStart?: (serverName, requestCount) => void`. A TUI usa esse callback para atualizar o spinner de carregamento (`gitSyncService.ts:74,558`).
 
 ---
 
@@ -301,8 +301,10 @@ const visibleLines = lines.slice(0, contentHeight);
 
 ---
 
-### UX-05 — `toggleModal` fecha modal "help" ao pressionar `Ctrl+P`
-**Severidade: BAIXO** | **Status: ABERTO**
+### ~~UX-05~~ — `toggleModal` fecha modal "help" ao pressionar `Ctrl+P`
+**Severidade: BAIXO** | **Status: RESOLVIDO**
+
+`layoutContext.ts`: ramo `if (current && modalType === "help")` removido de `toggleModal`. Pressionar `Ctrl+P` com qualquer modal aberta agora transiciona para a modal de parâmetros.
 
 ---
 
@@ -313,8 +315,10 @@ Resolvido com a correção do BUG-06 e atualização do teste. Ver BUG-06 acima.
 
 ---
 
-### UX-07 — Fluxo TUI: exceção em `serverResults` pode deixar estado indefinido
-**Severidade: BAIXO** | **Status: ABERTO**
+### ~~UX-07~~ — Fluxo TUI: exceção em `serverResults` pode deixar estado indefinido
+**Severidade: BAIXO** | **Status: RESOLVIDO**
+
+`loadTree()` agora envolve as chamadas de API de cada servidor em `try/catch`, retornando `null` em caso de falha. O filtro `validServerResults.filter(result => result !== null)` já existia para lidar com nulls — agora é ativado de facto em falhas de rede, sem abortar o carregamento completo.
 
 ---
 
@@ -351,13 +355,13 @@ Ao selecionar S para sincronizar, a mensagem genérica exibida no painel de log 
 | Severidade | Qtd | Itens principais |
 |---|---|---|
 | **CRÍTICO** | 0 | — |
-| **ALTO** | 3 | REQ-02, REQ-03, UX-04 |
+| **ALTO** | 4 | INC-06, REQ-02, REQ-03, UX-04 |
 | **MÉDIO** | 1 | BUG-07 |
-| **BAIXO** | 5 | INC-05, INC-08, REQ-05, UX-05, UX-07 |
+| **BAIXO** | 0 | — |
 
 ### Itens resolvidos desde a auditoria inicial
 
-BUG-02, BUG-03, BUG-04, BUG-05, BUG-06, BUG-08, BUG-09, BUG-10, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-01, DC-02, DC-03, DC-04, I18N-02, I18N-03, I18N-04, REQ-04, REQ-06, UX-01, UX-02, UX-06, UX-08, UX-09, UX-10, UX-11, REQ-01/UX-03 (31 itens)
+BUG-02, BUG-03, BUG-04, BUG-05, BUG-06, BUG-08, BUG-09, BUG-10, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, INC-08, DC-01, DC-02, DC-03, DC-04, I18N-02, I18N-03, I18N-04, REQ-04, REQ-05, REQ-06, UX-01, UX-02, UX-05, UX-06, UX-07, UX-08, UX-09, UX-10, UX-11, REQ-01/UX-03 (35 itens)
 
 ---
 

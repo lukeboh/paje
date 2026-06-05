@@ -604,38 +604,42 @@ export const createGitSyncCore = (): GitSyncCore => {
             await ensureSshKey(api, logger, config);
           }
 
-          const [groups, userProjects] = await Promise.all([
-            wrapRequest(server, t("cli.http.listGroups"), () => api.listGroups()),
-            wrapRequest(server, t("cli.http.listUserProjects"), () => api.listUserProjects()),
-          ]);
-          const projects = userProjects.filter((project, index, all) => {
-            return all.findIndex((item) => item.id === project.id) === index;
-          });
+          try {
+            const [groups, userProjects] = await Promise.all([
+              wrapRequest(server, t("cli.http.listGroups"), () => api.listGroups()),
+              wrapRequest(server, t("cli.http.listUserProjects"), () => api.listUserProjects()),
+            ]);
+            const projects = userProjects.filter((project, index, all) => {
+              return all.findIndex((item) => item.id === project.id) === index;
+            });
 
-          const projectsWithMetadata: GitLabProject[] = projects.map((project) => {
-            const meta: Partial<GitLabProject> = {};
-            if (server.baseDir) meta.pajeBaseDir = server.baseDir;
-            if (server.userEmail) meta.pajeUserEmail = server.userEmail;
-            if (server.token) {
-              try {
-                const url = new URL(project.http_url_to_repo);
-                url.username = "oauth2";
-                url.password = server.token as string;
-                meta.pajeHttpUrl = url.toString();
-              } catch {
-                // keep without pajeHttpUrl
+            const projectsWithMetadata: GitLabProject[] = projects.map((project) => {
+              const meta: Partial<GitLabProject> = {};
+              if (server.baseDir) meta.pajeBaseDir = server.baseDir;
+              if (server.userEmail) meta.pajeUserEmail = server.userEmail;
+              if (server.token) {
+                try {
+                  const url = new URL(project.http_url_to_repo);
+                  url.username = "oauth2";
+                  url.password = server.token as string;
+                  meta.pajeHttpUrl = url.toString();
+                } catch {
+                  // keep without pajeHttpUrl
+                }
               }
-            }
-            return { ...project, ...meta };
-          });
+              return { ...project, ...meta };
+            });
 
-          const serverFiltered = filterProjects(projectsWithMetadata, {
-            filter: server.filter,
-            noPublicRepos: server.noPublicRepos,
-            noArchivedRepos: server.noArchivedRepos,
-          } as GitSyncConfig);
+            const serverFiltered = filterProjects(projectsWithMetadata, {
+              filter: server.filter,
+              noPublicRepos: server.noPublicRepos,
+              noArchivedRepos: server.noArchivedRepos,
+            } as GitSyncConfig);
 
-          return { server, groups, projects: serverFiltered };
+            return { server, groups, projects: serverFiltered };
+          } catch {
+            return null;
+          }
         })
       );
 
