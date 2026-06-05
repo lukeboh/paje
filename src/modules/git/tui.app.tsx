@@ -464,16 +464,16 @@ export const renderRepositoryTree = async (
         (input: string, key: Key) => {
           const navigationKey = key as Key & { home?: boolean; end?: boolean };
           const lower = input.toLowerCase();
-          const isCtrlS = key.ctrl && (lower === "s" || input === "\u0013");
-          if (lower === "p") {
-            return;
-          }
-          if (lower === "b") {
+          if (key.ctrl && lower === "b") {
             openBranchModal();
             return;
           }
-          if (isCtrlS) {
+          if (key.return) {
             commitResolve(true, "single");
+            return;
+          }
+          if (key.ctrl && lower === "s") {
+            commitResolve(true, "all");
             return;
           }
           if (key.upArrow) {
@@ -508,11 +508,8 @@ export const renderRepositoryTree = async (
           if (input === " ") {
             toggleSelected();
           }
-          if (lower === "c") {
+          if (key.ctrl && lower === "m") {
             toggleSelectionFilter();
-          }
-          if (lower === "s") {
-            commitResolve(true, "all");
           }
         },
         { isActive: !modalState.modalOpen }
@@ -562,16 +559,15 @@ export const renderRepositoryTree = async (
           helpContext="tree"
           onHelpShortcut={(input, key) => {
             const lower = input.toLowerCase();
-            const isCtrlS = key.ctrl && (lower === "s" || input === "\u0013");
-            if (lower === "b") {
+            if (key.ctrl && lower === "b") {
               openBranchModal();
               return;
             }
-            if (lower === "c") {
+            if (key.ctrl && lower === "m") {
               toggleSelectionFilter();
               return;
             }
-            if (isCtrlS) {
+            if (key.return) {
               commitResolve(true, "single");
               return;
             }
@@ -607,7 +603,7 @@ export const renderRepositoryTree = async (
             if (input === " ") {
               toggleSelected();
             }
-            if (lower === "s") {
+            if (key.ctrl && lower === "s") {
               commitResolve(true, "all");
             }
           }}

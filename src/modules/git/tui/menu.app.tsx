@@ -155,10 +155,7 @@ export const renderMenu = async (
               debugLogger.info(`[TUI][MENU] escapeEnabled=true (input) instance=${instanceId}`);
             }
           }
-          if (normalizedInput === "p" || normalizedInput === "h") {
-            return;
-          }
-          if (normalizedInput === "s") {
+          if (key.ctrl && normalizedInput === "s") {
             const selected = items[0];
             if (selected) {
               appendLog(t("menu.log.selected", { label: selected.label }));
@@ -166,7 +163,7 @@ export const renderMenu = async (
             }
             return;
           }
-          if (normalizedInput === "g") {
+          if (key.ctrl && normalizedInput === "g") {
             const selected = items[clampIndex(1)];
             if (selected) {
               appendLog(t("menu.log.selected", { label: selected.label }));

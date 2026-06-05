@@ -10,13 +10,13 @@ const buildMenuItems = (): MenuItem[] => [
   {
     label: t("menu.items.gitSync.label"),
     command: "git-sync",
-    shortcut: "S",
+    shortcut: "Ctrl+S",
     description: t("menu.items.gitSync.description"),
   },
   {
     label: t("menu.items.gitServerStore.label"),
     command: "git-server-store",
-    shortcut: "G",
+    shortcut: "Ctrl+G",
     description: t("menu.items.gitServerStore.description"),
   },
 ];

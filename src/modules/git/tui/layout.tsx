@@ -178,8 +178,6 @@ export const Layout: React.FC<LayoutProps> = ({
 
   useInput((input = "", key) => {
     const lower = typeof input === "string" ? input.toLowerCase() : "";
-    const metaKey = (key as { meta?: boolean }).meta ?? false;
-    const isPlainLetter = input.length === 1 && !key.ctrl && !metaKey;
     if (key.escape) {
       debugLogger.info(
         `[TUI][ESC] layout escapeEnabled=${escapeEnabled} modalOpen=${modalState.modalOpen} logMax=${panelState.logMaximized} workspaceMax=${panelState.workspaceMaximized}`
@@ -202,22 +200,22 @@ export const Layout: React.FC<LayoutProps> = ({
       onEscape?.();
       return;
     }
-    if (isPlainLetter && lower === "h") {
+    if (key.ctrl && lower === "h") {
       modalState.openModal("help");
       return;
     }
-    if (isPlainLetter && lower === "p") {
+    if (key.ctrl && lower === "p") {
       modalState.toggleModal();
       return;
     }
     if (modalState.modalOpen) {
       return;
     }
-    if (isPlainLetter && lower === "l") {
+    if (key.ctrl && lower === "l") {
       panelState.toggleLog();
       return;
     }
-    if (isPlainLetter && lower === "w") {
+    if (key.ctrl && lower === "w") {
       panelState.toggleWorkspace();
       return;
     }
