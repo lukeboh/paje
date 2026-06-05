@@ -45,7 +45,17 @@ export type GitServerEntry = {
   baseUrl: string;
   useBasicAuth?: boolean;
   username?: string;
+  userEmail?: string;
+  password?: string;
   token?: string;
+  baseDir?: string;
+  noPublicRepos?: boolean;
+  noArchivedRepos?: boolean;
+  filter?: string;
+  syncRepos?: string;
+  tokenName?: string;
+  tokenScopes?: string;
+  tokenExpiresAt?: string;
 };
 
 export type GitSyncTreeView = {
