@@ -21,6 +21,8 @@ export type GitLabProject = {
   pajeOriginalPathWithNamespace?: string;
   pajeServerName?: string;
   pajeHttpUrl?: string;
+  pajeBaseDir?: string;
+  pajeUserEmail?: string;
 };
 
 export type RepoSyncState =

@@ -181,6 +181,7 @@ await program.parseAsync([
   "TSE-GIT",
   "--base-url",
   "https://git.tse.jus.br",
+  "--use-basic-auth",
   "--username",
   "usuario",
   "--key-label",

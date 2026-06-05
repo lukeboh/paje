@@ -293,6 +293,7 @@ const enUS = {
           "Unable to add {{server}} to ~/.ssh/known_hosts via ssh-keyscan. Host unreachable: {{server}}. Check connectivity/port 22 and permissions.",
         sshPort22Guidance:
           "If port 22 is blocked, use --use-basic-auth with a GitLab Personal Access Token. To generate a token: GitLab → Settings → Access Tokens → create with scopes: read_repository, read_api, self_rotate.",
+        port22Blocked: "Port 22 is unreachable for {{server}}. The SSH flow is not available.",
       },
       persistence: {
         missing: "Unable to write {{paths}}. Check ~/.ssh permissions (recommended 700).",

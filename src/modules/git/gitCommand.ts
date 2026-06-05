@@ -1,5 +1,6 @@
 import inquirer from "inquirer";
 import fs from "node:fs";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { Command } from "commander";
@@ -514,6 +515,17 @@ type SshKeyStoreCliOptions = {
 
 export const normalizeBaseUrl = (url: string): string => url.trim().replace(/\/+$/, "");
 
+const probePort = (host: string, port: number, timeoutMs = 3000): Promise<boolean> =>
+  new Promise((resolve) => {
+    const socket = new net.Socket();
+    const done = (result: boolean) => { socket.destroy(); resolve(result); };
+    socket.setTimeout(timeoutMs);
+    socket.on("connect", () => done(true));
+    socket.on("timeout", () => done(false));
+    socket.on("error", () => done(false));
+    socket.connect(port, host);
+  });
+
 type MergeResult = {
   servers: GitServerEntry[];
   updated: boolean;
@@ -1006,6 +1018,17 @@ const storeSshKeyOnly = async (
     const basicAuthServerWithToken: GitServerEntry = { ...server, token: tokenResultBA.token };
     const basicAuthMergedServers = mergeServer(existingServersBA, basicAuthServerWithToken);
     writeGitServers(basicAuthMergedServers.servers);
+    return;
+  }
+
+  const port22Open = await probePort(serverHost, 22);
+  if (!port22Open) {
+    const message = `${t("cli.prompt.trust.port22Blocked", { server: serverHost })}\n${t("cli.prompt.trust.sshPort22Guidance")}`;
+    if (session) {
+      await session.showMessage({ title: t("cli.prompt.trust.title"), message });
+    } else {
+      console.warn(message);
+    }
     return;
   }
 
@@ -2405,7 +2428,7 @@ export const configureSshKeyStoreCommand = (program: Command, session?: TuiSessi
         id: baseUrl,
         name: serverName,
         baseUrl,
-        useBasicAuth: options.useBasicAuth ?? true,
+        useBasicAuth: options.useBasicAuth ?? false,
         username,
         userEmail: options.userEmail,
         baseDir: options.baseDir,

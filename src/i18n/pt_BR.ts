@@ -293,6 +293,7 @@ const ptBR = {
           "Não foi possível adicionar {{server}} ao ~/.ssh/known_hosts via ssh-keyscan. Host inacessível: {{server}}. Verifique conectividade/porte 22 e permissões.",
         sshPort22Guidance:
           "Se a porta 22 estiver bloqueada, use --use-basic-auth com um Personal Access Token do GitLab. Para gerar um token: GitLab → Settings → Access Tokens → crie com escopos: read_repository, read_api, self_rotate.",
+        port22Blocked: "Porta 22 inacessível para {{server}}. O fluxo SSH não está disponível.",
       },
       persistence: {
         missing: "Não foi possível gravar {{paths}}. Verifique permissões de ~/.ssh (recomendado 700).",

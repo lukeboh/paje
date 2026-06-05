@@ -489,10 +489,10 @@ export const prepareTargets = (
     pathWithNamespace: resolveProjectLocalPath(project),
     sshUrl: project.ssh_url_to_repo,
     httpUrl: project.pajeHttpUrl,
-    localPath: path.join(baseDir, resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project)),
+    localPath: path.join(project.pajeBaseDir ?? baseDir, resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project)),
     defaultBranch: project.default_branch,
     gitUserName: username,
-    gitUserEmail: userEmail,
+    gitUserEmail: project.pajeUserEmail ?? userEmail,
   }));
 };
 
@@ -614,20 +614,30 @@ export const createGitSyncCore = (): GitSyncCore => {
             return all.findIndex((item) => item.id === project.id) === index;
           });
 
-          const projectsWithHttpUrl: GitLabProject[] = server.token
-            ? projects.map((project) => {
-                try {
-                  const url = new URL(project.http_url_to_repo);
-                  url.username = "oauth2";
-                  url.password = server.token as string;
-                  return { ...project, pajeHttpUrl: url.toString() };
-                } catch {
-                  return project;
-                }
-              })
-            : projects;
+          const projectsWithMetadata: GitLabProject[] = projects.map((project) => {
+            const meta: Partial<GitLabProject> = {};
+            if (server.baseDir) meta.pajeBaseDir = server.baseDir;
+            if (server.userEmail) meta.pajeUserEmail = server.userEmail;
+            if (server.token) {
+              try {
+                const url = new URL(project.http_url_to_repo);
+                url.username = "oauth2";
+                url.password = server.token as string;
+                meta.pajeHttpUrl = url.toString();
+              } catch {
+                // keep without pajeHttpUrl
+              }
+            }
+            return { ...project, ...meta };
+          });
 
-          return { server, groups, projects: projectsWithHttpUrl };
+          const serverFiltered = filterProjects(projectsWithMetadata, {
+            filter: server.filter,
+            noPublicRepos: server.noPublicRepos,
+            noArchivedRepos: server.noArchivedRepos,
+          } as GitSyncConfig);
+
+          return { server, groups, projects: serverFiltered };
         })
       );
 
@@ -660,7 +670,7 @@ export const createGitSyncCore = (): GitSyncCore => {
       const statusEntries = await Promise.all(
         filteredProjects.map(async (project) => {
           const targetPath = path.join(
-            config.baseDir,
+            project.pajeBaseDir ?? config.baseDir,
             resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project)
           );
           const status = await resolveRepoStatus({
@@ -677,7 +687,7 @@ export const createGitSyncCore = (): GitSyncCore => {
         if (node.type === "project" && node.project) {
           node.status = statusMap[node.project.id];
           node.localPath = path.join(
-            config.baseDir,
+            node.project.pajeBaseDir ?? config.baseDir,
             resolvedPaths.get(node.project.id) ?? resolveProjectLocalPath(node.project)
           );
           return;
