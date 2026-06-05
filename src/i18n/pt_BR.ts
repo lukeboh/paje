@@ -10,7 +10,7 @@ const ptBR = {
     descriptionLabel: "Descrição",
     commandHint: "Comando: paje {{command}}",
     orientation:
-      "S/G para selecionar | Setas para navegar | Enter para confirmar | Esc para sair | W para ampliar área de trabalho | L para ampliar log | H para ajuda",
+      "Ctrl+S/Ctrl+G para selecionar | Setas para navegar | Enter para confirmar | Esc para sair | Ctrl+W para ampliar área de trabalho | Ctrl+L para ampliar log | Ctrl+H para ajuda",
     log: {
       selectFeature: "[DEBUG] Selecione uma funcionalidade",
       selected: "[DEBUG] Selecionado: {{label}}",
@@ -88,16 +88,16 @@ const ptBR = {
     tree: {
       empty: "(Nenhum repositório encontrado)",
       orientationDefault:
-        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | S para sincronizar tudo | Ctrl+S para sincronizar apenas o escopo destacado | Esc para cancelar | C para filtrar selecionados | B para branch | W para ampliar área de trabalho | L para ampliar log | H para ajuda",
+        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | Ctrl+S para sincronizar tudo | Enter para sincronizar apenas o escopo destacado | Esc para cancelar | Ctrl+M para filtrar selecionados | Ctrl+B para branch | Ctrl+W para ampliar área de trabalho | Ctrl+L para ampliar log | Ctrl+H para ajuda",
       orientationConfirm:
-        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | S para confirmar seleção (tudo) | Ctrl+S para confirmar seleção (escopo) | Esc para cancelar | C para filtrar selecionados | B para branch | W para ampliar área de trabalho | L para ampliar log | H para ajuda",
+        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | Ctrl+S para confirmar seleção (tudo) | Enter para confirmar seleção (escopo) | Esc para cancelar | Ctrl+M para filtrar selecionados | Ctrl+B para branch | Ctrl+W para ampliar área de trabalho | Ctrl+L para ampliar log | Ctrl+H para ajuda",
       filterAll: "[DEBUG] Exibindo todos os repositórios.",
       filterSelected: "[DEBUG] Exibindo apenas repositórios marcados.",
       singleInvalid: "Selecione um repositório válido para sincronizar apenas um item.",
     },
     loading: {
       repositories: "Carregando repositórios...",
-      orientation: "Aguarde enquanto consultamos os servidores | Esc para cancelar | H para ajuda",
+      orientation: "Aguarde enquanto consultamos os servidores | Esc para cancelar | Ctrl+H para ajuda",
     },
   },
   branchModal: {

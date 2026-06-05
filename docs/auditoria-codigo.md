@@ -181,27 +181,21 @@ Presente em `pt_BR.ts:181` e `en_US.ts:181`. Nenhuma ocorrência em `src/`. Chav
 
 ---
 
-### I18N-04 *(novo)* — Texto de orientação na TUI mostra atalhos errados após Issue #6
-**Severidade: ALTO** | **Status: ABERTO**
+### ~~I18N-04~~ — Texto de orientação na TUI mostra atalhos errados após Issue #6
+**Severidade: ALTO** | **Status: RESOLVIDO**
 
-O commit que migrou para `Ctrl+*` atualizou o código (`tui.app.tsx`), mas não atualizou os textos de orientação. Usuários veem instruções erradas:
-
-| Texto exibido | Atalho real |
-|---|---|
-| `"S para sincronizar tudo"` | `Ctrl+S` |
-| `"C para filtrar selecionados"` | `Ctrl+M` |
-| `"B para branch"` | `Ctrl+B` |
-
-Arquivos afetados: `pt_BR.ts:91–93` e `en_US.ts:91–93`.
+Textos de orientação corrigidos em `pt_BR.ts` e `en_US.ts` para `menu.orientation`,
+`tui.tree.orientationDefault`, `tui.tree.orientationConfirm` e `tui.loading.orientation`.
+Todos os atalhos agora refletem as combinações com Ctrl (`Ctrl+S`, `Ctrl+M`, `Ctrl+B`, etc.).
 
 ---
 
 ## 4. REQUISITOS vs CÓDIGO
 
-### REQ-01 / UX-03 — Atalho "S" documentado; código usa "Ctrl+S"
-**Severidade: ALTO** | **Status: ABERTO**
+### ~~REQ-01 / UX-03~~ — Atalho "S" documentado; código usa "Ctrl+S"
+**Severidade: ALTO** | **Status: RESOLVIDO**
 
-Ver I18N-04. A orientação exibida na TUI ainda diz "S para sincronizar tudo", mas o handler real é `key.ctrl && lower === "s"`. Pressionar `S` puro não faz nada.
+Textos de orientação atualizados. `Ctrl+S` para sincronizar tudo, `Enter` para sincronizar apenas o escopo destacado.
 
 ---
 
@@ -278,16 +272,16 @@ const useTty = false;  // todo o bloco if (useTty) é dead code
 ## 6. PROBLEMAS DE UX / FLUXO
 
 ### ~~UX-01~~ — Orientação exibe "C para filtrar"; atalho real é `Ctrl+M`
-**Severidade: CRÍTICO** | **Status: ABERTO** *(reaberto — ver I18N-04)*
+**Severidade: CRÍTICO** | **Status: RESOLVIDO**
 
-O handler em `tui.app.tsx:511` foi corrigido para `key.ctrl && lower === "m"`, mas o texto de orientação em `pt_BR.ts:91` e `en_US.ts:91` ainda mostra `"C para filtrar selecionados"`.
+Handler e textos de orientação alinhados. `Ctrl+M` para filtrar selecionados.
 
 ---
 
 ### ~~UX-02~~ — Orientação exibe "B para branch"; atalho real é `Ctrl+B`
-**Severidade: ALTO** | **Status: ABERTO** *(reaberto — ver I18N-04)*
+**Severidade: ALTO** | **Status: RESOLVIDO**
 
-O handler em `tui.app.tsx:467` foi corrigido para `key.ctrl && lower === "b"`, mas o texto ainda mostra `"B para branch"`.
+Handler e textos de orientação alinhados. `Ctrl+B` para abrir branch modal.
 
 ---
 
@@ -341,11 +335,11 @@ Todo usuário que não seja do TSE verá esse URL como sugestão padrão no moda
 
 | Severidade | Qtd | Itens principais |
 |---|---|---|
-| **CRÍTICO** | 2 | BUG-06, UX-01 (I18N-04) |
-| **ALTO** | 8 | BUG-02, INC-06, I18N-04, REQ-01, REQ-02, REQ-03, UX-02, UX-04, UX-06, UX-09 |
+| **CRÍTICO** | 1 | BUG-06 |
+| **ALTO** | 6 | BUG-02, INC-06, REQ-02, REQ-03, UX-04, UX-06, UX-09 |
 | **MÉDIO** | 7 | BUG-03, BUG-07, I18N-03, DC-04, REQ-06, UX-08, ARQ-18 |
 | **BAIXO** | 8 | BUG-05, BUG-10, INC-05, INC-08, I18N-02, DC-01, DC-02, REQ-04, REQ-05, UX-05, UX-07 |
 
 ### Itens resolvidos desde a auditoria inicial
 
-BUG-04, BUG-08, BUG-09, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-03 (10 itens)
+BUG-04, BUG-08, BUG-09, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-03, I18N-04, UX-01, UX-02, REQ-01/UX-03 (14 itens)

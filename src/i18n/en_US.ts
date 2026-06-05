@@ -10,7 +10,7 @@ const enUS = {
     descriptionLabel: "Description",
     commandHint: "Command: paje {{command}}",
     orientation:
-      "S/G to select | Arrows to navigate | Enter to confirm | Esc to exit | W to expand workspace | L to expand log | H for help",
+      "Ctrl+S/Ctrl+G to select | Arrows to navigate | Enter to confirm | Esc to exit | Ctrl+W to expand workspace | Ctrl+L to expand log | Ctrl+H for help",
     log: {
       selectFeature: "[DEBUG] Select a feature",
       selected: "[DEBUG] Selected: {{label}}",
@@ -88,16 +88,16 @@ const enUS = {
     tree: {
       empty: "(No repositories found)",
       orientationDefault:
-        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | S to sync all | Ctrl+S to sync highlighted scope | Esc to cancel | C to filter selected | B to branch | W to expand workspace | L to expand log | H for help",
+        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | Ctrl+S to sync all | Enter to sync highlighted scope | Esc to cancel | Ctrl+M to filter selected | Ctrl+B to branch | Ctrl+W to expand workspace | Ctrl+L to expand log | Ctrl+H for help",
       orientationConfirm:
-        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | S to confirm selection (all) | Ctrl+S to confirm selection (scope) | Esc to cancel | C to filter selected | B to branch | W to expand workspace | L to expand log | H for help",
+        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | Ctrl+S to confirm selection (all) | Enter to confirm selection (scope) | Esc to cancel | Ctrl+M to filter selected | Ctrl+B to branch | Ctrl+W to expand workspace | Ctrl+L to expand log | Ctrl+H for help",
       filterAll: "[DEBUG] Showing all repositories.",
       filterSelected: "[DEBUG] Showing only selected repositories.",
       singleInvalid: "Select a valid repository to sync a single item.",
     },
     loading: {
       repositories: "Loading repositories...",
-      orientation: "Please wait while we query the servers | Esc to cancel | H for help",
+      orientation: "Please wait while we query the servers | Esc to cancel | Ctrl+H for help",
     },
   },
   branchModal: {
