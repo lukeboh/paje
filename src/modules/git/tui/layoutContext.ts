@@ -33,10 +33,6 @@ export const useModalStateController = (): ModalState => {
         setModalType(undefined);
         return false;
       }
-      if (current && modalType === "help") {
-        setModalType(undefined);
-        return false;
-      }
       setModalType("parameters");
       return true;
     });
