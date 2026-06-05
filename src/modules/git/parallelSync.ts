@@ -339,7 +339,7 @@ export const syncRepository = async (
 export const parallelSync = async (
   targets: GitRepositoryTarget[],
   options?: ParallelSyncOptions,
-  onProgress?: (result: SyncResult) => void,
+  onResult?: (result: SyncResult) => void,
   onProgressUpdate?: (event: ProgressEvent) => void
 ): Promise<SyncResult[]> => {
   const concurrency = resolveConcurrency(options);
@@ -355,7 +355,7 @@ export const parallelSync = async (
       }
       const result = await syncRepository(target, options, workerId, onProgressUpdate);
       results.push(result);
-      onProgress?.(result);
+      onResult?.(result);
     }
   });
 
