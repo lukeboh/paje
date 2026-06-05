@@ -75,7 +75,7 @@ import {
   type SshKeyInfo,
 } from "./sshManager.js";
 import { readGitServers, writeGitServers } from "./persistence.js";
-import { type GitServerEntry } from "./core/gitSyncService.js";
+import { type GitServerEntry, createGitSyncCore } from "./core/gitSyncService.js";
 
 const buildServerPrefix = (server: GitServerEntry): string => {
   const normalizedName = server.name?.trim() || t("cli.sync.defaultServerLabel");
@@ -2119,33 +2119,8 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
         return;
       }
 
-      const listStartAt = Date.now();
-      let listRequestCount = 0;
-      let spinnerFrameIndex = 0;
       const spinnerFrames = ["/", "-", "\\", "|"];
-      const renderSpinner = (): void => {
-        if (!session) {
-          return;
-        }
-        const frame = spinnerFrames[spinnerFrameIndex % spinnerFrames.length];
-        spinnerFrameIndex += 1;
-        logToTui(t("cli.http.accessServers", { frame, count: listRequestCount }));
-      };
-      const wrapRequest = async <T,>(server: GitServerEntry, label: string, fn: () => Promise<T>): Promise<T> => {
-        listRequestCount += 1;
-        renderSpinner();
-        logToTui(t("cli.http.start", { server: server.name, label, count: listRequestCount }));
-        try {
-          const result = await fn();
-          logToTui(t("cli.http.success", { server: server.name, label }));
-          return result;
-        } catch (error) {
-          const message = error instanceof Error ? error.message : t("cli.errors.unknown");
-          logToTui(t("cli.http.fail", { server: server.name, label, message }), "error");
-          throw error;
-        }
-      };
-
+      let spinnerFrameIndex = 0;
       const loadingHandle = session
         ? renderLoadingScreen({
             title: t("app.gitSyncTitle"),
@@ -2156,170 +2131,52 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
           })
         : null;
 
-      const serverResults = await Promise.all(
-        servers.map(async (server) => {
-          const serverHost = new URL(server.baseUrl).hostname;
-          const hasSshAssociation = hasValidSshAssociation(serverHost);
-          let basicAuth: { username: string; password: string } | undefined;
+      const core = createGitSyncCore();
+      const { header, tree, statusMap, projects: filteredProjects } = await core.loadTree({
+        config: mergedOptions,
+        logger: logBroker,
+        onBasicAuthRequired: async (serverName, username) => {
+          return promptBasicAuthPassword(username, session, mergedOptions.password);
+        },
+        onRequestStart: (serverName, requestCount) => {
+          const frame = spinnerFrames[spinnerFrameIndex % spinnerFrames.length];
+          spinnerFrameIndex += 1;
+          logToTui(t("cli.http.accessServers", { frame, count: requestCount }));
+          logToTui(t("cli.http.start", { server: serverName, label: "...", count: requestCount }));
+        },
+      }).finally(() => loadingHandle?.stop());
 
-          if (server.useBasicAuth && !hasSshAssociation) {
-            const username = server.username?.trim();
-            const resolvedUsername = username && username.length > 0 ? username : "";
-            if (!resolvedUsername) {
-              const message = t("cli.prompt.gitlab.userMissingBasicAuth", { server: server.name });
-              if (session) {
-                await session.showMessage({ title: t("cli.prompt.gitlab.title"), message });
-              } else {
-                console.log(message);
-              }
-              return null;
-            }
-            const password = await promptBasicAuthPassword(resolvedUsername, session, mergedOptions.password);
-            basicAuth = { username: resolvedUsername, password };
-          }
-
-          const api = new GitLabApi({
-            baseUrl: server.baseUrl,
-            basicAuth,
-            token: server.token,
-            verbose: mergedOptions.verbose ?? false,
-            logger: mergedOptions.verbose
-              ? (message) => {
-                  logDebug(message);
-                }
-              : undefined,
-          });
-
-          if (!api.hasAuth()) {
-            const message = t("cli.prompt.gitlab.noAuthConfigured", { server: server.name });
-            if (session) {
-              await session.showMessage({ title: t("cli.prompt.gitlab.title"), message });
-            } else {
-              console.log(message);
-            }
-            return null;
-          }
-
-          if (hasSshAssociation || api.hasAuth()) {
-            await ensureSshKey(api, session, mergedOptions.verbose ?? false, mergedOptions);
-          }
-
-          const [groups, userProjects, publicProjects] = await Promise.all([
-            wrapRequest(server, t("cli.http.listGroups"), () => api.listGroups()),
-            wrapRequest(server, t("cli.http.listUserProjects"), () => api.listUserProjects()),
-            mergedOptions.noPublicRepos
-              ? Promise.resolve([])
-              : wrapRequest(server, t("cli.http.listPublicProjects"), () => api.listPublicProjects()),
-          ]);
-          const projects = [...userProjects, ...publicProjects].filter((project, index, all) => {
-            return all.findIndex((item) => item.id === project.id) === index;
-          });
-
-          return { server, groups, projects };
-        })
-      ).finally(() => {
-        loadingHandle?.stop();
-      });
-
-      const validServerResults = serverResults.filter(
-        (result): result is { server: GitServerEntry; groups: GitLabGroup[]; projects: GitLabProject[] } =>
-          result !== null
-      );
-
-      if (validServerResults.length === 0) {
-        const message = t("cli.prompt.gitlab.noValidServer");
-        if (session) {
-          await session.showMessage({ title: t("cli.prompt.gitlab.title"), message });
-        } else {
-          console.log(message);
-        }
+      if (filteredProjects.length === 0 && tree.length === 0) {
         return;
       }
-
-      const { groups, idMapByServer } = mergeGroupsByPath(
-        validServerResults.map((result) => ({ server: result.server, groups: result.groups }))
-      );
-      const { projects } = mergeProjectsByPath(
-        validServerResults.map((result) => ({ server: result.server, projects: result.projects })),
-        idMapByServer
-      );
-      const activeServers = validServerResults.map((result) => result.server);
-      const header = buildServersHeader(activeServers);
-      const listDurationMs = Date.now() - listStartAt;
-      const tempoLabel = t("cli.sync.durationTag");
-      const tempoValor = `${(listDurationMs / 1000).toFixed(2)}s`;
-      logInfo(t("cli.sync.listDurationInline", { label: tempoLabel, value: tempoValor }));
-
-      const filterPatterns = compileAntPatterns(mergedOptions.filter);
-      const filteredProjects = projects.filter((project) => {
-        if (mergedOptions.noPublicRepos && project.visibility === "public") {
-          return false;
-        }
-        if (mergedOptions.noArchivedRepos && project.archived) {
-          return false;
-        }
-        const matchCandidates = [
-          project.path_with_namespace,
-          project.pajeOriginalPathWithNamespace,
-          project.namespace?.full_path,
-          project.namespace?.full_path ? `${project.namespace.full_path}/${project.name}` : undefined,
-        ].filter(Boolean) as string[];
-        if (matchCandidates.length === 0) {
-          return matchesAntPatterns(project.path_with_namespace, filterPatterns);
-        }
-        return matchCandidates.some((candidate) => matchesAntPatterns(candidate, filterPatterns));
-      });
-
-      const summary = createSummary();
-      filteredProjects.forEach((project) => {
-        summary.total += 1;
-        if (project.visibility === "public") {
-          summary.publicCount += 1;
-        }
-        if (project.archived) {
-          summary.archivedCount += 1;
-        }
-      });
-
-
-      const tree = buildGitLabTree(groups, filteredProjects);
       if (!session) {
         const defaultBaseDir = mergedOptions.baseDir ?? "repos";
         const resolvedUserName = mergedOptions.username?.trim() || undefined;
         const resolvedUserEmail = mergedOptions.userEmail?.trim() || undefined;
         const resolvedPaths = resolveLocalPathConflicts(filteredProjects);
-       await ensureLocalDirsIfNeeded(filteredProjects, defaultBaseDir, mergedOptions.prepareLocalDirs ?? false);
-       const statusEntries = await Promise.all(
-         filteredProjects.map(async (project) => {
-           const targetPath = path.join(defaultBaseDir, resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project));
-           const status = await resolveRepoStatus({
-             targetPath,
-             defaultBranch: project.default_branch,
-             knownRemote: true,
-           });
-           return [project.id, status] as const;
-         })
-       );
-       const statusMap = Object.fromEntries(statusEntries) as Record<number, RepoSyncStatus>;
-       const knownPaths = new Set(
-         filteredProjects.map((project) =>
-           path.join(defaultBaseDir, resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project))
-         )
-       );
-       const localScan = await buildLocalStatusMap(defaultBaseDir, knownPaths);
-       const treeNodes = buildHierarchyTree(filteredProjects, statusMap, localScan.localPaths, localScan.statusMap);
-       renderTreeLines(header, treeNodes).forEach((line) => console.log(line));
-       Object.values(statusMap).forEach((status) => {
-         summary.byStatus[status.state] += 1;
-       });
-       if (!mergedOptions.noSummary) {
-         Object.values(localScan.statusMap).forEach((status) => {
-           summary.byStatus[status.state] += 1;
-         });
-       }
-       if (!mergedOptions.noSummary) {
-         renderSummaryLines(summary).forEach((line) => logInfo(line));
-       }
+        const knownPaths = new Set(
+          filteredProjects.map((project) =>
+            path.join(defaultBaseDir, resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project))
+          )
+        );
+        const localScan = await buildLocalStatusMap(defaultBaseDir, knownPaths);
+        const treeNodes = buildHierarchyTree(filteredProjects, statusMap, localScan.localPaths, localScan.statusMap);
+        renderTreeLines(header, treeNodes).forEach((line) => console.log(line));
+        const summary = createSummary();
+        summary.total = filteredProjects.length;
+        summary.publicCount = filteredProjects.filter((p) => p.visibility === "public").length;
+        summary.archivedCount = filteredProjects.filter((p) => p.archived).length;
+        Object.values(statusMap).forEach((status) => {
+          summary.byStatus[status.state] += 1;
+        });
+        if (!mergedOptions.noSummary) {
+          Object.values(localScan.statusMap).forEach((status) => {
+            summary.byStatus[status.state] += 1;
+          });
+        }
+        if (!mergedOptions.noSummary) {
+          renderSummaryLines(summary).forEach((line) => logInfo(line));
+        }
 
         const syncSpecs = resolveSyncReposSpecs(mergedOptions.syncRepos);
         if (syncSpecs.length > 0) {
@@ -2798,19 +2655,6 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
 
       const defaultBaseDir = mergedOptions.baseDir ?? "repos";
       const resolvedPaths = resolveLocalPathConflicts(filteredProjects);
-      await ensureLocalDirsIfNeeded(filteredProjects, defaultBaseDir, mergedOptions.prepareLocalDirs ?? false);
-      const statusEntries = await Promise.all(
-        filteredProjects.map(async (project) => {
-          const targetPath = path.join(defaultBaseDir, resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project));
-          const status = await resolveRepoStatus({
-            targetPath,
-            defaultBranch: project.default_branch,
-            knownRemote: true,
-          });
-          return [project.id, status] as const;
-        })
-      );
-      const statusMap = Object.fromEntries(statusEntries) as Record<number, RepoSyncStatus>;
       const knownPaths = new Set(
         filteredProjects.map((project) =>
           path.join(defaultBaseDir, resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project))
@@ -2819,6 +2663,10 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
       const localScan = mergedOptions.noSummary
         ? { localPaths: [], statusMap: {} as Record<string, RepoSyncStatus> }
         : await buildLocalStatusMap(defaultBaseDir, knownPaths);
+      const summary = createSummary();
+      summary.total = filteredProjects.length;
+      summary.publicCount = filteredProjects.filter((p) => p.visibility === "public").length;
+      summary.archivedCount = filteredProjects.filter((p) => p.archived).length;
       Object.values(statusMap).forEach((status) => {
         summary.byStatus[status.state] += 1;
       });
@@ -2829,20 +2677,14 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
         renderSummaryLines(summary).forEach((line) => logInfo(line));
       }
       const projectNodeMap = new Map<number, string>();
-      const applyStatusToTree = (node: GitLabTreeNode): void => {
+      const buildProjectNodeMap = (node: GitLabTreeNode): void => {
         if (node.type === "project" && node.project) {
-          node.status = statusMap[node.project.id];
-          node.localPath = path.join(
-            defaultBaseDir,
-            resolvedPaths.get(node.project.id) ?? resolveProjectLocalPath(node.project)
-          );
           projectNodeMap.set(node.project.id, node.id);
           return;
         }
-        node.children?.forEach((child) => applyStatusToTree(child));
+        node.children?.forEach((child) => buildProjectNodeMap(child));
       };
-      tree.forEach((node) => applyStatusToTree(node));
-      applyInitialSelectionFromStatusMap(tree, statusMap);
+      tree.forEach((node) => buildProjectNodeMap(node));
 
       let treeProgress: TuiTreeProgress | null = null;
       const treeProgressRef = (): TuiTreeProgress | null => treeProgress;

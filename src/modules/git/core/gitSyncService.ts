@@ -64,6 +64,14 @@ export type GitSyncTreeView = {
   header: string;
   tree: GitLabTreeNode[];
   statusMap: Record<number, RepoSyncStatus>;
+  projects: GitLabProject[];
+};
+
+export type GitSyncLoadOptions = {
+  config: GitSyncConfig;
+  logger: LoggerBroker;
+  onBasicAuthRequired?: (serverName: string, username: string) => Promise<string | undefined>;
+  onRequestStart?: (serverName: string, requestCount: number) => void;
 };
 
 export type GitSyncProgressHandlers = {
@@ -81,7 +89,7 @@ export type GitSyncSummary = {
 
 export type GitSyncCore = {
   listServers: (options: { config: GitSyncConfig; logger: LoggerBroker }) => Promise<GitServerEntry[]>;
-  loadTree: (options: { config: GitSyncConfig; logger: LoggerBroker }) => Promise<GitSyncTreeView>;
+  loadTree: (options: GitSyncLoadOptions) => Promise<GitSyncTreeView>;
   toggleTreeSelection: (tree: GitLabTreeNode[], id: string) => GitLabTreeNode[];
   syncSelected: (options: {
     config: GitSyncConfig;
@@ -525,16 +533,17 @@ export const createGitSyncCore = (): GitSyncCore => {
 
       return servers;
     },
-    loadTree: async ({ config, logger }) => {
+    loadTree: async ({ config, logger, onBasicAuthRequired, onRequestStart }) => {
       const servers = await createGitSyncCore().listServers({ config, logger });
       if (servers.length === 0) {
-        return { header: "GitLab", tree: [], statusMap: {} };
+        return { header: "GitLab", tree: [], statusMap: {}, projects: [] };
       }
 
       const listStartAt = Date.now();
       let listRequestCount = 0;
       const wrapRequest = async <T,>(server: GitServerEntry, label: string, fn: () => Promise<T>): Promise<T> => {
         listRequestCount += 1;
+        onRequestStart?.(server.name, listRequestCount);
         logger.info(`HTTP: ${server.name} - ${label} (requisição ${listRequestCount})`);
         try {
           const result = await fn();
@@ -560,7 +569,10 @@ export const createGitSyncCore = (): GitSyncCore => {
               logger.warn(`Usuário não informado para autenticação básica em ${server.name}.`);
               return null;
             }
-            basicAuth = { username: resolvedUsername, password: config.password };
+            const password = onBasicAuthRequired
+              ? await onBasicAuthRequired(server.name, resolvedUsername) ?? config.password
+              : config.password;
+            basicAuth = { username: resolvedUsername, password };
           }
 
           const api = new GitLabApi({
@@ -612,7 +624,7 @@ export const createGitSyncCore = (): GitSyncCore => {
 
       if (validServerResults.length === 0) {
         logger.warn(t("cli.sync.noValidServer"));
-        return { header: "GitLab", tree: [], statusMap: {} };
+        return { header: "GitLab", tree: [], statusMap: {}, projects: [] };
       }
 
       const { groups, idMapByServer } = mergeGroupsByPath(
@@ -660,7 +672,7 @@ export const createGitSyncCore = (): GitSyncCore => {
       };
       tree.forEach((node) => applyStatusToTree(node));
       applyInitialSelectionFromStatusMap(tree, statusMap);
-      return { header, tree, statusMap };
+      return { header, tree, statusMap, projects: filteredProjects };
     },
     toggleTreeSelection: (tree, id) => {
       toggleById(tree, id);
