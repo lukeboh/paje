@@ -292,7 +292,7 @@ const ptBR = {
         cannotAddHost:
           "Não foi possível adicionar {{server}} ao ~/.ssh/known_hosts via ssh-keyscan. Host inacessível: {{server}}. Verifique conectividade/porte 22 e permissões.",
         sshPort22Guidance:
-          "Se a porta 22 estiver bloqueada, use --use-basic-auth com um Personal Access Token do GitLab. Para gerar um token: GitLab → Settings → Access Tokens → crie com escopos: read_repository, read_api, self_rotate.",
+          "Se a porta 22 estiver bloqueada, use --use-basic-auth com um Personal Access Token (PAT).\n\nGitLab:\n  1. GitLab → Settings → Access Tokens → Add new token\n  2. Defina nome (ex: paje) e data de expiração\n  3. Escopos obrigatórios: read_repository, read_api, self_rotate\n  4. Clique em \"Create personal access token\" e copie o valor\n  5. Execute: paje git-server-store --use-basic-auth\n\nGitHub (suporte em breve):\n  1. GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)\n  2. Generate new token (classic)\n  3. Defina nome e data de expiração\n  4. Escopos obrigatórios: repo, read:user\n  5. Clique em \"Generate token\" e copie o valor",
         port22Blocked: "Porta 22 inacessível para {{server}}. O fluxo SSH não está disponível.",
       },
       persistence: {
