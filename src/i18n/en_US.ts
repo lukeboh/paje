@@ -357,6 +357,7 @@ const enUS = {
       listDuration: "Listing completed in {{seconds}}s.",
       noneSelected: "No repositories selected.",
       noSyncMatches: "No repositories match the filters.",
+      singleModeSyncReposIgnored: "Single-selection mode active: --sync-repos parameter will be ignored.",
       defaultServerLabel: "GitLab",
       serverSingle: "server",
       serverPlural: "servers",

@@ -2813,103 +2813,70 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
             }
           }
 
-          const resolvedUserName = mergedOptions.username?.trim() || undefined;
-          const resolvedUserEmail = mergedOptions.userEmail?.trim() || undefined;
-          const syncSpecs = selectionMode === "single" ? [] : resolveSyncReposSpecs(mergedOptions.syncRepos);
-          const syncTargets = syncSpecs.length > 0
-            ? resolveSyncTargets(selected, syncSpecs).map((target) => ({
-                ...target,
-                localPath: path.join(defaultBaseDir, resolvedPaths.get(target.id) ?? target.pathWithNamespace),
-                gitUserName: resolvedUserName,
-                gitUserEmail: resolvedUserEmail,
-              }))
-            : prepareTargets(selected, defaultBaseDir, resolvedUserName, resolvedUserEmail).map((target) => ({
-                ...target,
-                localPath: path.join(defaultBaseDir, resolvedPaths.get(target.id) ?? target.pathWithNamespace),
-              }));
-
-          if (syncTargets.length === 0) {
-            logBroker.warn(t("cli.sync.noSyncMatches"));
-            return;
-          }
-
-          const concurrency = resolveParallels(mergedOptions.parallels);
-          const dryRunBadge = mergedOptions.dryRun ? "DRY-RUN" : "";
-          logBroker.info(
-            t("cli.sync.start", {
-              title: t("cli.sync.title"),
-              total: String(syncTargets.length),
-              concurrency: concurrency === "auto" ? t("cli.sync.concurrencyAuto") : String(concurrency),
-              dryRun: dryRunBadge,
-            })
-          );
-
+          const counts = { total: 0, cloned: 0, pulled: 0, pushed: 0, skipped: 0, failed: 0 };
           const startedTargets = new Set<number>();
-          const syncResults = await parallelSync(
-            syncTargets,
-            {
-              concurrency,
-              shallow: false,
-              dryRun: mergedOptions.dryRun ?? false,
-              logger: (message, level) => logBroker.log(level ?? "info", message),
-            },
-            async (result) => {
-              logBroker.info(
-                t("cli.sync.repoDone", {
-                  repo: result.target.pathWithNamespace,
-                  status: resolveResultLabel(result.status),
-                })
-              );
-              const nodeId = projectNodeMap.get(result.target.id);
-              if (nodeId) {
-                treeProgressRef()?.clearProgress(nodeId);
-              }
-              const status = await resolveRepoStatus({
-                targetPath: result.target.localPath,
-                defaultBranch: result.target.defaultBranch,
-                knownRemote: true,
-              }).catch(() => undefined);
-              if (status && nodeId) {
-                treeProgressRef()?.updateStatus(nodeId, status);
-              }
-            },
-            (event) => {
-              if (!startedTargets.has(event.target.id)) {
-                startedTargets.add(event.target.id);
-                const phaseLabel = event.phase === "check" ? t("cli.sync.phaseCheck") : event.phase.toUpperCase();
+          await core.syncSelected({
+            config: mergedOptions,
+            logger: logBroker,
+            tree,
+            selectedProjects: selectionMode === "single" ? selected : undefined,
+            handlers: {
+              onBegin: (totalCount) => {
+                const concurrency = resolveParallels(mergedOptions.parallels);
                 logBroker.info(
-                  t("cli.sync.repoStart", {
-                    repo: event.target.pathWithNamespace,
-                    phase: phaseLabel,
+                  t("cli.sync.start", {
+                    title: t("cli.sync.title"),
+                    total: String(totalCount),
+                    concurrency: concurrency === "auto" ? t("cli.sync.concurrencyAuto") : String(concurrency),
+                    dryRun: mergedOptions.dryRun ? "DRY-RUN" : "",
                   })
                 );
-              }
-              const nodeId = projectNodeMap.get(event.target.id);
-              if (!nodeId) {
-                return;
-              }
-              treeProgressRef()?.updateProgress(nodeId, buildProgressLabel(event));
-            }
-          );
-
-          const counts = syncResults.reduce(
-            (acc, result) => {
-              acc.total += 1;
-              if (result.status === "cloned") {
-                acc.cloned += 1;
-              } else if (result.status === "pulled") {
-                acc.pulled += 1;
-              } else if (result.status === "pushed") {
-                acc.pushed += 1;
-              } else if (result.status === "skipped") {
-                acc.skipped += 1;
-              } else if (result.status === "failed") {
-                acc.failed += 1;
-              }
-              return acc;
+              },
+              onResult: async (result) => {
+                counts.total += 1;
+                if (result.status === "cloned") counts.cloned += 1;
+                else if (result.status === "pulled") counts.pulled += 1;
+                else if (result.status === "pushed") counts.pushed += 1;
+                else if (result.status === "skipped") counts.skipped += 1;
+                else if (result.status === "failed") counts.failed += 1;
+                logBroker.info(
+                  t("cli.sync.repoDone", {
+                    repo: result.target.pathWithNamespace,
+                    status: resolveResultLabel(result.status as SyncResult["status"]),
+                  })
+                );
+                const nodeId = projectNodeMap.get(result.target.id);
+                if (nodeId) {
+                  treeProgressRef()?.clearProgress(nodeId);
+                }
+                const status = await resolveRepoStatus({
+                  targetPath: result.target.localPath,
+                  defaultBranch: result.target.defaultBranch,
+                  knownRemote: true,
+                }).catch(() => undefined);
+                if (status && nodeId) {
+                  treeProgressRef()?.updateStatus(nodeId, status);
+                }
+              },
+              onProgress: (event) => {
+                if (!startedTargets.has(event.target.id)) {
+                  startedTargets.add(event.target.id);
+                  const phaseLabel = event.phase === "check" ? t("cli.sync.phaseCheck") : event.phase.toUpperCase();
+                  logBroker.info(
+                    t("cli.sync.repoStart", {
+                      repo: event.target.pathWithNamespace,
+                      phase: phaseLabel,
+                    })
+                  );
+                }
+                const nodeId = projectNodeMap.get(event.target.id);
+                if (!nodeId) {
+                  return;
+                }
+                treeProgressRef()?.updateProgress(nodeId, buildProgressLabel(event));
+              },
             },
-            { total: 0, cloned: 0, pulled: 0, pushed: 0, skipped: 0, failed: 0 }
-          );
+          });
           logBroker.info(t("cli.sync.summaryTitle"));
           logBroker.info(
             `${t("cli.sync.summary.total")} ${counts.total}  ` +

@@ -358,6 +358,7 @@ const ptBR = {
       listDuration: "Listagem concluída em {{seconds}}s.",
       noneSelected: "Nenhum repositório selecionado.",
       noSyncMatches: "Nenhum repositório corresponde aos filtros.",
+      singleModeSyncReposIgnored: "Modo de seleção individual ativo: o parâmetro --sync-repos será ignorado.",
       defaultServerLabel: "GitLab",
       serverSingle: "servidor",
       serverPlural: "servidores",

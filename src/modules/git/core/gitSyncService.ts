@@ -75,8 +75,9 @@ export type GitSyncLoadOptions = {
 };
 
 export type GitSyncProgressHandlers = {
+  onBegin?: (totalCount: number) => void;
   onProgress?: (event: ProgressEvent) => void;
-  onResult?: (entry: { status: string; message?: string; target: GitRepositoryTarget }) => void;
+  onResult?: (entry: { status: string; message?: string; target: GitRepositoryTarget }) => void | Promise<void>;
 };
 
 export type GitSyncSummary = {
@@ -95,6 +96,7 @@ export type GitSyncCore = {
     config: GitSyncConfig;
     logger: LoggerBroker;
     tree: GitLabTreeNode[];
+    selectedProjects?: GitLabProject[];
     handlers?: GitSyncProgressHandlers;
   }) => Promise<{ summary: GitSyncSummary }>;
 };
@@ -346,6 +348,18 @@ const findNodeById = (nodes: GitLabTreeNode[], id: string): GitLabTreeNode | und
     }
   }
   return undefined;
+};
+
+const collectAllProjectsFromTree = (nodes: GitLabTreeNode[]): GitLabProject[] => {
+  const projects: GitLabProject[] = [];
+  const visit = (node: GitLabTreeNode): void => {
+    if (node.type === "project" && node.project) {
+      projects.push(node.project);
+    }
+    node.children?.forEach((child) => visit(child));
+  };
+  nodes.forEach((node) => visit(node));
+  return projects;
 };
 
 const toggleById = (nodes: GitLabTreeNode[], id: string): void => {
@@ -678,8 +692,20 @@ export const createGitSyncCore = (): GitSyncCore => {
       toggleById(tree, id);
       return tree;
     },
-    syncSelected: async ({ config, logger, tree, handlers }) => {
-      const selected = collectSelectedProjects(tree);
+    syncSelected: async ({ config, logger, tree, selectedProjects, handlers }) => {
+      const syncSpecs = resolveSyncReposSpecs(config.syncRepos);
+      let selected: GitLabProject[];
+      if (selectedProjects !== undefined) {
+        if (config.syncRepos) {
+          logger.warn(t("cli.sync.singleModeSyncReposIgnored"));
+        }
+        selected = selectedProjects;
+      } else if (syncSpecs.length > 0) {
+        selected = collectAllProjectsFromTree(tree);
+      } else {
+        selected = collectSelectedProjects(tree);
+      }
+
       if (selected.length === 0) {
         logger.warn(t("cli.sync.noneSelected"));
         return { summary: buildSummary() };
@@ -687,9 +713,8 @@ export const createGitSyncCore = (): GitSyncCore => {
 
       const resolvedUserName = config.username?.trim() || undefined;
       const resolvedUserEmail = config.userEmail?.trim() || undefined;
-      const syncSpecs = resolveSyncReposSpecs(config.syncRepos);
       const resolvedPaths = resolveLocalPathConflicts(selected);
-      const syncTargets = syncSpecs.length > 0
+      const syncTargets = syncSpecs.length > 0 && selectedProjects === undefined
         ? resolveSyncTargets(selected, syncSpecs).map((target) => ({
             ...target,
             localPath: path.join(config.baseDir, resolvedPaths.get(target.id) ?? target.pathWithNamespace),
@@ -703,6 +728,8 @@ export const createGitSyncCore = (): GitSyncCore => {
         return { summary: buildSummary() };
       }
 
+      handlers?.onBegin?.(syncTargets.length);
+
       const concurrency = resolveParallels(config.parallels);
       const syncResults = await parallelSync(
         syncTargets,
@@ -712,8 +739,8 @@ export const createGitSyncCore = (): GitSyncCore => {
           dryRun: config.dryRun ?? false,
           logger: (message, level) => logger.log(level ?? "info", message),
         },
-        (result) => {
-          handlers?.onResult?.({ status: result.status, message: result.message, target: result.target });
+        async (result) => {
+          await handlers?.onResult?.({ status: result.status, message: result.message, target: result.target });
         },
         (event) => {
           handlers?.onProgress?.(event);
