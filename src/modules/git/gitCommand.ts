@@ -1332,7 +1332,7 @@ const formatRepoLabel = (value: string, width: number): string => {
   if (value.length <= width) {
     return value.padEnd(width, " ");
   }
-  return `${value.slice(0, Math.max(0, width - 1))}?`;
+  return `${value.slice(0, Math.max(0, width - 1))}…`;
 };
 
 const buildParameterSource = (resolution: EnvResolution): ParameterSource => {
@@ -1725,57 +1725,6 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
             const filled = Math.round(ratio * width);
             const empty = Math.max(0, width - filled);
             return `[${"#".repeat(filled)}${"-".repeat(empty)}]`;
-          };
-          const formatTransferDetail = (options: {
-            progress?: {
-              objectsReceived?: number;
-              objectsTotal?: number;
-              transferred?: string;
-              speed?: string;
-            };
-            status: "cloned" | "pulled" | "pushed" | "skipped" | "failed";
-            message?: string;
-          }): string => {
-            if (options.status === "failed") {
-              return options.message ? ` (${options.message})` : ` (${t("cli.errors.unknown")})`;
-            }
-            const parts: string[] = [];
-            const received = options.progress?.objectsReceived;
-            const total = options.progress?.objectsTotal;
-            if (total || received) {
-              if (total) {
-                parts.push(t("cli.progress.objectsCopied", { received: received ?? 0, total }));
-              } else {
-                parts.push(t("cli.progress.objectsCopiedSingle", { received: received ?? 0 }));
-              }
-            }
-            if (options.progress?.transferred) { parts.push(options.progress.transferred); }
-            if (options.progress?.speed) { parts.push(t("cli.progress.speed", { speed: options.progress.speed })); }
-            if (parts.length === 0) { return ""; }
-            return ` ${parts.join(", ")}`;
-          };
-          const parseMiB = (value?: string, isSpeed = false): string => {
-            if (!value) { return "--"; }
-            const trimmed = value.trim();
-            const cleaned = isSpeed ? trimmed.replace("/s", "") : trimmed;
-            const match = cleaned.match(/^([\d.,]+)\s*(KiB|MiB|GiB)$/i);
-            if (!match) { return "--"; }
-            const raw = Number(match[1].replace(",", "."));
-            if (Number.isNaN(raw)) { return "--"; }
-            const unit = match[2].toLowerCase();
-            const inMiB = unit === "kib" ? raw / 1024 : unit === "gib" ? raw * 1024 : raw;
-            const label = inMiB.toFixed(2);
-            return isSpeed ? `${label} MiB/s` : `${label} MiB`;
-          };
-          const formatObjects = (progress?: { objectsReceived?: number; objectsTotal?: number }): string => {
-            if (!progress) { return "--"; }
-            if (progress.objectsTotal) { return `${progress.objectsReceived ?? 0}/${progress.objectsTotal}`; }
-            if (progress.objectsReceived) { return String(progress.objectsReceived); }
-            return "--";
-          };
-          const formatRepoLabel = (value: string, width: number): string => {
-            if (value.length <= width) { return value.padEnd(width, " "); }
-            return `${value.slice(0, Math.max(0, width - 1))}…`;
           };
           await core.syncSelected({
             config: mergedOptions,

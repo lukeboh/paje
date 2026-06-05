@@ -268,10 +268,10 @@ Removidos: `useTty`, `overallLine`, `blockLines`, `workerStates`, `completedTarg
 
 ---
 
-### DC-04 — Funções declaradas duas vezes com implementações ligeiramente diferentes
-**Severidade: MÉDIO** | **Status: ABERTO**
+### ~~DC-04~~ — Funções declaradas duas vezes com implementações ligeiramente diferentes
+**Severidade: MÉDIO** | **Status: RESOLVIDO**
 
-`formatTransferDetail`, `parseMiB`, `formatObjects` e `formatRepoLabel` são declaradas como funções de módulo (linhas 1566, 1601, 1621, 1634) E redeclaradas como funções locais dentro do bloco `if (!session)` (linhas 2077, 2105, 2118, 2124). As versões de módulo externas só são usadas dentro do bloco TUI; as internas só dentro do bloco CLI. Consolidar em uma única declaração.
+As redeclarações locais de `formatTransferDetail`, `parseMiB`, `formatObjects` e `formatRepoLabel` foram removidas. As versões de módulo são agora usadas por ambos os caminhos (TUI e CLI). Aproveitou-se para corrigir `formatRepoLabel` module-level: trocou `?` por `…` para alinhar com a versão local.
 
 ---
 
@@ -352,12 +352,12 @@ Ao selecionar S para sincronizar, a mensagem genérica exibida no painel de log 
 |---|---|---|
 | **CRÍTICO** | 0 | — |
 | **ALTO** | 3 | REQ-02, REQ-03, UX-04 |
-| **MÉDIO** | 2 | BUG-07, DC-04 |
+| **MÉDIO** | 1 | BUG-07 |
 | **BAIXO** | 5 | INC-05, INC-08, REQ-05, UX-05, UX-07 |
 
 ### Itens resolvidos desde a auditoria inicial
 
-BUG-02, BUG-03, BUG-04, BUG-05, BUG-06, BUG-08, BUG-09, BUG-10, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-01, DC-02, DC-03, I18N-02, I18N-03, I18N-04, REQ-04, REQ-06, UX-01, UX-02, UX-06, UX-08, UX-09, UX-10, UX-11, REQ-01/UX-03 (30 itens)
+BUG-02, BUG-03, BUG-04, BUG-05, BUG-06, BUG-08, BUG-09, BUG-10, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-01, DC-02, DC-03, DC-04, I18N-02, I18N-03, I18N-04, REQ-04, REQ-06, UX-01, UX-02, UX-06, UX-08, UX-09, UX-10, UX-11, REQ-01/UX-03 (31 itens)
 
 ---
 
