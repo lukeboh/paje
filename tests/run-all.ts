@@ -1,6 +1,7 @@
 export {};
 const globalBucket = globalThis as { __pajeTests?: Promise<void>[] };
 globalBucket.__pajeTests = [];
+await import("./git_sync_core_test.js");
 await import("./git_tree_selection_test.js");
 await import("./git_parallel_sync_test.js");
 await import("./git_branch_service_test.js");
