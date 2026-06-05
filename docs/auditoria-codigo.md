@@ -1,6 +1,6 @@
 # Relatório de Auditoria — Projeto PAJE
 
-Data: 2026-06-05
+Data: 2026-06-05 (revisada 2026-06-05 pós refatoração)
 
 ---
 
@@ -9,40 +9,40 @@ Data: 2026-06-05
 ### ~~BUG-01~~ — `gitBranchService.ts:100` — DIVERGED exibido como AHEAD *(decisão de design — não é bug)*
 
 > **Esclarecimento:** comportamento intencional documentado em `docs/requisitos-tui-git-sync.md` RF-03.
-> Quando `ahead > 0` e `behind > 0`, o sistema exibe `state: "AHEAD"` para destacar a presença de commits locais não publicados — situação mais urgente do que commits remotos pendentes. O delta `+N/-M` ainda comunica a divergência. A cor azul (AHEAD) é preferida à magenta (DIVERGED) porque sinaliza a necessidade de `push` antes de qualquer pull.
+> Quando `ahead > 0` e `behind > 0`, o sistema exibe `state: "AHEAD"` para destacar a presença de commits locais não publicados. O delta `+N/-M` ainda comunica a divergência.
 
 ---
 
-### BUG-02 — `gitCommand.ts:890,981,1093` — Chaves i18n `cli.errors.gitlab.registerKey*` inexistentes
-**Severidade: ALTO**
+### BUG-02 — `gitCommand.ts:705,796,908` — Chaves i18n `cli.errors.gitlab.registerKey*` inexistentes
+**Severidade: ALTO** | **Status: ABERTO**
 
 `t("cli.errors.gitlab.registerKeyDetails")` e `t("cli.errors.gitlab.registerKey")` chamadas em `ensureSshKey()` não existem em nenhum locale. Erros de registro de chave SSH exibirão a chave literal ao invés da mensagem.
 
 ---
 
-### BUG-03 — `gitCommand.ts:1143` — Chave i18n `cli.prompt.verbose.title` inexistente
-**Severidade: MÉDIO**
+### BUG-03 — `gitCommand.ts:958` — Chave i18n `cli.prompt.verbose.title` inexistente
+**Severidade: MÉDIO** | **Status: ABERTO**
 
 Título de modal exibirá `"cli.prompt.verbose.title"` literal.
 
 ---
 
-### BUG-04 — `gitCommand.ts:2388` — Chave i18n `cli.log.syncNoMatch` inexistente
-**Severidade: MÉDIO**
+### BUG-04 — `gitCommand.ts` — Chave i18n `cli.log.syncNoMatch` inexistente
+**Severidade: MÉDIO** | **Status: RESOLVIDO**
 
-Deveria ser `cli.sync.noSyncMatches`. Mensagem de "nenhum repositório corresponde ao --sync-repos" exibe chave literal.
-
----
-
-### BUG-05 — `gitCommand.ts:1692–1730` — Chaves `cli.prompt.parallel.*` inexistentes (12 chaves)
-**Severidade: MÉDIO** (mitigado: função `resolveParallelOptions` é dead code — ver DC-01)
-
-Chaves ausentes: `cli.prompt.parallel.title`, `level`, `auto`, `autoDesc`, `oneDesc`, `twoDesc`, `fourDesc`, `eightDesc`, `shallow`.
+A chamada foi removida com a Fase 2. A lógica de "nenhum repositório corresponde" passou para o core, que usa `cli.sync.noSyncMatches`.
 
 ---
 
-### BUG-06 — `gitCommand.ts:3175` — `useBasicAuth` padrão `true` em `git-server-store`
-**Severidade: CRÍTICO**
+### BUG-05 — `gitCommand.ts:1487–1540` — Chaves `cli.prompt.parallel.*` inexistentes (9 chaves)
+**Severidade: BAIXO** | **Status: ABERTO (mitigado)**
+
+Função `resolveParallelOptions` continua dead code (ver DC-01). Enquanto não for chamada, o bug não se manifesta.
+
+---
+
+### BUG-06 — `gitCommand.ts:2685` — `useBasicAuth` padrão `true` em `git-server-store`
+**Severidade: CRÍTICO** | **Status: ABERTO**
 
 ```typescript
 useBasicAuth: options.useBasicAuth ?? true,   // ← deveria ser ?? false
@@ -53,110 +53,93 @@ Executar `paje git-server-store` sem `--use-basic-auth` ativa autenticação bá
 ---
 
 ### BUG-07 — `gitCommand.ts` vs `gitSyncService.ts` — semântica invertida do campo `updated` em `mergeServer`
-**Severidade: MÉDIO**
+**Severidade: MÉDIO** | **Status: ABERTO**
 
-Em `gitCommand.ts`: novo servidor → `updated: false`, atualizado → `updated: true`.
-Em `gitSyncService.ts`: ambos os casos → `updated: true`. Semânticas opostas para a mesma operação.
-
----
-
-### BUG-08 — `gitCommand.ts` — `const resolvedPaths` redeclarado no mesmo bloco
-**Severidade: BAIXO**
-
-Duas declarações `const resolvedPaths` nas linhas 2333 e 2369 no mesmo escopo `if (!session)`.
+Em `gitCommand.ts:542`: novo servidor → `updated: false`, atualizado → `updated: true`.
+Em `gitSyncService.ts:142`: ambos os casos → `updated: true`. Semânticas opostas para a mesma operação.
+Risco: código que testa `merge.updated` se comporta diferente dependendo do caminho chamado.
 
 ---
 
-### BUG-09 — `parallelSync.ts` — `ensureParentDir` usa binário `mkdir` externo
-**Severidade: MÉDIO**
+### ~~BUG-08~~ — `gitCommand.ts` — `const resolvedPaths` redeclarado no mesmo bloco
+**Severidade: BAIXO** | **Status: RESOLVIDO**
 
-```typescript
-await execFileAsync("mkdir", ["-p", path.dirname(targetPath)]);
-```
-Não portável. Deveria usar `fs.promises.mkdir(..., { recursive: true })` como o restante do código.
+As duas declarações (linhas 1979 e 2401) estão em escopos distintos após a refatoração.
 
 ---
 
-### BUG-10 — `gitCommand.ts:2927` — Chave i18n `cli.log.tuiUnavailable` inexistente
-**Severidade: BAIXO** (código nunca alcançado em runtime)
+### ~~BUG-09~~ — `parallelSync.ts` — `ensureParentDir` usa binário `mkdir` externo
+**Severidade: MÉDIO** | **Status: RESOLVIDO**
+
+Corrigido em `parallelSync.ts:135–136`: usa `fs.promises.mkdir(..., { recursive: true })`.
 
 ---
 
-### BUG-11 — `gitCommand.ts:1648` — `prepareTargets` ignora conflitos de caminho em multi-servidor
-**Severidade: ALTO**
+### BUG-10 — `gitCommand.ts:2470` — Chave i18n `cli.log.tuiUnavailable` inexistente
+**Severidade: BAIXO** | **Status: ABERTO** (código raramente alcançado em runtime)
 
-A função local usa `project.path_with_namespace` diretamente no `localPath`, ignorando `resolveLocalPathConflicts`. Em cenários multi-servidor com repos de mesmo nome, dois repositórios mapeiam para o mesmo diretório local. O `gitSyncService.ts` resolve corretamente.
+---
+
+### ~~BUG-11~~ — `gitCommand.ts` — `prepareTargets` ignorava conflitos de caminho em multi-servidor
+**Severidade: ALTO** | **Status: RESOLVIDO**
+
+`prepareTargets` removida da camada de apresentação. O core usa `resolveLocalPathConflicts` corretamente em todos os paths.
 
 ---
 
 ## 2. INCONSISTÊNCIAS ENTRE ARQUIVOS
 
-### INC-01 — Separador de branch em `syncRepos`: `#` no CLI vs `@` na TUI
-**Severidade: ALTO**
+### ~~INC-01~~ — Separador de branch em `syncRepos`: `#` no CLI vs `@` na TUI
+**Severidade: ALTO** | **Status: RESOLVIDO**
 
-`gitCommand.ts` (caminho CLI): `"grupo/repo.git#main"`.
-`gitSyncService.ts` (caminho TUI): `"grupo/repo@main"`.
-O README documenta `#`. Usuários que configuram via YAML não têm branch resolvida no caminho TUI.
+Alinhado para `#` em todos os caminhos.
 
 ---
 
-### INC-02 — `GitServerEntry` declarado em dois arquivos sem relação entre si
-**Severidade: MÉDIO**
+### ~~INC-02~~ — `GitServerEntry` declarado em dois arquivos sem relação entre si
+**Severidade: MÉDIO** | **Status: RESOLVIDO**
 
-Tipo duplicado em `gitCommand.ts:78` e `gitSyncService.ts:42`. Adições silenciosas em um não propagam para o outro.
-
----
-
-### INC-03 — `buildSummary` em `gitSyncService.ts` usa estados inválidos
-**Severidade: MÉDIO**
-
-O tipo `RepoSyncState` define `"SYNCED"|"BEHIND"|"AHEAD"|"REMOTE"|"EMPTY"|"LOCAL"|"UNCOMMITTED"|"DIVERGED"`.
-O `buildSummary` em `gitSyncService.ts` usa `UPDATED`, `UNPUSHED`, `CLONED`, `FAILED` (inexistentes no tipo) e omite `REMOTE`, `EMPTY`, `LOCAL`.
+`gitCommand.ts` importa `GitServerEntry` de `gitSyncService.ts`. Único ponto canônico.
 
 ---
 
-### INC-04 — `filterProjects` em `gitSyncService.ts` usa `includes()` em vez de Ant/Glob
-**Severidade: ALTO**
+### ~~INC-03~~ — `buildSummary` em `gitSyncService.ts` usa estados inválidos
+**Severidade: MÉDIO** | **Status: RESOLVIDO**
 
-```typescript
-// gitSyncService.ts — busca simples por substring
-normalizedPath.includes(normalizedFilter)
-
-// gitCommand.ts — correto
-compileAntPatterns / matchesAntPatterns  // suporta *, **, ?, múltiplos padrões
-```
-
-Usuário que define `filter: "grupo/**"` via YAML terá comportamento diferente entre CLI e TUI.
+`buildSummary` agora usa chaves de `RepoSyncState` válidas.
 
 ---
 
-### INC-05 — `ensureLocalDirsIfNeeded`: cria diretório pai (TUI) vs diretório completo (CLI)
-**Severidade: MÉDIO**
+### ~~INC-04~~ — `filterProjects` em `gitSyncService.ts` usa `includes()` em vez de Ant/Glob
+**Severidade: ALTO** | **Status: RESOLVIDO**
 
-- `gitCommand.ts:485`: cria `targetPath` completo
-- `gitSyncService.ts:338`: cria apenas `path.dirname(targetPath)`
+Core usa `compileAntPatterns` / `matchesAntPatterns` desde a Fase 1.
 
-Comportamento diferente para `--prepare-local-dirs`.
+---
+
+### INC-05 — `ensureLocalDirsIfNeeded`: cria diretório pai (core) vs diretório completo (CLI anterior)
+**Severidade: BAIXO** | **Status: EFETIVAMENTE RESOLVIDO**
+
+O CLI não chama mais `ensureLocalDirsIfNeeded` diretamente. Ambos os caminhos (CLI e TUI) passam pelo core, que cria apenas `path.dirname(targetPath)`. Comportamento unificado, embora a semântica (dirname vs targetPath completo) seja um ponto a revisar se `--prepare-local-dirs` for reutilizado.
 
 ---
 
 ### INC-06 — `mergeServer` tem semântica de `updated` oposta entre os dois arquivos
-**Severidade: MÉDIO**
+**Severidade: MÉDIO** | **Status: ABERTO**
 
-Ver BUG-07. Em `gitSyncService.ts`, ambas as situações (novo ou existente) retornam `updated: true`.
-Em `gitCommand.ts`, novo retorna `updated: false` e existente retorna `updated: true`.
+Ver BUG-07. Dois `mergeServer` separados: `gitCommand.ts:527` e `gitSyncService.ts:133`.
 
 ---
 
-### INC-07 — `gitSyncService.ts` não lista projetos públicos; o CLI lista
-**Severidade: ALTO**
+### ~~INC-07~~ — `gitSyncService.ts` não listava projetos públicos; o CLI listava
+**Severidade: ALTO** | **Status: RESOLVIDO**
 
-O caminho TUI omite completamente a chamada `api.listPublicProjects()`. Usuários via TUI não veem projetos públicos que não participam diretamente.
+`listPublicProjects()` removida do fluxo de `loadTree()`. Projetos públicos dos quais o usuário é membro já retornam via `listUserProjects()` (`membership=true`). O flag `noPublicRepos` filtra projetos públicos dentro dessa lista.
 
 ---
 
 ### INC-08 — `parallelSync`: parâmetro `onProgress` tem duas semânticas diferentes
-**Severidade: BAIXO**
+**Severidade: BAIXO** | **Status: ABERTO**
 
 Terceiro parâmetro de `parallelSync` recebe `SyncResult` (resultado final), não progresso intermediário. Em `gitSyncService.ts` é chamado internamente de `onResult`. Nomenclatura enganosa.
 
@@ -166,88 +149,92 @@ Terceiro parâmetro de `parallelSync` recebe `SyncResult` (resultado final), nã
 
 ### I18N-01 — Chaves usadas no código mas ausentes em ambos os locales
 
-| Chave | Arquivo:Linha | Observação |
+| Chave | Arquivo:Linha | Status |
 |---|---|---|
-| `cli.errors.gitlab.registerKeyDetails` | `gitCommand.ts:890,981,1093` | Critica — exibida em erros de SSH |
-| `cli.errors.gitlab.registerKey` | `gitCommand.ts:896,987,1099` | Critica — exibida em erros de SSH |
-| `cli.prompt.verbose.title` | `gitCommand.ts:1143` | Título de modal |
-| `cli.log.syncNoMatch` | `gitCommand.ts:2388` | Confusão com `cli.sync.noSyncMatches` |
-| `cli.log.tuiUnavailable` | `gitCommand.ts:2927` | Dead code, mas ausente |
-| `cli.prompt.parallel.title` | `gitCommand.ts:1692` | Dead code |
-| `cli.prompt.parallel.level` | `gitCommand.ts:1693` | Dead code |
-| `cli.prompt.parallel.auto` | `gitCommand.ts:1695` | Dead code |
-| `cli.prompt.parallel.autoDesc` | `gitCommand.ts:1695` | Dead code |
-| `cli.prompt.parallel.oneDesc` | `gitCommand.ts:1696` | Dead code |
-| `cli.prompt.parallel.twoDesc` | `gitCommand.ts:1697` | Dead code |
-| `cli.prompt.parallel.fourDesc` | `gitCommand.ts:1698` | Dead code |
-| `cli.prompt.parallel.eightDesc` | `gitCommand.ts:1699` | Dead code |
-| `cli.prompt.parallel.shallow` | `gitCommand.ts:1704` | Dead code |
+| `cli.errors.gitlab.registerKeyDetails` | `gitCommand.ts:705,796,908` | ABERTO |
+| `cli.errors.gitlab.registerKey` | `gitCommand.ts:711,802,914` | ABERTO |
+| `cli.prompt.verbose.title` | `gitCommand.ts:958` | ABERTO |
+| `cli.log.tuiUnavailable` | `gitCommand.ts:2470` | ABERTO |
+| `cli.prompt.parallel.title` | `gitCommand.ts:1492` | ABERTO (dead code) |
+| `cli.prompt.parallel.level` | `gitCommand.ts:1493` | ABERTO (dead code) |
+| `cli.prompt.parallel.auto` | `gitCommand.ts:1495` | ABERTO (dead code) |
+| `cli.prompt.parallel.autoDesc` | `gitCommand.ts:1495` | ABERTO (dead code) |
+| `cli.prompt.parallel.oneDesc` | `gitCommand.ts:1496` | ABERTO (dead code) |
+| `cli.prompt.parallel.twoDesc` | `gitCommand.ts:1497` | ABERTO (dead code) |
+| `cli.prompt.parallel.fourDesc` | `gitCommand.ts:1498` | ABERTO (dead code) |
+| `cli.prompt.parallel.eightDesc` | `gitCommand.ts:1499` | ABERTO (dead code) |
+| `cli.prompt.parallel.shallow` | `gitCommand.ts:1504` | ABERTO (dead code) |
 
 ---
 
 ### I18N-02 — Chave `cli.log.preselection` definida mas nunca usada no código
-**Severidade: BAIXO**
+**Severidade: BAIXO** | **Status: ABERTO**
 
 Presente em `pt_BR.ts:181` e `en_US.ts:181`. Nenhuma ocorrência em `src/`. Chave órfã.
 
 ---
 
 ### I18N-03 — `en_US.ts` não é verificado pelo compilador
-**Severidade: MÉDIO**
+**Severidade: MÉDIO** | **Status: ABERTO**
 
-`types.ts` usa apenas `PtBrTranslations`. Chaves adicionadas a `pt_BR` e omitidas em `en_US` não causam erro de compilação. Recomendação: `export type LocaleTranslations = PtBrTranslations & EnUsTranslations` ou verificação estrutural explícita.
+`types.ts` usa apenas `PtBrTranslations`. Chaves adicionadas a `pt_BR` e omitidas em `en_US` não causam erro de compilação.
+
+---
+
+### I18N-04 *(novo)* — Texto de orientação na TUI mostra atalhos errados após Issue #6
+**Severidade: ALTO** | **Status: ABERTO**
+
+O commit que migrou para `Ctrl+*` atualizou o código (`tui.app.tsx`), mas não atualizou os textos de orientação. Usuários veem instruções erradas:
+
+| Texto exibido | Atalho real |
+|---|---|
+| `"S para sincronizar tudo"` | `Ctrl+S` |
+| `"C para filtrar selecionados"` | `Ctrl+M` |
+| `"B para branch"` | `Ctrl+B` |
+
+Arquivos afetados: `pt_BR.ts:91–93` e `en_US.ts:91–93`.
 
 ---
 
 ## 4. REQUISITOS vs CÓDIGO
 
-### REQ-01 / UX-03 — Atalho "S" documentado; código usa "Enter" e "Ctrl+S" com semântica invertida
-**Severidade: CRÍTICO**
+### REQ-01 / UX-03 — Atalho "S" documentado; código usa "Ctrl+S"
+**Severidade: ALTO** | **Status: ABERTO**
 
-Orientação exibida na TUI (`pt_BR.ts:92–93`):
-```
-"S para sincronizar tudo | Ctrl+S para sincronizar apenas o escopo destacado"
-```
-
-Código real (`tui.app.tsx`):
-- `Enter` → sincroniza escopo destacado (single)
-- `Ctrl+S` → sincroniza todos (all)
-- `S` puro → **não faz nada**
-
-O atalho `S` não existe na implementação. A descrição de `Ctrl+S` está invertida em relação ao comportamento real.
+Ver I18N-04. A orientação exibida na TUI ainda diz "S para sincronizar tudo", mas o handler real é `key.ctrl && lower === "s"`. Pressionar `S` puro não faz nada.
 
 ---
 
 ### REQ-02 — `docs/requisitos-tui-git-sync.md` RF-08: Modal de resumo final não implementada
-**Severidade: ALTO**
+**Severidade: ALTO** | **Status: ABERTO**
 
 Requisito pede modal com tempo total, contagem de ações e lista ordenada de repositórios com métricas. Código entrega apenas logs no painel de log.
 
 ---
 
 ### REQ-03 — `docs/requisitos-tui-git-sync.md` RF-06: Remoção de repositórios desmarcados inconsistente
-**Severidade: ALTO**
+**Severidade: ALTO** | **Status: ABERTO**
 
 Bug documentado em `docs/bugs-conhecidos.md` como aberto (BUG-004). Remoção não respeita escopo correto (linha vs grupo) nem as regras de exclusão segura para estados UNCOMMITTED/AHEAD/DIVERGED.
 
 ---
 
 ### REQ-04 — README cita `F12` para log em tela cheia; código usa `Ctrl+L`
-**Severidade: MÉDIO**
+**Severidade: MÉDIO** | **Status: ABERTO**
 
 `F12` não aparece em nenhum handler de input. O atalho real é `Ctrl+L` em `layout.tsx`.
 
 ---
 
 ### REQ-05 — `docs/requisitos-tui-git-sync.md` RF-01: Spinner de loading não disponível no caminho `gitSyncService`
-**Severidade: BAIXO**
+**Severidade: BAIXO** | **Status: ABERTO**
 
 O spinner existe apenas no caminho `gitCommand.ts`. O `gitSyncService.loadTree()` não emite eventos de progresso HTTP para consumidores externos.
 
 ---
 
 ### REQ-06 — `docs/requisitos-tui-git-sync.md` RU-03: Painel de log deve iniciar em nível `warn`; inicia em `info`
-**Severidade: MÉDIO**
+**Severidade: MÉDIO** | **Status: ABERTO**
 
 ```typescript
 // logStore.ts:17
@@ -258,123 +245,92 @@ private minLevel: LogLevel = "info";  // deveria ser "warn" conforme RU-03
 
 ## 5. DEAD CODE / CÓDIGO NUNCA ALCANÇADO
 
-### DC-01 — `resolveParallelOptions()` nunca é chamada (`gitCommand.ts:1689`)
-**Severidade: BAIXO**
+### DC-01 — `resolveParallelOptions()` nunca é chamada (`gitCommand.ts:1487`)
+**Severidade: BAIXO** | **Status: ABERTO**
 
-Função declarada mas não invocada em nenhum lugar do código. Carrega 12 chaves i18n inexistentes.
+Função declarada mas não invocada. Carrega 9 chaves i18n inexistentes. Pode ser removida junto com as chaves de `cli.prompt.parallel.*`.
 
 ---
 
-### DC-02 — `useTty = false` torna ~150 linhas de renderização TTY inacessíveis (`gitCommand.ts:2422`)
-**Severidade: BAIXO**
+### DC-02 — `useTty = false` torna ~150 linhas de renderização TTY inacessíveis (`gitCommand.ts:2031`)
+**Severidade: BAIXO** | **Status: ABERTO**
 
 ```typescript
 const useTty = false;  // todo o bloco if (useTty) é dead code
 ```
 
-Inclui lógica de cursor save/restore, renderBlock, workerLines e progressBar avançado.
-
 ---
 
-### DC-03 — `createGitSyncCore` (`gitSyncService.ts`) nunca é importado fora dos testes
-**Severidade: MÉDIO**
+### ~~DC-03~~ — `createGitSyncCore` nunca importado fora dos testes
+**Severidade: MÉDIO** | **Status: RESOLVIDO**
 
-O módulo `gitSyncService.ts` não é importado por nenhum arquivo em `src/`. Toda a lógica de sync da TUI passa por `gitCommand.ts`. Resultado: duas implementações paralelas divergentes, ambas incompletas, nenhuma sendo a canônica em produção.
+`createGitSyncCore` é importado e usado em `gitCommand.ts:1957`. A lógica de sync de produção passa pelo core.
 
 ---
 
 ### DC-04 — Funções declaradas duas vezes com implementações ligeiramente diferentes
-**Severidade: MÉDIO**
+**Severidade: MÉDIO** | **Status: ABERTO**
 
-`formatTransferDetail`, `parseMiB`, `formatObjects` e `formatRepoLabel` são declaradas como funções de módulo E redeclaradas como funções locais dentro do bloco `if (!session)` de `gitCommand.ts`, com implementações ligeiramente diferentes (ex.: `"?"` vs `"…"` no truncamento). As versões externas nunca são chamadas.
+`formatTransferDetail`, `parseMiB`, `formatObjects` e `formatRepoLabel` são declaradas como funções de módulo (linhas 1566, 1601, 1621, 1634) E redeclaradas como funções locais dentro do bloco `if (!session)` (linhas 2077, 2105, 2118, 2124). As versões de módulo externas só são usadas dentro do bloco TUI; as internas só dentro do bloco CLI. Consolidar em uma única declaração.
 
 ---
 
 ## 6. PROBLEMAS DE UX / FLUXO
 
-### UX-01 — Orientação exibe "C para filtrar"; atalho real é `Ctrl+M`
-**Severidade: CRÍTICO**
+### ~~UX-01~~ — Orientação exibe "C para filtrar"; atalho real é `Ctrl+M`
+**Severidade: CRÍTICO** | **Status: ABERTO** *(reaberto — ver I18N-04)*
 
-```
-pt_BR.ts:92: "C para filtrar selecionados"
-```
-```typescript
-// tui.app.tsx — atalho real
-if (key.ctrl && lower === "m") { toggleSelectionFilter(); }
-```
-
-O usuário que pressionar `C` não verá nenhuma resposta.
+O handler em `tui.app.tsx:511` foi corrigido para `key.ctrl && lower === "m"`, mas o texto de orientação em `pt_BR.ts:91` e `en_US.ts:91` ainda mostra `"C para filtrar selecionados"`.
 
 ---
 
-### UX-02 — Orientação exibe "B para branch"; atalho real é `Ctrl+B`
-**Severidade: ALTO**
+### ~~UX-02~~ — Orientação exibe "B para branch"; atalho real é `Ctrl+B`
+**Severidade: ALTO** | **Status: ABERTO** *(reaberto — ver I18N-04)*
 
-```
-pt_BR.ts:92: "B para branch"
-```
-```typescript
-// tui.app.tsx — atalho real
-if (key.ctrl && lower === "b") { openBranchModal(); }
-```
-
----
-
-### UX-03 — Ver REQ-01 acima.
+O handler em `tui.app.tsx:467` foi corrigido para `key.ctrl && lower === "b"`, mas o texto ainda mostra `"B para branch"`.
 
 ---
 
 ### UX-04 — `HelpModal` não implementa scroll; hint promete `↑/↓ PgUp/PgDn`
-**Severidade: ALTO**
+**Severidade: ALTO** | **Status: ABERTO**
 
 ```typescript
 // HelpModal.tsx:235 — corta silenciosamente; sem scroll
 const visibleLines = lines.slice(0, contentHeight);
 ```
 
-O hint exibido diz `"↑/↓ PgUp/PgDn para rolar"` mas nenhum handler de teclado implementa scroll no componente. Em terminais com menos de ~20 linhas, shortcuts da seção "tree" ficam invisíveis.
-
 ---
 
 ### UX-05 — `toggleModal` fecha modal "help" ao pressionar `Ctrl+P`
-**Severidade: BAIXO**
-
-Se a modal "help" estiver aberta e o usuário pressionar `Ctrl+P`, `toggleModal()` fecha a help em vez de abrir a de parâmetros.
+**Severidade: BAIXO** | **Status: ABERTO**
 
 ---
 
 ### UX-06 — BUG-001 documentado ainda aberto: senha ausente em `git-server-store`
-**Severidade: ALTO**
+**Severidade: ALTO** | **Status: ABERTO**
 
-Conforme `docs/bugs-conhecidos.md` BUG-001. O fluxo de `storeSshKeyOnly()` pode falhar dependendo da ausência de `cli.password` em determinados caminhos.
+Conforme `docs/bugs-conhecidos.md` BUG-001.
 
 ---
 
-### UX-07 — Fluxo TUI: exceção inesperada em `serverResults` pode deixar estado indefinido
-**Severidade: BAIXO**
-
-Se `Promise.all(servers.map(...))` rejeitar por razão não coberta pelos try/catch internos, o `loadingHandle` é encerrado pelo `.finally()` mas a aplicação não trata a rejeição propagada.
+### UX-07 — Fluxo TUI: exceção em `serverResults` pode deixar estado indefinido
+**Severidade: BAIXO** | **Status: ABERTO**
 
 ---
 
 ### UX-08 — `gitSyncService.ts` tem ~15 strings hardcoded em português, ignorando i18n
-**Severidade: MÉDIO**
+**Severidade: MÉDIO** | **Status: ABERTO**
 
 Mensagens de erro SSH, log HTTP e warnings em `gitSyncService.ts` são strings literais em português. Não serão traduzidas para `en_US`.
-
-Exemplos:
-- `"A chave vinculada em ~/.ssh/config para ${server} não existe (${associatedIdentityPath})."`
-- `"Nenhuma chave SSH configurada em ~/.ssh. Configure uma chave para continuar."`
-- Mensagens de log HTTP nas linhas 548–556
 
 ---
 
 ### UX-09 — Default de `baseUrl` hardcoded para `"https://git.tse.jus.br"` (URL do TSE)
-**Severidade: ALTO**
+**Severidade: ALTO** | **Status: ABERTO**
 
 ```typescript
-// gitCommand.ts:1907
-const baseUrlResolution = resolveEnvOrCliString(options.baseUrl?.trim(), "baseUrl", "base-url", "https://git.tse.jus.br");
+// gitCommand.ts:1687
+resolveEnvOrCliString(options.baseUrl?.trim(), "baseUrl", "base-url", "https://git.tse.jus.br");
 ```
 
 Todo usuário que não seja do TSE verá esse URL como sugestão padrão no modal de parâmetros do `git-server-store`. Deveria ser `""` ou `"https://gitlab.com"`.
@@ -383,9 +339,13 @@ Todo usuário que não seja do TSE verá esse URL como sugestão padrão no moda
 
 ## Resumo por Severidade
 
-| Severidade | Qtd | Itens |
+| Severidade | Qtd | Itens principais |
 |---|---|---|
-| **CRÍTICO** | 4 | BUG-06, REQ-01/UX-03, UX-01 |
-| **ALTO** | 11 | BUG-02, BUG-11, INC-01, INC-04, INC-07, REQ-02, REQ-03, UX-02, UX-04, UX-06, UX-09 |
-| **MÉDIO** | 11 | BUG-03, BUG-04, BUG-07, BUG-09, INC-02, INC-03, INC-05, I18N-03, DC-03, DC-04, REQ-06, UX-08 |
-| **BAIXO** | 9 | BUG-05, BUG-08, BUG-10, INC-08, I18N-02, DC-01, DC-02, REQ-04, REQ-05, UX-05, UX-07 |
+| **CRÍTICO** | 2 | BUG-06, UX-01 (I18N-04) |
+| **ALTO** | 8 | BUG-02, INC-06, I18N-04, REQ-01, REQ-02, REQ-03, UX-02, UX-04, UX-06, UX-09 |
+| **MÉDIO** | 7 | BUG-03, BUG-07, I18N-03, DC-04, REQ-06, UX-08, ARQ-18 |
+| **BAIXO** | 8 | BUG-05, BUG-10, INC-05, INC-08, I18N-02, DC-01, DC-02, REQ-04, REQ-05, UX-05, UX-07 |
+
+### Itens resolvidos desde a auditoria inicial
+
+BUG-04, BUG-08, BUG-09, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-03 (10 itens)
