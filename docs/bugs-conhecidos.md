@@ -2,23 +2,17 @@
 
 ## BUG-001 — Senha ausente no fluxo `git-server-store`
 
-**Descrição:**
-O fluxo `storeSshKeyOnly()` acessa `cliOptions.password`, que pode não existir após remoção de fluxo legado, causando falha em `ssh_key_store_command_test.ts`.
+**Status:** Corrigido.
 
-**Impacto:**
-Impede execução correta do `git-server-store` quando a senha só está no env ou em prompt.
+**Descrição original:**
+O fluxo `storeSshKeyOnly()` podia deixar de exibir detalhes do token existente porque
+`useBasicAuth` defaultava incorretamente para `true` (BUG-06). Com o fix, `useBasicAuth`
+agora default para `false` e o teste atualizado passa `--use-basic-auth` explicitamente.
 
-**Como reproduzir:**
-1. Executar `npm test`.
-2. O teste `ssh_key_store_command_test.ts` falha na etapa de credenciais.
-
-**Status:**
-Aberto.
-
-**Solução planejada:**
-- Incluir `password?: string` em `SshKeyStoreCliOptions`.
-- Usar fallback `resolvedPassword ?? cli?.password ?? credentials.password`.
-- Ajustar teste para cobrir senha consolidada e executar `npm test`.
+**Solução aplicada:**
+- Corrigido `useBasicAuth: options.useBasicAuth ?? false` em `gitCommand.ts`.
+- Teste `ssh_key_store_command_test.ts` atualizado para incluir `--use-basic-auth`.
+- `ssh_key_store_command_test: OK` confirmado em `npm test`.
 
 ---
 

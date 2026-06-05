@@ -41,14 +41,10 @@ Função `resolveParallelOptions` continua dead code (ver DC-01). Enquanto não 
 
 ---
 
-### BUG-06 — `gitCommand.ts:2685` — `useBasicAuth` padrão `true` em `git-server-store`
-**Severidade: CRÍTICO** | **Status: ABERTO**
+### ~~BUG-06~~ — `gitCommand.ts` — `useBasicAuth` padrão `true` em `git-server-store`
+**Severidade: CRÍTICO** | **Status: RESOLVIDO**
 
-```typescript
-useBasicAuth: options.useBasicAuth ?? true,   // ← deveria ser ?? false
-```
-
-Executar `paje git-server-store` sem `--use-basic-auth` ativa autenticação básica por padrão, ignorando o fluxo SSH que é o comportamento esperado.
+Corrigido para `useBasicAuth: options.useBasicAuth ?? false`. O fluxo SSH é agora o padrão correto.
 
 ---
 
@@ -300,10 +296,10 @@ const visibleLines = lines.slice(0, contentHeight);
 
 ---
 
-### UX-06 — BUG-001 documentado ainda aberto: senha ausente em `git-server-store`
-**Severidade: ALTO** | **Status: ABERTO**
+### ~~UX-06~~ — BUG-001 documentado ainda aberto: senha ausente em `git-server-store`
+**Severidade: ALTO** | **Status: RESOLVIDO**
 
-Conforme `docs/bugs-conhecidos.md` BUG-001.
+Resolvido com a correção do BUG-06 e atualização do teste. Ver `docs/bugs-conhecidos.md` BUG-001.
 
 ---
 
@@ -335,11 +331,11 @@ Todo usuário que não seja do TSE verá esse URL como sugestão padrão no moda
 
 | Severidade | Qtd | Itens principais |
 |---|---|---|
-| **CRÍTICO** | 1 | BUG-06 |
-| **ALTO** | 6 | BUG-02, INC-06, REQ-02, REQ-03, UX-04, UX-06, UX-09 |
-| **MÉDIO** | 7 | BUG-03, BUG-07, I18N-03, DC-04, REQ-06, UX-08, ARQ-18 |
-| **BAIXO** | 8 | BUG-05, BUG-10, INC-05, INC-08, I18N-02, DC-01, DC-02, REQ-04, REQ-05, UX-05, UX-07 |
+| **CRÍTICO** | 0 | — |
+| **ALTO** | 5 | BUG-02, INC-06, REQ-02, REQ-03, UX-04, UX-09 |
+| **MÉDIO** | 7 | BUG-03, BUG-07, I18N-03, DC-04, REQ-06, UX-08 |
+| **BAIXO** | 10 | BUG-05, BUG-10, INC-05, INC-08, I18N-02, DC-01, DC-02, REQ-04, REQ-05, UX-05, UX-07 |
 
 ### Itens resolvidos desde a auditoria inicial
 
-BUG-04, BUG-08, BUG-09, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-03, I18N-04, UX-01, UX-02, REQ-01/UX-03 (14 itens)
+BUG-04, BUG-06, BUG-08, BUG-09, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-03, I18N-04, UX-01, UX-02, UX-06, REQ-01/UX-03 (16 itens)

@@ -133,9 +133,119 @@ Falhas pré-existentes conhecidas (infraestrutura de container, não código):
 
 ## Persistência e configuração
 
-- Configurações e logs locais ficam em `~/.paje`.
-- Parâmetros podem vir do arquivo `~/.paje/env.yaml` ou de `--env-file`.
-- Tokens e chaves nunca são persistidos em texto plano no repositório.
+- Configurações e logs locais ficam em `~/.paje/`.
+- Servidores são gravados em `~/.paje/git-servers.json`.
+- Tokens são gravados em `~/.paje/git-servers.json` (somente token, nunca senha).
+- Parâmetros de sessão podem vir de `~/.paje/env.yaml` ou de `--env-file <caminho>`.
+- Nenhum dado sensível é persistido no repositório.
+
+---
+
+## Parâmetros — fontes e ordem de prioridade
+
+Todo parâmetro de execução passa por `resolveGitSyncConfig()` (em `gitSyncConfig.ts`),
+que aplica a seguinte precedência, da mais alta para a mais baixa:
+
+| Prioridade | Fonte | Exemplo |
+|---|---|---|
+| 1 — mais alta | **Argumento CLI** | `--base-dir /projetos` |
+| 2 | **Arquivo de ambiente** (`--env-file` ou `~/.paje/env.yaml`) | `baseDir: /projetos` |
+| 3 — mais baixa | **Padrão embutido** | `repos` (para `baseDir`) |
+
+A origem de cada parâmetro resolvido é rastreada (`"cli"` / `"env"` / `"default"`)
+e exibida no modal de parâmetros carregados (`Ctrl+P` na TUI).
+
+### Parâmetros disponíveis (`git-sync` e `git-server-store`)
+
+| Parâmetro | Flag CLI | Chave env | Padrão |
+|---|---|---|---|
+| Diretório base para clone | `--base-dir` | `baseDir` | `repos` |
+| Nome do servidor | `--server-name` | `serverName` | `""` |
+| URL base do servidor | `--base-url` | `baseUrl` | `""` |
+| Autenticação básica (HTTPS+PAT) | `--use-basic-auth` | `useBasicAuth` | `false` |
+| Usuário GitLab | `--username` | `username` | `""` |
+| E-mail Git | `--user-email` | `userEmail` | `""` |
+| Senha / PAT | `--password` | `password` | `""` |
+| Nome da chave SSH | `--key-label` | `keyLabel` | `""` |
+| Passphrase da chave SSH | `--passphrase` | `passphrase` | `""` |
+| Caminho da chave pública existente | `--public-key-path` | `publicKeyPath` | `""` |
+| Ocultar repos públicos | `--no-public-repos` | `noPublicRepos` | `false` |
+| Ocultar repos arquivados | `--no-archived-repos` | `noArchivedRepos` | `false` |
+| Filtro Ant/Glob de path | `--filter` | `filter` | `""` |
+| Repos/branches a sincronizar | `--sync-repos` | `syncRepos` | `""` |
+| Nível de detalhe | `--verbose` | `verbose` | `false` |
+| Simular sem persistir | `--dry-run` | `dryRun` | `false` |
+| Paralelismo | `--parallels` | `parallels` | `auto` |
+| Criar dirs sem clonar | `--prepare-local-dirs` | `prepareLocalDirs` | `false` |
+| Ocultar resumo final | `--no-summary` | `noSummary` | `false` |
+| Arquivo de ambiente | `--env-file` | — | `~/.paje/env.yaml` |
+
+---
+
+## Propriedades por servidor (`GitServerEntry`)
+
+Cada servidor registrado via `git-server-store` é salvo em `~/.paje/git-servers.json`
+com as seguintes propriedades:
+
+| Propriedade | Tipo | Descrição |
+|---|---|---|
+| `id` | `string` | URL base normalizada (chave de identidade) |
+| `name` | `string` | Nome legível do servidor |
+| `baseUrl` | `string` | URL base da API GitLab |
+| `useBasicAuth` | `boolean?` | Se `true`, usa HTTPS + token; se `false`/ausente, usa SSH |
+| `username` | `string?` | Usuário para autenticação básica |
+| `token` | `string?` | PAT salvo — único segredo persistido em disco |
+| `userEmail` | `string?` | E-mail Git aplicado aos repos clonados deste servidor |
+| `baseDir` | `string?` | Diretório base de clone específico deste servidor |
+| `filter` | `string?` | Filtro Ant/Glob aplicado somente aos projetos deste servidor |
+| `noPublicRepos` | `boolean?` | Ocultar repos públicos para este servidor |
+| `noArchivedRepos` | `boolean?` | Ocultar repos arquivados para este servidor |
+| `syncRepos` | `string?` | Repos/branches a sincronizar para este servidor |
+| `tokenName` | `string?` | Nome do PAT no GitLab (usado na criação/rotação) |
+| `tokenScopes` | `string?` | Escopos do PAT separados por vírgula |
+| `tokenExpiresAt` | `string?` | Data de expiração do PAT (`YYYY-MM-DD`) |
+
+### Prioridade das propriedades de servidor vs. parâmetros de sessão
+
+Para os campos `baseDir`, `userEmail`, `filter`, `noPublicRepos` e `noArchivedRepos`,
+a precedência efetiva durante um `git-sync` é:
+
+| Prioridade | Fonte |
+|---|---|
+| 1 — mais alta | **Propriedade gravada no servidor** (`~/.paje/git-servers.json`) |
+| 2 | **Argumento CLI** da sessão atual (`--base-dir`, `--filter`, etc.) |
+| 3 | **Arquivo de ambiente** (`env.yaml` / `--env-file`) |
+| 4 — mais baixa | **Padrão embutido** |
+
+Ou seja: se o servidor tem `baseDir: /projetos/tse` salvo, esse valor é usado
+independentemente de `--base-dir` passado na linha de comando. O argumento CLI
+só prevalece se o servidor não tiver a propriedade definida.
+
+**Implementação:** em `loadTree()` (`gitSyncService.ts`), cada projeto recebe os campos
+`pajeBaseDir`, `pajeUserEmail` e `pajeHttpUrl` estampados a partir do servidor de origem.
+Em `prepareTargets()`, esses campos têm precedência sobre os valores de `config`:
+
+```typescript
+localPath: path.join(project.pajeBaseDir ?? config.baseDir, ...),
+gitUserEmail: project.pajeUserEmail ?? config.userEmail,
+httpUrl: project.pajeHttpUrl,   // URL HTTPS com token OAuth2 embutido
+```
+
+O filtro por servidor é aplicado por `filterProjects()` dentro do loop por servidor,
+antes da mesclagem de projetos de múltiplos servidores. O filtro global de `config`
+é aplicado novamente após a mesclagem como segundo passe.
+
+### Fluxo de autenticação (`useBasicAuth`)
+
+| `useBasicAuth` | Modo | Operações git usam |
+|---|---|---|
+| `false` (padrão) | SSH | URL `ssh_url_to_repo` via `~/.ssh/config` |
+| `true` | HTTPS + PAT | `pajeHttpUrl` com `oauth2:<token>@host` embutido |
+
+Ao executar `git-server-store` sem `--use-basic-auth`, o fluxo SSH é iniciado.
+O PAJE verifica proativamente se a porta 22 do servidor está acessível antes
+de tentar o setup. Se bloqueada, exibe orientação para geração de PAT e sugere
+reexecutar com `--use-basic-auth`.
 
 ## Componentes de TUI
 
