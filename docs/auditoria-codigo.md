@@ -315,15 +315,10 @@ Mensagens de erro SSH, log HTTP e warnings em `gitSyncService.ts` são strings l
 
 ---
 
-### UX-09 — Default de `baseUrl` hardcoded para `"https://git.tse.jus.br"` (URL do TSE)
-**Severidade: ALTO** | **Status: ABERTO**
+### ~~UX-09~~ — Default de `baseUrl` hardcoded para `"https://git.tse.jus.br"` (URL do TSE)
+**Severidade: ALTO** | **Status: RESOLVIDO**
 
-```typescript
-// gitCommand.ts:1687
-resolveEnvOrCliString(options.baseUrl?.trim(), "baseUrl", "base-url", "https://git.tse.jus.br");
-```
-
-Todo usuário que não seja do TSE verá esse URL como sugestão padrão no modal de parâmetros do `git-server-store`. Deveria ser `""` ou `"https://gitlab.com"`.
+Substituído por `"https://gitlab.com"` em `gitCommand.ts`.
 
 ---
 
@@ -332,10 +327,10 @@ Todo usuário que não seja do TSE verá esse URL como sugestão padrão no moda
 | Severidade | Qtd | Itens principais |
 |---|---|---|
 | **CRÍTICO** | 0 | — |
-| **ALTO** | 5 | BUG-02, INC-06, REQ-02, REQ-03, UX-04, UX-09 |
+| **ALTO** | 4 | BUG-02, INC-06, REQ-02, REQ-03, UX-04 |
 | **MÉDIO** | 6 | BUG-03, BUG-07, I18N-03, DC-04, REQ-06, UX-08 |
 | **BAIXO** | 9 | BUG-05, BUG-10, INC-05, INC-08, I18N-02, DC-01, DC-02, REQ-05, UX-05, UX-07 |
 
 ### Itens resolvidos desde a auditoria inicial
 
-BUG-04, BUG-06, BUG-08, BUG-09, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-03, I18N-04, REQ-04, UX-01, UX-02, UX-06, REQ-01/UX-03 (17 itens)
+BUG-04, BUG-06, BUG-08, BUG-09, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-03, I18N-04, REQ-04, UX-01, UX-02, UX-06, UX-09, REQ-01/UX-03 (18 itens)

@@ -1430,7 +1430,7 @@ const buildSshKeyStoreParameters = (options: SshKeyStoreCliOptions, hasCliArg: (
     return resolveEnvStringArrayWithSource(resolvedCli, envConfig, key);
   };
 
-  const baseUrlResolution = resolveEnvOrCliString(options.baseUrl?.trim(), "baseUrl", "base-url", "https://git.tse.jus.br");
+  const baseUrlResolution = resolveEnvOrCliString(options.baseUrl?.trim(), "baseUrl", "base-url", "https://gitlab.com");
   const serverNameResolution = resolveEnvOrCliString(options.serverName, "serverName", "server-name", "GitLab");
   const usernameResolution = resolveEnvOrCliString(options.username, "username", "username");
   const keyLabelResolution = resolveEnvOrCliString(options.keyLabel, "keyLabel", "key-label", "paje");
