@@ -64,29 +64,24 @@ gitCommand.ts
 | ARQ-10 | `prepareTargets` duplicada | ✅ RESOLVIDO — Fase 3: removida |
 | ARQ-11 | `resolveParallels` duplicada | ✅ RESOLVIDO — Fase 3: importada do core |
 | ARQ-12 | `ensureLocalDirsIfNeeded` duplicada | ✅ RESOLVIDO — Fase 3: removida |
-| ARQ-13 | `buildSummary`/`createSummary` duplicadas | ⚠️ PARCIAL — `createSummary` permanece em `gitCommand.ts:291` com tipo diferente (`RepoSummary` sem `failed`). O core usa `buildSummary` com `GitSyncSummary`. Funcionalmente separadas; consolidação pendente. |
+| ARQ-13 | `buildSummary`/`createSummary` duplicadas | ✅ RESOLVIDO — `RepoSummary` removida. `createSummary()` agora retorna `GitSyncSummary` importado do core. |
 | ARQ-14 | `parallelSync` importado diretamente pela CLI/TUI | ✅ EFETIVAMENTE RESOLVIDO — `parallelSync()` não é mais chamado diretamente. O import permanece para `runGit`, `resolveConcurrency`, `ProgressEvent` e `SyncResult` — tipos e utilitários de infra que a camada de apresentação ainda consome legitimamente. |
-| ARQ-15 | `ensureSshKey` divergente: core incompleto | ⚠️ PENDENTE — core tem versão mínima; CLI tem fluxo completo com rotação de PAT, `useBasicAuth` e prompts. |
+| ARQ-15 | `ensureSshKey` divergente: core incompleto | ✅ RESOLVIDO — A versão local em `gitCommand.ts` era dead code (nunca chamada). Removida. O core mantém a versão canônica não-interativa chamada por `loadTree()`. |
 | ARQ-16 | `resolveProjectLocalPath` duplicada | ✅ RESOLVIDO — Fase 1: movida para `gitPathUtils.ts` |
 
 ---
 
-## 4. Novos itens identificados pós-refatoração
-
-| ID | Descrição | Arquivo:Linha | Severidade |
-|---|---|---|---|
-| ARQ-17 | `resolveParallelOptions()` é dead code desde a Fase 2 | `gitCommand.ts:1487` | BAIXO — Remove junto com DC-01 de `auditoria-codigo.md`. |
-| ARQ-18 | `createSummary` em `gitCommand.ts` e `buildSummary` no core divergem de tipo | `gitCommand.ts:291` vs `gitSyncService.ts:438` | MÉDIO — `createSummary` não tem campo `failed`; `buildSummary` não computa `behind`/`ahead`/etc. Consolidar em tipo único. |
-
----
-
-## 5. Resumo do progresso
+## 4. Resumo do progresso
 
 | Métrica | Antes | Depois |
 |---|---|---|
-| `gitCommand.ts` | ~2 844 linhas | ~2 712 linhas |
-| Funções duplicadas | 12 | 2 remanescentes (ARQ-13/18, ARQ-15) |
+| `gitCommand.ts` | ~2 844 linhas | ~2 440 linhas |
+| Funções duplicadas | 12 | 0 |
 | `parallelSync()` chamado diretamente | Sim | Não |
 | `createGitSyncCore()` usado em produção | Não | Sim |
+| Tipo `RepoSummary` local | Sim | Removido — usa `GitSyncSummary` do core |
+| `ensureSshKey` dead code no CLI | Sim | Removido |
 | Lógica de sync centralizada no core | Não | Sim |
 | Testes cobrem código de produção | Parcialmente | Sim |
+
+**Todos os 16 itens ARQ originais estão resolvidos.**

@@ -73,7 +73,7 @@ import {
   type SshKeyInfo,
 } from "./sshManager.js";
 import { readGitServers, writeGitServers } from "./persistence.js";
-import { type GitServerEntry, createGitSyncCore, resolveRepoStatus, resolveParallels } from "./core/gitSyncService.js";
+import { type GitServerEntry, type GitSyncSummary, createGitSyncCore, resolveRepoStatus, resolveParallels } from "./core/gitSyncService.js";
 
 const buildServerPrefix = (server: GitServerEntry): string => {
   const normalizedName = server.name?.trim() || t("cli.sync.defaultServerLabel");
@@ -221,12 +221,6 @@ const parseBooleanFlag = (value?: string | boolean): boolean | undefined => {
   return normalized === "true";
 };
 
-type RepoSummary = {
-  total: number;
-  publicCount: number;
-  archivedCount: number;
-  byStatus: Record<RepoSyncState, number>;
-};
 
 export type TreePrintNode = {
   label: string;
@@ -288,10 +282,11 @@ const resolveBranchColor = (branch: string): string | undefined => {
   return undefined;
 };
 
-const createSummary = (): RepoSummary => ({
+const createSummary = (): GitSyncSummary => ({
   total: 0,
   publicCount: 0,
   archivedCount: 0,
+  failed: 0,
   byStatus: {
     SYNCED: 0,
     BEHIND: 0,
@@ -304,7 +299,7 @@ const createSummary = (): RepoSummary => ({
   },
 });
 
-const renderSummaryLines = (summary: RepoSummary): string[] => {
+const renderSummaryLines = (summary: GitSyncSummary): string[] => {
   const entries: Array<[string, number]> = [
     [t("cli.summary.repositoriesIdentified"), summary.total],
     [t("cli.summary.public"), summary.publicCount],
@@ -649,278 +644,6 @@ export const promptBasicAuthPassword = async (
     { type: "password", name: "password", message: t("cli.prompt.basicAuth.passwordLabel", { username }) },
   ])) as { password: string };
   return answers.password;
-};
-
-const ensureSshKey = async (
-  api: GitLabApi,
-  session?: TuiSession,
-  verbose?: boolean,
-  cli?: GitSyncCliOptions
-): Promise<void> => {
-  const existingKeys = listSshPublicKeys();
-  const server = api.getServerHost();
-  let associatedIdentityPath = getIdentityFileForHost(server);
-  if (associatedIdentityPath) {
-    const resolved = resolveSshIdentityPath(associatedIdentityPath);
-    if (!fs.existsSync(resolved)) {
-      const message = t("cli.prompt.sshKey.missingKey", { server, path: associatedIdentityPath });
-      if (session) {
-        await session.showMessage({ title: t("cli.prompt.sshKey.title"), message });
-      } else {
-        console.log(message);
-      }
-      associatedIdentityPath = null;
-    }
-  }
-
-  if (associatedIdentityPath) {
-    await ensureKnownHost(server, session, verbose);
-    await reportSshPersistenceStatus(server, session);
-    return;
-  }
-
-  if (!associatedIdentityPath && existingKeys.length > 0) {
-    if (cli?.publicKeyPath) {
-      const selectedKey = cli.publicKeyPath;
-      if (!fs.existsSync(selectedKey)) {
-        const message = t("cli.prompt.sshKey.missingProvidedKey", { path: selectedKey });
-        if (session) {
-          await session.showMessage({ title: t("cli.prompt.sshKey.title"), message });
-        } else {
-          console.log(message);
-        }
-        return;
-      }
-      const key = sanitizePublicKey(readPublicKey(selectedKey));
-      upsertSshConfigHost(server, selectedKey.replace(/\.pub$/, ""));
-      await ensureKnownHost(server, session, verbose);
-      await reportSshPersistenceStatus(server, session);
-      if (api.hasAuth()) {
-        try {
-          await registerKeyInGitLab(api, `paje-existing-${Date.now()}`, key);
-        } catch (error) {
-          const details = (error as { details?: { method: string; url: string; status: number; responseBody: string; curl: string } })
-            .details;
-          const message = details
-            ? t("cli.errors.gitlab.registerKeyDetails", {
-                status: details.status,
-                url: details.url,
-                response: details.responseBody,
-                curl: details.curl,
-              })
-            : t("cli.errors.gitlab.registerKey", {
-                message: error instanceof Error ? error.message : t("cli.errors.unknown"),
-              });
-          if (session) {
-            await session.showMessage({ title: t("cli.prompt.gitlab.title"), message });
-          } else {
-            console.log(message);
-          }
-        }
-      }
-      return;
-    }
-    let choice: "existing" | "generate" = "generate";
-    if (session) {
-      const selection = await session.promptList({
-        title: t("cli.prompt.sshKey.title"),
-        message: t("cli.prompt.sshKey.selectOption"),
-        choices: [
-          {
-            label: t("cli.prompt.sshKey.optionExisting"),
-            value: "existing",
-            description: t("cli.prompt.sshKey.optionExistingDesc"),
-          },
-          {
-            label: t("cli.prompt.sshKey.optionGenerate"),
-            value: "generate",
-            description: t("cli.prompt.sshKey.optionGenerateDesc"),
-          },
-        ],
-      });
-      choice = (selection ?? "generate") as "existing" | "generate";
-    } else {
-      const promptChoice = (await inquirer.prompt([
-        {
-          name: "choice",
-          type: "list",
-          message: t("cli.prompt.sshKey.title"),
-          choices: [
-            { name: t("cli.prompt.sshKey.optionExisting"), value: "existing" },
-            { name: t("cli.prompt.sshKey.optionGenerate"), value: "generate" },
-          ],
-        },
-      ])) as { choice: "existing" | "generate" };
-      choice = promptChoice.choice;
-    }
-
-    if (choice === "existing") {
-      let selectedKey: string | null = null;
-      if (session) {
-        selectedKey = await session.promptList({
-          title: t("cli.prompt.sshKey.title"),
-          message: t("cli.prompt.sshKey.selectPublicKey"),
-          choices: existingKeys.map((key) => ({
-            label: key,
-            value: key,
-            description: t("cli.prompt.sshKey.confirmPublicKeyDesc"),
-          })),
-        });
-      } else {
-        const promptKey = (await inquirer.prompt([
-          {
-            name: "selectedKey",
-            type: "list",
-            message: t("cli.prompt.sshKey.selectPublicKey"),
-            choices: existingKeys,
-          },
-        ])) as { selectedKey: string };
-        selectedKey = promptKey.selectedKey;
-      }
-
-      if (!selectedKey) {
-        return;
-      }
-
-      const key = sanitizePublicKey(readPublicKey(selectedKey));
-      upsertSshConfigHost(server, selectedKey.replace(/\.pub$/, ""));
-      await ensureKnownHost(server, session, verbose);
-      await reportSshPersistenceStatus(server, session);
-      if (api.hasAuth()) {
-        try {
-          await registerKeyInGitLab(api, `paje-existing-${Date.now()}`, key);
-        } catch (error) {
-          const details = (error as { details?: { method: string; url: string; status: number; responseBody: string; curl: string } })
-            .details;
-          const message = details
-            ? t("cli.errors.gitlab.registerKeyDetails", {
-                status: details.status,
-                url: details.url,
-                response: details.responseBody,
-                curl: details.curl,
-              })
-            : t("cli.errors.gitlab.registerKey", {
-                message: error instanceof Error ? error.message : t("cli.errors.unknown"),
-              });
-          if (session) {
-            await session.showMessage({ title: t("cli.prompt.gitlab.title"), message });
-          } else {
-            console.log(message);
-          }
-        }
-      }
-      return;
-    }
-  }
-
-  let passphrase: string | null = cli?.passphrase ?? null;
-  let keyLabel: string | null = cli?.keyLabel ?? null;
-  if (session) {
-    if (cli?.keyLabel) {
-      keyLabel = cli.keyLabel;
-    }
-    if (cli?.passphrase) {
-      passphrase = cli.passphrase;
-    }
-    if (cli?.keyLabel || cli?.passphrase) {
-      // não abrir formulário se parâmetros foram fornecidos
-    } else {
-      const form = await session.promptForm<{ keyLabel: string; passphrase: string }>({
-        title: t("cli.prompt.sshKey.title"),
-        fields: [
-        {
-          name: "keyLabel",
-          label: t("cli.prompt.sshKey.keyLabelPrompt"),
-          defaultValue: "paje",
-          description: t("cli.prompt.sshKey.keyLabelDesc"),
-        },
-        {
-          name: "passphrase",
-          label: t("cli.prompt.sshKey.passphrasePrompt"),
-          secret: true,
-          description: t("cli.prompt.sshKey.passphraseDesc"),
-        },
-        ],
-      });
-      keyLabel = form?.keyLabel ?? "paje";
-      passphrase = form?.passphrase ?? null;
-    }
-  } else {
-    if (!cli?.keyLabel) {
-      const promptLabel = (await inquirer.prompt([
-        { name: "keyLabel", message: t("cli.prompt.sshKey.keyLabelPrompt"), type: "input", default: "paje" },
-      ])) as { keyLabel?: string };
-      keyLabel = promptLabel.keyLabel ?? "paje";
-    }
-    if (!cli?.passphrase) {
-      const promptPass = (await inquirer.prompt([
-        { name: "passphrase", message: t("cli.prompt.sshKey.passphrasePrompt"), type: "password" },
-      ])) as { passphrase?: string };
-      passphrase = promptPass.passphrase ?? null;
-    }
-  }
-
-  let resolvedLabel = keyLabel || "paje";
-  while (sshKeyExists(resolvedLabel)) {
-    if (session) {
-      session.showInlineError(t("cli.prompt.sshKey.keyExists", { label: resolvedLabel }));
-      const retryForm = await session.promptForm<{ keyLabel: string; passphrase: string }>({
-        title: t("cli.prompt.sshKey.title"),
-        fields: [
-          {
-            name: "keyLabel",
-            label: t("cli.prompt.sshKey.keyLabelPrompt"),
-            defaultValue: resolvedLabel,
-            description: t("cli.prompt.sshKey.keyLabelDesc"),
-          },
-          {
-            name: "passphrase",
-            label: t("cli.prompt.sshKey.passphrasePrompt"),
-            secret: true,
-            description: t("cli.prompt.sshKey.passphraseDesc"),
-          },
-        ],
-      });
-      resolvedLabel = retryForm?.keyLabel ?? resolvedLabel;
-      passphrase = retryForm?.passphrase ?? passphrase;
-    } else {
-      console.log(t("cli.prompt.sshKey.keyExists", { label: resolvedLabel }));
-      break;
-    }
-  }
-
-  if (sshKeyExists(resolvedLabel)) {
-    return;
-  }
-
-      const keyInfo = await generatePajeKeyPair(passphrase || undefined, resolvedLabel);
-      const sanitizedKey = sanitizePublicKey(keyInfo.publicKey);
-      upsertSshConfigHost(server, keyInfo.privateKeyPath);
-      await ensureKnownHost(server, session, verbose);
-      await reportSshPersistenceStatus(server, session);
-      if (api.hasAuth()) {
-        try {
-          await registerKeyInGitLab(api, `paje-${Date.now()}`, sanitizedKey);
-        } catch (error) {
-          const details = (error as { details?: { method: string; url: string; status: number; responseBody: string; curl: string } })
-            .details;
-          const message = details
-            ? t("cli.errors.gitlab.registerKeyDetails", {
-                status: details.status,
-                url: details.url,
-                response: details.responseBody,
-                curl: details.curl,
-              })
-            : t("cli.errors.gitlab.registerKey", {
-                message: error instanceof Error ? error.message : t("cli.errors.unknown"),
-              });
-          if (session) {
-            await session.showMessage({ title: t("cli.prompt.gitlab.title"), message });
-          } else {
-            console.log(message);
-          }
-        }
-      }
 };
 
 const ensureKnownHost = async (server: string, session?: TuiSession, verbose?: boolean): Promise<void> => {
