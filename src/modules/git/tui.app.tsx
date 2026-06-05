@@ -24,6 +24,8 @@ type FlatTreeItem = {
   id: string;
   depth: number;
   label: string;
+  serverName?: string;
+  serverColor?: string;
   status?: RepoSyncStatus;
   progress?: string;
   selected: boolean;
@@ -57,6 +59,25 @@ const STATUS_COLOR: Record<RepoSyncState, string> = {
   LOCAL: "red",
   UNCOMMITTED: "red",
   DIVERGED: "red",
+};
+
+const SERVER_COLOR_PALETTE = ["cyan", "magenta", "yellow", "blue", "green", "white", "red"] as const;
+
+const resolveServerColorMap = (nodes: GitLabTreeNode[]): Map<string, string> => {
+  const seen = new Set<string>();
+  const visit = (node: GitLabTreeNode): void => {
+    const name = node.project?.pajeServerName;
+    if (name) {
+      seen.add(name);
+    }
+    node.children?.forEach(visit);
+  };
+  nodes.forEach(visit);
+  const map = new Map<string, string>();
+  Array.from(seen).forEach((name, index) => {
+    map.set(name, SERVER_COLOR_PALETTE[index % SERVER_COLOR_PALETTE.length]);
+  });
+  return map;
 };
 
 const BRANCH_COLOR: Record<string, string> = {
@@ -104,20 +125,28 @@ const renderStatusLabel = (status: RepoSyncStatus): { branch: string; branchColo
   };
 };
 
-const flattenTree = (items: GitLabTreeNode[], progressMap: Map<string, ProgressSnapshot>, depth = 0): FlatTreeItem[] => {
+const flattenTree = (
+  items: GitLabTreeNode[],
+  progressMap: Map<string, ProgressSnapshot>,
+  depth = 0,
+  serverColorMap?: Map<string, string>
+): FlatTreeItem[] => {
   const output: FlatTreeItem[] = [];
   items.forEach((node) => {
+    const serverName = node.project?.pajeServerName;
     output.push({
       id: node.id,
       depth,
       label: node.label,
+      serverName,
+      serverColor: serverName ? serverColorMap?.get(serverName) : undefined,
       status: node.status,
       progress: progressMap.get(node.id)?.text,
       selected: node.selected ?? false,
       partiallySelected: node.partiallySelected ?? false,
     });
     if (node.children && node.children.length > 0) {
-      output.push(...flattenTree(node.children, progressMap, depth + 1));
+      output.push(...flattenTree(node.children, progressMap, depth + 1, serverColorMap));
     }
   });
   return output;
@@ -133,6 +162,7 @@ const TreeRowComponent: React.FC<{ item: FlatTreeItem; selected: boolean }> = (
   const progressLabel = item.progress ? item.progress : "";
   const textColor = selected ? "white" : undefined;
   const backgroundColor = selected ? "blue" : undefined;
+  const hasInfo = Boolean(item.serverName || statusLabel);
 
   return (
     <Box flexDirection="row" width="100%">
@@ -141,12 +171,22 @@ const TreeRowComponent: React.FC<{ item: FlatTreeItem; selected: boolean }> = (
         {indicator} {item.label}
       </Text>
       <Box flexGrow={1} justifyContent="flex-end">
-        {statusLabel && (
+        {hasInfo && (
           <Text color={textColor} backgroundColor={backgroundColor}>
             {" "}[
-            <Text color={statusLabel.branchColor ?? textColor}>{statusLabel.branch}</Text>
-            {", "}
-            <Text color={statusLabel.stateColor ?? textColor}>{statusLabel.state}</Text>]
+            {item.serverName && (
+              <Text color={item.serverColor ?? textColor}>{item.serverName}</Text>
+            )}
+            {item.serverName && statusLabel && (
+              <Text color={textColor}>{", "}</Text>
+            )}
+            {statusLabel && (
+              <>
+                <Text color={statusLabel.branchColor ?? textColor}>{statusLabel.branch}</Text>
+                <Text color={textColor}>{", "}</Text>
+                <Text color={statusLabel.stateColor ?? textColor}>{statusLabel.state}</Text>
+              </>
+            )}]
           </Text>
         )}
         {progressLabel && (
@@ -169,6 +209,8 @@ const TreeRow = React.memo(
     prev.item.selected === next.item.selected &&
     prev.item.partiallySelected === next.item.partiallySelected &&
     prev.item.progress === next.item.progress &&
+    prev.item.serverName === next.item.serverName &&
+    prev.item.serverColor === next.item.serverColor &&
     prev.item.status?.branch === next.item.status?.branch &&
     prev.item.status?.state === next.item.status?.state &&
     prev.item.status?.delta === next.item.status?.delta
@@ -293,10 +335,12 @@ export const renderRepositoryTree = async (
       const resolvedRef = useRef(false);
       const syncInProgressRef = useRef(false);
 
+      const serverColorMap = useMemo(() => resolveServerColorMap(nodes), [nodes]);
+
       const items = useMemo(() => {
         const visibleNodes = showOnlySelected ? filterTreeBySelection(nodes) : nodes;
-        return flattenTree(visibleNodes, progressMapRef.current);
-      }, [nodes, version, showOnlySelected]);
+        return flattenTree(visibleNodes, progressMapRef.current, 0, serverColorMap);
+      }, [nodes, version, showOnlySelected, serverColorMap]);
 
       useEffect(() => {
         if (items.length === 0) {
