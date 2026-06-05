@@ -34,6 +34,7 @@ import type {
   GitLabProject,
   GitLabTreeNode,
   GitRepositoryTarget,
+  RepoSyncState,
   RepoSyncStatus,
 } from "../types.js";
 import { LoggerBroker } from "./loggerBroker.js";
@@ -73,7 +74,8 @@ export type GitSyncSummary = {
   total: number;
   publicCount: number;
   archivedCount: number;
-  byStatus: Record<string, number>;
+  failed: number;
+  byStatus: Record<RepoSyncState, number>;
 };
 
 export type GitSyncCore = {
@@ -437,16 +439,16 @@ const buildSummary = (): GitSyncSummary => ({
   total: 0,
   publicCount: 0,
   archivedCount: 0,
+  failed: 0,
   byStatus: {
     SYNCED: 0,
-    UPDATED: 0,
-    UNPUSHED: 0,
-    UNCOMMITTED: 0,
-    AHEAD: 0,
     BEHIND: 0,
+    AHEAD: 0,
+    REMOTE: 0,
+    EMPTY: 0,
+    LOCAL: 0,
+    UNCOMMITTED: 0,
     DIVERGED: 0,
-    CLONED: 0,
-    FAILED: 0,
   },
 });
 
@@ -641,17 +643,6 @@ export const createGitSyncCore = (): GitSyncCore => {
       logger.info(t("cli.sync.listDuration", { seconds: (listDurationMs / 1000).toFixed(2) }));
 
       const filteredProjects = filterProjects(projects, config);
-      const summary = buildSummary();
-      filteredProjects.forEach((project) => {
-        summary.total += 1;
-        if (project.visibility === "public") {
-          summary.publicCount += 1;
-        }
-        if (project.archived) {
-          summary.archivedCount += 1;
-        }
-      });
-
       await ensureLocalDirsIfNeeded(filteredProjects, config.baseDir, config.prepareLocalDirs ?? false);
 
       const resolvedPaths = resolveLocalPathConflicts(filteredProjects);
@@ -737,14 +728,16 @@ export const createGitSyncCore = (): GitSyncCore => {
         summary.total += 1;
         switch (result.status) {
           case "failed":
-            summary.byStatus.FAILED += 1;
+            summary.failed += 1;
             break;
           case "cloned":
-            summary.byStatus.CLONED += 1;
+            summary.byStatus.REMOTE += 1;
             break;
           case "pulled":
+            summary.byStatus.BEHIND += 1;
+            break;
           case "pushed":
-            summary.byStatus.UPDATED += 1;
+            summary.byStatus.AHEAD += 1;
             break;
           case "skipped":
             summary.byStatus.SYNCED += 1;
