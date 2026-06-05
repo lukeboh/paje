@@ -3,7 +3,8 @@ import path from "node:path";
 import { t } from "../../../i18n/index.js";
 import { GitLabApi } from "../gitlabApi.js";
 import { parallelSync, runGit, type ProgressEvent } from "../parallelSync.js";
-import { splitFilterPatterns } from "../patternFilter.js";
+import { antPatternToRegex, compileAntPatterns, matchesAntPatterns, splitFilterPatterns } from "../patternFilter.js";
+import { resolveLocalPathConflicts, resolveProjectLocalPath } from "../gitPathUtils.js";
 import { readGitServers, writeGitServers } from "../persistence.js";
 import {
   addHostToKnownHosts,
@@ -205,7 +206,7 @@ const mergeProjectsByPath = (
   return { projects };
 };
 
-const resolveSyncReposSpecs = (rawPatterns?: string): Array<{ projectPath: string; branch?: string }> => {
+export const resolveSyncReposSpecs = (rawPatterns?: string): Array<{ projectPath: string; branch?: string }> => {
   const specs: Array<{ projectPath: string; branch?: string }> = [];
   splitFilterPatterns(rawPatterns).forEach((rawPattern: string) => {
     const trimmed = rawPattern.trim();
@@ -221,42 +222,50 @@ const resolveSyncReposSpecs = (rawPatterns?: string): Array<{ projectPath: strin
   return specs;
 };
 
-const resolveSyncTargets = (
+export const resolveSyncTargets = (
   projects: GitLabProject[],
   specs: Array<{ projectPath: string; branch?: string }>
 ): GitRepositoryTarget[] => {
-  const matches: GitRepositoryTarget[] = [];
+  if (specs.length === 0) {
+    return [];
+  }
   const normalizedProjects = projects.map((project) => ({
     project,
-    matchPath: project.path_with_namespace.toLowerCase(),
+    matchPaths: [
+      project.path_with_namespace,
+      project.pajeOriginalPathWithNamespace,
+    ].filter(Boolean) as string[],
   }));
-
+  const matches: GitRepositoryTarget[] = [];
   specs.forEach((spec) => {
-    const normalizedSpec = spec.projectPath.toLowerCase();
-    normalizedProjects.forEach(({ project, matchPath }) => {
-      if (matchPath !== normalizedSpec) {
+    const pattern = antPatternToRegex(spec.projectPath);
+    normalizedProjects.forEach(({ project, matchPaths }) => {
+      if (!matchPaths.some((mp) => pattern.test(mp))) {
         return;
       }
       matches.push({
         id: project.id,
         name: project.name,
-        pathWithNamespace: project.path_with_namespace,
+        pathWithNamespace: resolveProjectLocalPath(project),
         sshUrl: project.ssh_url_to_repo,
+        httpUrl: project.pajeHttpUrl,
         localPath: "",
-        defaultBranch: spec.branch || project.default_branch,
+        defaultBranch: project.default_branch,
         branch: spec.branch,
       });
     });
   });
-
+  const uniqueByPath = new Map<string, GitRepositoryTarget>();
   matches.forEach((target) => {
-    target.pathWithNamespace = target.pathWithNamespace.trim();
+    const key = `${target.pathWithNamespace}#${target.branch ?? ""}`;
+    if (!uniqueByPath.has(key)) {
+      uniqueByPath.set(key, target);
+    }
   });
-
-  return matches;
+  return Array.from(uniqueByPath.values());
 };
 
-const resolveRepoStatus = async (options: {
+export const resolveRepoStatus = async (options: {
   targetPath: string;
   defaultBranch?: string | null;
   knownRemote?: boolean;
@@ -298,37 +307,8 @@ const resolveRepoStatus = async (options: {
   return { branch, state: "DIVERGED", delta: `+${ahead}/-${behind}` };
 };
 
-const resolveProjectLocalPath = (project: GitLabProject): string => {
-  return project.pajeOriginalPathWithNamespace ?? project.path_with_namespace;
-};
 
-const resolveLocalPathConflicts = (projects: GitLabProject[]): Map<number, string> => {
-  const byPath = new Map<string, GitLabProject[]>();
-  const resolved = new Map<number, string>();
-
-  projects.forEach((project) => {
-    const basePath = resolveProjectLocalPath(project);
-    const entries = byPath.get(basePath) ?? [];
-    entries.push(project);
-    byPath.set(basePath, entries);
-  });
-
-  byPath.forEach((entries, basePath) => {
-    if (entries.length === 1) {
-      resolved.set(entries[0].id, basePath);
-      return;
-    }
-    entries.forEach((project) => {
-      const serverName = project.pajeServerName?.trim();
-      const suffix = serverName && serverName.length > 0 ? `-${serverName}` : "-servidor";
-      resolved.set(project.id, `${basePath}${suffix}`);
-    });
-  });
-
-  return resolved;
-};
-
-const ensureLocalDirsIfNeeded = async (
+export const ensureLocalDirsIfNeeded = async (
   projects: GitLabProject[],
   baseDir: string,
   prepareLocalDirs: boolean
@@ -452,7 +432,8 @@ const buildSummary = (): GitSyncSummary => ({
   },
 });
 
-const filterProjects = (projects: GitLabProject[], config: GitSyncConfig): GitLabProject[] => {
+export const filterProjects = (projects: GitLabProject[], config: GitSyncConfig): GitLabProject[] => {
+  const filterPatterns = compileAntPatterns(config.filter);
   return projects.filter((project) => {
     if (config.noArchivedRepos && project.archived) {
       return false;
@@ -460,16 +441,20 @@ const filterProjects = (projects: GitLabProject[], config: GitSyncConfig): GitLa
     if (config.noPublicRepos && project.visibility === "public") {
       return false;
     }
-    if (config.filter) {
-      const normalizedPath = project.path_with_namespace.toLowerCase();
-      const normalizedFilter = config.filter.trim().toLowerCase();
-      return normalizedPath.includes(normalizedFilter);
+    if (filterPatterns.length === 0) {
+      return true;
     }
-    return true;
+    const candidates = [
+      project.path_with_namespace,
+      project.pajeOriginalPathWithNamespace,
+      project.namespace?.full_path,
+      project.namespace?.full_path ? `${project.namespace.full_path}/${project.name}` : undefined,
+    ].filter(Boolean) as string[];
+    return candidates.some((candidate) => matchesAntPatterns(candidate, filterPatterns));
   });
 };
 
-const prepareTargets = (
+export const prepareTargets = (
   projects: GitLabProject[],
   baseDir: string,
   username?: string,
@@ -489,7 +474,7 @@ const prepareTargets = (
   }));
 };
 
-const resolveParallels = (rawValue?: string): number | "auto" => {
+export const resolveParallels = (rawValue?: string): number | "auto" => {
   if (!rawValue) {
     return "auto";
   }
