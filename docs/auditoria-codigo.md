@@ -34,10 +34,10 @@ A chamada foi removida com a Fase 2. A lógica de "nenhum repositório correspon
 
 ---
 
-### BUG-05 — `gitCommand.ts:1487–1540` — Chaves `cli.prompt.parallel.*` inexistentes (9 chaves)
-**Severidade: BAIXO** | **Status: ABERTO (mitigado)**
+### ~~BUG-05~~ — `gitCommand.ts` — Chaves `cli.prompt.parallel.*` inexistentes (9 chaves)
+**Severidade: BAIXO** | **Status: RESOLVIDO**
 
-Função `resolveParallelOptions` continua dead code (ver DC-01). Enquanto não for chamada, o bug não se manifesta.
+A função `resolveParallelOptions` (dead code) foi removida junto com as 9 chamadas a chaves inexistentes. Ver DC-01.
 
 ---
 
@@ -247,10 +247,10 @@ O spinner existe apenas no caminho `gitCommand.ts`. O `gitSyncService.loadTree()
 
 ## 5. DEAD CODE / CÓDIGO NUNCA ALCANÇADO
 
-### DC-01 — `resolveParallelOptions()` nunca é chamada (`gitCommand.ts:1487`)
-**Severidade: BAIXO** | **Status: ABERTO**
+### ~~DC-01~~ — `resolveParallelOptions()` nunca era chamada
+**Severidade: BAIXO** | **Status: RESOLVIDO**
 
-Função declarada mas não invocada. Carrega 9 chaves i18n inexistentes. Pode ser removida junto com as chaves de `cli.prompt.parallel.*`.
+Função removida de `gitCommand.ts`. Eliminadas as 9 chamadas a chaves `cli.prompt.parallel.*` inexistentes (resolve também BUG-05).
 
 ---
 
@@ -355,11 +355,11 @@ Ao selecionar S para sincronizar, a mensagem genérica exibida no painel de log 
 | **CRÍTICO** | 0 | — |
 | **ALTO** | 3 | REQ-02, REQ-03, UX-04 |
 | **MÉDIO** | 2 | BUG-07, DC-04 |
-| **BAIXO** | 8 | BUG-05, INC-05, INC-08, DC-01, DC-02, REQ-05, UX-05, UX-07 |
+| **BAIXO** | 6 | INC-05, INC-08, DC-02, REQ-05, UX-05, UX-07 |
 
 ### Itens resolvidos desde a auditoria inicial
 
-BUG-02, BUG-03, BUG-04, BUG-06, BUG-08, BUG-09, BUG-10, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-03, I18N-02, I18N-03, I18N-04, REQ-04, REQ-06, UX-01, UX-02, UX-06, UX-08, UX-09, UX-10, UX-11, REQ-01/UX-03 (27 itens)
+BUG-02, BUG-03, BUG-04, BUG-05, BUG-06, BUG-08, BUG-09, BUG-10, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-01, DC-03, I18N-02, I18N-03, I18N-04, REQ-04, REQ-06, UX-01, UX-02, UX-06, UX-08, UX-09, UX-10, UX-11, REQ-01/UX-03 (29 itens)
 
 ---
 

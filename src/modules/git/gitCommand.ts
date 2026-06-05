@@ -1230,55 +1230,6 @@ const toggleById = (nodes: GitLabTreeNode[], id: string): void => {
   nodes.forEach((root) => recomputeTreeSelection(root));
 };
 
-const resolveParallelOptions = async (session?: TuiSession): Promise<ParallelSyncOptions> => {
-  if (session) {
-    const concurrency = await session.promptList<number | "auto">({
-      title: t("cli.prompt.parallel.title"),
-      message: t("cli.prompt.parallel.level"),
-      choices: [
-        { label: t("cli.prompt.parallel.auto"), value: "auto", description: t("cli.prompt.parallel.autoDesc") },
-        { label: "1", value: 1, description: t("cli.prompt.parallel.oneDesc") },
-        { label: "2", value: 2, description: t("cli.prompt.parallel.twoDesc") },
-        { label: "4", value: 4, description: t("cli.prompt.parallel.fourDesc") },
-        { label: "8", value: 8, description: t("cli.prompt.parallel.eightDesc") },
-      ],
-    });
-    const shallow = await session.promptConfirm({
-      title: t("cli.prompt.parallel.title"),
-      message: t("cli.prompt.parallel.shallow"),
-      defaultValue: false,
-    });
-
-    return {
-      concurrency: (concurrency ?? "auto") as ParallelSyncOptions["concurrency"],
-      shallow: shallow ?? false,
-    };
-  }
-
-  const { concurrency, shallow } = (await inquirer.prompt([
-    {
-      name: "concurrency",
-      type: "list",
-      message: t("cli.prompt.parallel.level"),
-      choices: [
-        { name: t("cli.prompt.parallel.auto"), value: "auto" },
-        { name: "1", value: 1 },
-        { name: "2", value: 2 },
-        { name: "4", value: 4 },
-        { name: "8", value: 8 },
-      ],
-    },
-    {
-      name: "shallow",
-      type: "confirm",
-      message: t("cli.prompt.parallel.shallow"),
-      default: false,
-    },
-  ])) as { concurrency: number | "auto"; shallow: boolean };
-
-  return { concurrency, shallow } as ParallelSyncOptions;
-};
-
 const formatProgressValue = (value?: string): string => {
   if (!value) {
     return "--";
