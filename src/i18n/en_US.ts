@@ -180,7 +180,6 @@ const enUS: PtBrTranslations = {
   },
   cli: {
     log: {
-      preselection: "Preselection: {{displayPath}} → {{targetPath}} ({{state}})",
       tokenValid: "Valid token for {{baseUrl}}.",
       tokenDetails: "Token details: active={{active}}, expires={{expiresAt}}, scopes={{scopes}}",
       tokenReuse: "Reusing existing token.",

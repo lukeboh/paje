@@ -178,7 +178,6 @@ const ptBR = {
   },
   cli: {
     log: {
-      preselection: "Pré-seleção: {{displayPath}} → {{targetPath}} ({{state}})",
       tokenValid: "Token válido para {{baseUrl}}.",
       tokenDetails: "Detalhes do token: ativo={{active}}, expira={{expiresAt}}, escopos={{scopes}}",
       tokenReuse: "Reutilizando token existente.",

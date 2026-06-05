@@ -168,10 +168,10 @@ Terceiro parâmetro de `parallelSync` recebe `SyncResult` (resultado final), nã
 
 ---
 
-### I18N-02 — Chave `cli.log.preselection` definida mas nunca usada no código
-**Severidade: BAIXO** | **Status: ABERTO**
+### ~~I18N-02~~ — Chave `cli.log.preselection` definida mas nunca usada
+**Severidade: BAIXO** | **Status: RESOLVIDO**
 
-Presente em `pt_BR.ts:181` e `en_US.ts:181`. Nenhuma ocorrência em `src/`. Chave órfã.
+Chave órfã removida de `pt_BR.ts` e `en_US.ts`.
 
 ---
 
@@ -355,11 +355,11 @@ Ao selecionar S para sincronizar, a mensagem genérica exibida no painel de log 
 | **CRÍTICO** | 0 | — |
 | **ALTO** | 3 | REQ-02, REQ-03, UX-04 |
 | **MÉDIO** | 2 | BUG-07, DC-04 |
-| **BAIXO** | 9 | BUG-05, INC-05, INC-08, I18N-02, DC-01, DC-02, REQ-05, UX-05, UX-07 |
+| **BAIXO** | 8 | BUG-05, INC-05, INC-08, DC-01, DC-02, REQ-05, UX-05, UX-07 |
 
 ### Itens resolvidos desde a auditoria inicial
 
-BUG-02, BUG-03, BUG-04, BUG-06, BUG-08, BUG-09, BUG-10, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-03, I18N-03, I18N-04, REQ-04, REQ-06, UX-01, UX-02, UX-06, UX-08, UX-09, UX-10, UX-11, REQ-01/UX-03 (26 itens)
+BUG-02, BUG-03, BUG-04, BUG-06, BUG-08, BUG-09, BUG-10, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-03, I18N-02, I18N-03, I18N-04, REQ-04, REQ-06, UX-01, UX-02, UX-06, UX-08, UX-09, UX-10, UX-11, REQ-01/UX-03 (27 itens)
 
 ---
 
