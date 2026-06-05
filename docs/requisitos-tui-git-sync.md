@@ -49,6 +49,14 @@ Este documento define os requisitos da funcionalidade **Sincronizar repositório
 - As cores devem seguir o mesmo padrão da CLI.
 - Branchs conhecidas devem ter destaque (ex.: `main`, `master`, `develop`, `desenvolvimento`, `feature-*`).
 
+#### Decisão de design — estado DIVERGED exibido como AHEAD
+
+Quando um repositório está **divergido** (`ahead > 0` e `behind > 0`), o sistema exibe o estado como **AHEAD** (com delta `+N/-M`).
+
+**Motivação:** a presença de commits locais não enviados ao servidor é a informação mais crítica para o usuário — commits não publicados podem ser perdidos. Exibir o estado como "adiantado" (AHEAD) destaca essa urgência de forma mais visível do que "divergido" (que pode ser interpretado como um estado neutro). O delta `+N/-M` ainda informa que há commits remotos a receber.
+
+**Consequência intencional:** repositórios divergidos usam a cor azul (AHEAD) em vez do vermelho/magenta que seria aplicado ao estado DIVERGED.
+
 ### RF-04 — Seleção por checkbox
 
 - Cada nó exibido deve ter checkbox (`[ ]`, `[~]`, `[x]`).

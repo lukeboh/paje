@@ -6,17 +6,10 @@ Data: 2026-06-05
 
 ## 1. BUGS / COMPORTAMENTOS INCORRETOS
 
-### BUG-01 — `gitBranchService.ts:100` — DIVERGED retornado como AHEAD
-**Severidade: ALTO**
+### ~~BUG-01~~ — `gitBranchService.ts:100` — DIVERGED exibido como AHEAD *(decisão de design — não é bug)*
 
-Quando `ahead > 0` e `behind > 0`, a função retorna `state: "AHEAD"` em vez de `"DIVERGED"`. Repositórios divergidos aparecem na TUI com a cor e rótulo de "adiantados".
-
-```typescript
-// Linha 100 — retorna AHEAD para o estado divergido
-return { branch, state: "AHEAD", delta: `+${ahead}/-${behind}` };
-// Deveria ser:
-return { branch, state: "DIVERGED", delta: `+${ahead}/-${behind}` };
-```
+> **Esclarecimento:** comportamento intencional documentado em `docs/requisitos-tui-git-sync.md` RF-03.
+> Quando `ahead > 0` e `behind > 0`, o sistema exibe `state: "AHEAD"` para destacar a presença de commits locais não publicados — situação mais urgente do que commits remotos pendentes. O delta `+N/-M` ainda comunica a divergência. A cor azul (AHEAD) é preferida à magenta (DIVERGED) porque sinaliza a necessidade de `push` antes de qualquer pull.
 
 ---
 
@@ -393,6 +386,6 @@ Todo usuário que não seja do TSE verá esse URL como sugestão padrão no moda
 | Severidade | Qtd | Itens |
 |---|---|---|
 | **CRÍTICO** | 4 | BUG-06, REQ-01/UX-03, UX-01 |
-| **ALTO** | 12 | BUG-01, BUG-02, BUG-11, INC-01, INC-04, INC-07, REQ-02, REQ-03, UX-02, UX-04, UX-06, UX-09 |
+| **ALTO** | 11 | BUG-02, BUG-11, INC-01, INC-04, INC-07, REQ-02, REQ-03, UX-02, UX-04, UX-06, UX-09 |
 | **MÉDIO** | 11 | BUG-03, BUG-04, BUG-07, BUG-09, INC-02, INC-03, INC-05, I18N-03, DC-03, DC-04, REQ-06, UX-08 |
 | **BAIXO** | 9 | BUG-05, BUG-08, BUG-10, INC-08, I18N-02, DC-01, DC-02, REQ-04, REQ-05, UX-05, UX-07 |
