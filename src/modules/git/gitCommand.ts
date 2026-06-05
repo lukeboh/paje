@@ -74,25 +74,7 @@ import {
   type SshKeyInfo,
 } from "./sshManager.js";
 import { readGitServers, writeGitServers } from "./persistence.js";
-
-type GitServerEntry = {
-  id: string;
-  name: string;
-  baseUrl: string;
-  useBasicAuth?: boolean;
-  username?: string;
-  userEmail?: string;
-  password?: string;
-  token?: string;
-  baseDir?: string;
-  noPublicRepos?: boolean;
-  noArchivedRepos?: boolean;
-  filter?: string;
-  syncRepos?: string;
-  tokenName?: string;
-  tokenScopes?: string;
-  tokenExpiresAt?: string;
-};
+import { type GitServerEntry } from "./core/gitSyncService.js";
 
 const buildServerPrefix = (server: GitServerEntry): string => {
   const normalizedName = server.name?.trim() || t("cli.sync.defaultServerLabel");
