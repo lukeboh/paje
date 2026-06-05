@@ -206,11 +206,14 @@ const mergeProjectsByPath = (
 const resolveSyncReposSpecs = (rawPatterns?: string): Array<{ projectPath: string; branch?: string }> => {
   const specs: Array<{ projectPath: string; branch?: string }> = [];
   splitFilterPatterns(rawPatterns).forEach((rawPattern: string) => {
-    if (!rawPattern.includes("@")) {
-      specs.push({ projectPath: rawPattern });
+    const trimmed = rawPattern.trim();
+    if (!trimmed.includes("#")) {
+      specs.push({ projectPath: trimmed.replace(/\.git$/, "") });
       return;
     }
-    const [projectPath, branch] = rawPattern.split("@");
+    const hashIndex = trimmed.indexOf("#");
+    const projectPath = trimmed.slice(0, hashIndex).replace(/\.git$/, "");
+    const branch = trimmed.slice(hashIndex + 1).trim() || undefined;
     specs.push({ projectPath, branch });
   });
   return specs;
