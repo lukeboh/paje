@@ -1651,12 +1651,15 @@ const prepareTargets = (
   gitUserName?: string,
   gitUserEmail?: string
 ): GitRepositoryTarget[] => {
+  const resolvedPaths = resolveLocalPathConflicts(projects);
   return projects.map((project) => ({
     id: project.id,
     name: project.name,
-    pathWithNamespace: project.path_with_namespace,
+    pathWithNamespace: resolveProjectLocalPath(project),
     sshUrl: project.ssh_url_to_repo,
-    localPath: path.join(baseDir, project.path_with_namespace),
+    httpUrl: project.pajeHttpUrl,
+    localPath: path.join(baseDir, resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project)),
+    defaultBranch: project.default_branch,
     gitUserName,
     gitUserEmail,
   }));
