@@ -254,12 +254,10 @@ Função removida de `gitCommand.ts`. Eliminadas as 9 chamadas a chaves `cli.pro
 
 ---
 
-### DC-02 — `useTty = false` torna ~150 linhas de renderização TTY inacessíveis (`gitCommand.ts:2031`)
-**Severidade: BAIXO** | **Status: ABERTO**
+### ~~DC-02~~ — `useTty = false` tornava ~150 linhas inacessíveis em `gitCommand.ts`
+**Severidade: BAIXO** | **Status: RESOLVIDO**
 
-```typescript
-const useTty = false;  // todo o bloco if (useTty) é dead code
-```
+Removidos: `useTty`, `overallLine`, `blockLines`, `workerStates`, `completedTargets`, `lastPrinted`, `historyLines` e as funções `saveCursor`, `restoreCursor`, `renderBlock`, `appendHistoryLine`, `buildWorkerPlaceholder`. Todos os blocos `if (useTty)` foram removidos e os blocos `if (!useTty)` tiveram os guards eliminados. Comportamento em runtime preservado.
 
 ---
 
@@ -355,11 +353,11 @@ Ao selecionar S para sincronizar, a mensagem genérica exibida no painel de log 
 | **CRÍTICO** | 0 | — |
 | **ALTO** | 3 | REQ-02, REQ-03, UX-04 |
 | **MÉDIO** | 2 | BUG-07, DC-04 |
-| **BAIXO** | 6 | INC-05, INC-08, DC-02, REQ-05, UX-05, UX-07 |
+| **BAIXO** | 5 | INC-05, INC-08, REQ-05, UX-05, UX-07 |
 
 ### Itens resolvidos desde a auditoria inicial
 
-BUG-02, BUG-03, BUG-04, BUG-05, BUG-06, BUG-08, BUG-09, BUG-10, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-01, DC-03, I18N-02, I18N-03, I18N-04, REQ-04, REQ-06, UX-01, UX-02, UX-06, UX-08, UX-09, UX-10, UX-11, REQ-01/UX-03 (29 itens)
+BUG-02, BUG-03, BUG-04, BUG-05, BUG-06, BUG-08, BUG-09, BUG-10, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, DC-01, DC-02, DC-03, I18N-02, I18N-03, I18N-04, REQ-04, REQ-06, UX-01, UX-02, UX-06, UX-08, UX-09, UX-10, UX-11, REQ-01/UX-03 (30 itens)
 
 ---
 

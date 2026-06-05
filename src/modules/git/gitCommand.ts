@@ -1704,14 +1704,7 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
           let syncStartAt = 0;
           const allResults: Array<{ status: string; message?: string; target: { id: number; pathWithNamespace: string; branch?: string; localPath: string; defaultBranch?: string | null } }> = [];
           const workerLines = new Map<number, string>();
-          const workerStates = new Map<
-            number,
-            { line: string; targetPath?: string; percent?: number; objectsReceived?: number }
-          >();
           const targetWorkerMap = new Map<string, number>();
-          const completedTargets = new Set<string>();
-          const lastPrinted = new Map<number, { percent?: number; objectsReceived?: number; line?: string }>();
-          const historyLines: string[] = [];
           const targetLastUpdateAt = new Map<string, number>();
           const targetLastLine = new Map<string, string>();
           const startedTargets = new Set<string>();
@@ -1724,52 +1717,14 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
               speed?: string;
             }
           >();
-          let overallLine = "";
-          const useTty = false;
           const progressWidth = 20;
-          let blockLines = 1;
-          const saveCursor = (): void => {
-            if (!useTty) { return; }
-            process.stdout.write("[s");
-          };
-          const restoreCursor = (): void => {
-            if (!useTty) { return; }
-            process.stdout.write("[u");
-          };
-          const renderBlock = (nextOverallLine?: string): void => {
-            if (!useTty) { return; }
-            if (nextOverallLine !== undefined) { overallLine = nextOverallLine; }
-            restoreCursor();
-            const moveUp = Math.max(0, blockLines - 1);
-            if (moveUp > 0) { process.stdout.write(`[${moveUp}A`); }
-            historyLines.forEach((content) => { process.stdout.write(`\r[2K${content}\n`); });
-            workerLines.forEach((content) => { process.stdout.write(`\r[2K${content}\n`); });
-            process.stdout.write(`\r[2K${overallLine}\n`);
-            blockLines = historyLines.length + workerLines.size + 1;
-            saveCursor();
-          };
           const writeLine = (line: string): void => { console.log(line); };
-          const appendHistoryLine = (line: string): void => {
-            if (!useTty) {
-              const last = lastPrinted.get(-1);
-              if (last?.line === line) { return; }
-              lastPrinted.set(-1, { line });
-              console.log(line);
-              return;
-            }
-            historyLines.push(line);
-            renderBlock();
-          };
           const renderProgressBar = (current: number, total: number): string => {
             const width = 20;
             const ratio = total === 0 ? 1 : current / total;
             const filled = Math.round(ratio * width);
             const empty = Math.max(0, width - filled);
             return `[${"#".repeat(filled)}${"-".repeat(empty)}]`;
-          };
-          const buildWorkerPlaceholder = (workerId: number): string => {
-            const workerLabel = colorize(t("cli.sync.workerLabel", { index: workerId.toString().padStart(2, "0") }), "white");
-            return `${workerLabel} ${t("cli.sync.workerWaiting")}`;
           };
           const formatTransferDetail = (options: {
             progress?: {
@@ -1837,21 +1792,6 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
                 const concurrencyLabel =
                   concurrency === "auto" ? colorize(t("cli.sync.concurrencyAuto"), "cyan") : colorize(String(concurrency), "cyan");
                 console.log(t("cli.sync.start", { title: tituloSync, total: totalLabel, concurrency: concurrencyLabel, dryRun: dryRunBadge }));
-                if (useTty) {
-                  const progressLineCount =
-                    concurrency === "auto" ? Math.min(totalCount, resolveConcurrency()) : Number(concurrency ?? 1);
-                  for (let index = 1; index <= progressLineCount; index += 1) {
-                    const placeholder = colorize(t("cli.sync.workerLabel", { index: index.toString().padStart(2, "0") }), "white");
-                    const line = `${placeholder} ${t("cli.sync.workerWaiting")}`;
-                    workerLines.set(index, line);
-                    workerStates.set(index, { line });
-                  }
-                  workerLines.forEach((line) => console.log(line));
-                  overallLine = "";
-                  console.log(overallLine);
-                  blockLines = workerLines.size + 1;
-                  saveCursor();
-                }
               },
               onResult: (result) => {
                 allResults.push(result);
@@ -1884,49 +1824,16 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
                   status: result.status as "cloned" | "pulled" | "pushed" | "skipped" | "failed",
                   message: result.message,
                 });
-                const workerId = targetWorkerMap.get(targetKey);
-                if (workerId) {
-                  if (useTty) {
-                    const workerLabel = colorize(
-                      t("cli.sync.workerLabel", { index: workerId.toString().padStart(2, "0") }),
-                      "white"
-                    );
-                    const doneLabel = colorize(t("cli.sync.progressComplete"), "cyan");
-                    const doneLine = `${workerLabel} [${"#".repeat(progressWidth)}] ${doneLabel} -- -- ${actionLabel} ${result.target.pathWithNamespace}${detail}`;
-                    if (!completedTargets.has(targetKey)) {
-                      completedTargets.add(targetKey);
-                      appendHistoryLine(doneLine);
-                    }
-                    const placeholder = buildWorkerPlaceholder(workerId);
-                    workerLines.set(workerId, placeholder);
-                    workerStates.set(workerId, { line: placeholder });
-                  }
-                }
-                if (useTty) {
-                  renderBlock(
-                    `${bar} ${counter} ${prefix}${result.target.pathWithNamespace}${branchLabel} ${actionLabel}${detail}`
-                  );
-                } else {
-                  console.log(`${bar} ${counter} ${prefix}${result.target.pathWithNamespace}${branchLabel} ${actionLabel}${detail}`);
-                }
+                console.log(`${bar} ${counter} ${prefix}${result.target.pathWithNamespace}${branchLabel} ${actionLabel}${detail}`);
               },
               onProgress: (event) => {
                 if (!workerLines.has(event.workerId)) {
-                  if (!useTty) {
-                    const placeholder = colorize(
-                      t("cli.sync.workerLabel", { index: event.workerId.toString().padStart(2, "0") }),
-                      "white"
-                    );
-                    workerLines.set(event.workerId, `${placeholder} ${t("cli.sync.workerWaiting")}`);
-                    workerStates.set(event.workerId, { line: `${placeholder} ${t("cli.sync.workerWaiting")}` });
-                  } else {
-                    return;
-                  }
+                  const placeholder = colorize(
+                    t("cli.sync.workerLabel", { index: event.workerId.toString().padStart(2, "0") }),
+                    "white"
+                  );
+                  workerLines.set(event.workerId, `${placeholder} ${t("cli.sync.workerWaiting")}`);
                 }
-                const workerLabel = colorize(
-                  t("cli.sync.workerLabel", { index: event.workerId.toString().padStart(2, "0") }),
-                  "white"
-                );
                 const branchLabel = event.target.branch ? `#${event.target.branch}` : "";
                 const targetKey = `${event.target.pathWithNamespace}${branchLabel}`;
                 targetWorkerMap.set(targetKey, event.workerId);
@@ -1945,74 +1852,32 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
                   transferred: event.transferred ?? previousProgress?.transferred,
                   speed: event.speed ?? previousProgress?.speed,
                 });
-                if (!useTty) {
-                  const now = Date.now();
-                  if (!startedTargets.has(targetKey)) {
-                    startedTargets.add(targetKey);
-                    const startPhase = event.phase === "check" ? t("cli.sync.phaseCheck") : event.phase.toUpperCase();
-                    const startLine = `${colorize(t("cli.sync.phaseStart"), "yellow")} ${startPhase} ${event.target.pathWithNamespace}${branchLabel}`;
-                    console.log(startLine);
-                    targetLastUpdateAt.set(targetKey, now);
-                    targetLastLine.set(targetKey, startLine);
-                  }
-                  if (event.percent !== undefined && event.percent >= 100) {
-                    return;
-                  }
-                  const lastAt = targetLastUpdateAt.get(targetKey) ?? 0;
-                  if (now - lastAt < 2000) {
-                    return;
-                  }
-                  const line = renderWorkerLine(event, progressWidth);
-                  if (targetLastLine.get(targetKey) === line) {
-                    return;
-                  }
-                  targetLastLine.set(targetKey, line);
+                const now = Date.now();
+                if (!startedTargets.has(targetKey)) {
+                  startedTargets.add(targetKey);
+                  const startPhase = event.phase === "check" ? t("cli.sync.phaseCheck") : event.phase.toUpperCase();
+                  const startLine = `${colorize(t("cli.sync.phaseStart"), "yellow")} ${startPhase} ${event.target.pathWithNamespace}${branchLabel}`;
+                  console.log(startLine);
                   targetLastUpdateAt.set(targetKey, now);
-                  console.log(line);
+                  targetLastLine.set(targetKey, startLine);
+                }
+                if (event.percent !== undefined && event.percent >= 100) {
                   return;
                 }
-                const line = `${workerLabel} ${renderWorkerLine(event, progressWidth)}`;
-                const currentState = workerStates.get(event.workerId);
-                if (currentState?.line === line) {
+                const lastAt = targetLastUpdateAt.get(targetKey) ?? 0;
+                if (now - lastAt < 2000) {
                   return;
                 }
-                if (completedTargets.has(targetKey)) {
+                const line = renderWorkerLine(event, progressWidth);
+                if (targetLastLine.get(targetKey) === line) {
                   return;
                 }
-                if (event.percent === 100) {
-                  return;
-                }
-                const percent = event.percent ?? currentState?.percent ?? 0;
-                const objectsReceived = event.objectsReceived ?? currentState?.objectsReceived ?? 0;
-                if (currentState?.targetPath === event.target.pathWithNamespace) {
-                  const samePercent = percent === currentState.percent;
-                  const sameObjects = objectsReceived === currentState.objectsReceived;
-                  if (samePercent && sameObjects) {
-                    return;
-                  }
-                }
-                workerStates.set(event.workerId, {
-                  line,
-                  targetPath: event.target.pathWithNamespace,
-                  percent,
-                  objectsReceived,
-                });
-                workerLines.set(event.workerId, line);
-                renderBlock();
+                targetLastLine.set(targetKey, line);
+                targetLastUpdateAt.set(targetKey, now);
+                console.log(line);
               },
             },
           });
-          if (useTty) {
-            workerLines.forEach((line, workerId) => {
-              const placeholder = buildWorkerPlaceholder(workerId);
-              if (line === placeholder) {
-                return;
-              }
-              workerLines.set(workerId, placeholder);
-            });
-            overallLine = "";
-            renderBlock("");
-          }
           const syncDurationMs = Date.now() - syncStartAt;
           const counts = allResults.reduce(
             (acc, result) => {
