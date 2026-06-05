@@ -81,7 +81,17 @@ type GitServerEntry = {
   baseUrl: string;
   useBasicAuth?: boolean;
   username?: string;
+  userEmail?: string;
+  password?: string;
   token?: string;
+  baseDir?: string;
+  noPublicRepos?: boolean;
+  noArchivedRepos?: boolean;
+  filter?: string;
+  syncRepos?: string;
+  tokenName?: string;
+  tokenScopes?: string;
+  tokenExpiresAt?: string;
 };
 
 const buildServerPrefix = (server: GitServerEntry): string => {
@@ -671,6 +681,9 @@ type SshKeyStoreCliOptions = {
   serverName?: string;
   baseUrl?: string;
   username?: string;
+  userEmail?: string;
+  password?: string;
+  useBasicAuth?: boolean;
   keyLabel?: string;
   passphrase?: string;
   publicKeyPath?: string;
@@ -681,6 +694,11 @@ type SshKeyStoreCliOptions = {
   tokenName?: string;
   tokenScopes?: string;
   tokenExpiresAt?: string;
+  baseDir?: string;
+  noPublicRepos?: boolean;
+  noArchivedRepos?: boolean;
+  filter?: string;
+  syncRepos?: string;
   locale?: string;
 };
 
@@ -1127,7 +1145,9 @@ const ensureKnownHost = async (server: string, session?: TuiSession, verbose?: b
       : undefined,
   });
   if (!added) {
-    const message = t("cli.prompt.trust.cannotAddHost", { server });
+    const baseMessage = t("cli.prompt.trust.cannotAddHost", { server });
+    const guidance = t("cli.prompt.trust.sshPort22Guidance");
+    const message = `${baseMessage}\n${guidance}`;
     if (session) {
       await session.showMessage({ title: t("cli.prompt.trust.title"), message });
     } else {
@@ -1323,6 +1343,132 @@ const storeSshKeyOnly = async (
       ])) as { username?: string };
       resolvedUsername = promptUser.username?.trim();
     }
+  }
+
+  const useBasicAuth = server.useBasicAuth ?? cli?.useBasicAuth ?? false;
+  if (useBasicAuth) {
+    if (process.env.PAJE_SKIP_SSH_STORE === "1") {
+      logger?.(t("cli.log.skipRemoteToken"));
+      return;
+    }
+
+    let basicAuthPassword = resolveEnvOrCliString(
+      hasCliArg("password") ? cli?.password : undefined,
+      "password",
+      "password"
+    );
+    if (!basicAuthPassword) {
+      if (session) {
+        const form = await session.promptForm<{ password: string }>({
+          title: t("cli.prompt.gitlab.title"),
+          fields: [
+            {
+              name: "password",
+              label: t("cli.prompt.basicAuth.passwordLabelDefault"),
+              secret: true,
+              description: t("cli.prompt.basicAuth.passwordDesc"),
+            },
+          ],
+        });
+        basicAuthPassword = form?.password ?? "";
+      } else {
+        const promptPass = (await inquirer.prompt([
+          { name: "password", message: t("cli.prompt.basicAuth.passwordLabelDefault"), type: "password" },
+        ])) as { password?: string };
+        basicAuthPassword = promptPass.password ?? "";
+      }
+    }
+
+    const basicAuthCredentials = loadGitCredentials({
+      envFilePaths: resolveEnvPaths(resolveEnvFileFromCli(cli?.envFile)),
+      allowProcessEnv: false,
+    });
+
+    const normalizedBaseUrlBA = normalizeBaseUrl(server.baseUrl);
+    const existingServersBA = readGitServers<GitServerEntry[]>([]);
+    const existingServerBA = existingServersBA.find((item) => normalizeBaseUrl(item.baseUrl) === normalizedBaseUrlBA);
+
+    if (existingServerBA?.token) {
+      try {
+        const tokenStatus = await validatePersonalAccessToken({
+          baseUrl: normalizedBaseUrlBA,
+          token: existingServerBA.token,
+          fetchImpl: globalThis.fetch,
+          logger,
+        });
+        if (tokenStatus.valid) {
+          const expiresAt = tokenStatus.expiresAt ?? t("cli.log.notInformed");
+          const scopes =
+            tokenStatus.scopes && tokenStatus.scopes.length > 0
+              ? tokenStatus.scopes.join(", ")
+              : t("cli.log.notInformed");
+          const active = tokenStatus.active ?? true;
+          logger?.(t("cli.log.tokenValid", { baseUrl: normalizedBaseUrlBA }));
+          logger?.(t("cli.log.tokenDetails", { active: String(active), expiresAt, scopes }));
+          logger?.(t("cli.log.tokenReuse"));
+          return;
+        }
+        logger?.(t("cli.log.tokenInvalid"));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : t("cli.errors.unknown");
+        logger?.(t("cli.log.tokenValidateFail", { message }));
+      }
+
+      logger?.(t("cli.log.tokenRotateStart", { baseUrl: normalizedBaseUrlBA }));
+      try {
+        const rotated = await rotatePersonalAccessToken({
+          baseUrl: normalizedBaseUrlBA,
+          token: existingServerBA.token,
+          fetchImpl: globalThis.fetch,
+          logger,
+        });
+        const serverWithTokenBA: GitServerEntry = { ...server, token: rotated.token };
+        const mergedServersBA = mergeServer(existingServersBA, serverWithTokenBA);
+        writeGitServers(mergedServersBA.servers);
+        logger?.(t("cli.log.tokenRotateSuccess", { baseUrl: normalizedBaseUrlBA }));
+        return;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : t("cli.errors.unknown");
+        logger?.(t("cli.log.tokenRotateFail", { message }));
+      }
+    }
+
+    const resolvedTokenNameBA = resolveEnvOrCliString(cli?.tokenName?.trim(), "tokenName", "token-name");
+    const resolvedTokenScopesBA = resolveEnvStringArray(
+      hasCliArg("token-scopes") ? cli?.tokenScopes : undefined,
+      envConfig,
+      "tokenScopes"
+    );
+    const resolvedTokenExpiresAtBA = resolveEnvOrCliString(cli?.tokenExpiresAt, "tokenExpiresAt", "token-expires-at");
+    const tokenNameBA = resolvedTokenNameBA ?? "";
+    const scopeListBA = resolvedTokenScopesBA
+      ? resolvedTokenScopesBA.split(",").map((item) => item.trim()).filter(Boolean)
+      : ["read_repository", "read_api", "read_virtual_registry", "self_rotate"];
+    if (!resolvedTokenNameBA) {
+      logger?.(t("cli.log.tokenNameMissing"));
+      return;
+    }
+
+    const tokenResultBA = await ensureGitLabPersonalAccessToken({
+      baseUrl: normalizedBaseUrlBA,
+      name: tokenNameBA,
+      scopes: scopeListBA,
+      expiresAt: resolvedTokenExpiresAtBA,
+      credentials: {
+        ...basicAuthCredentials,
+        username: resolvedUsername ?? basicAuthCredentials.username,
+        password: basicAuthPassword ?? basicAuthCredentials.password ?? "",
+      },
+      fetchImpl: globalThis.fetch,
+      logger,
+      maxAttempts: resolveEnvOrCliNumber(cli?.maxAttempts, "maxAttempts", "max-attempts"),
+      retryDelayMs: resolveEnvOrCliNumber(cli?.retryDelayMs, "retryDelayMs", "retry-delay-ms"),
+    });
+
+    const basicAuthServerWithToken: GitServerEntry = { ...server, token: tokenResultBA.token };
+    const basicAuthMergedServers = mergeServer(existingServersBA, basicAuthServerWithToken);
+    writeGitServers(basicAuthMergedServers.servers);
+    return;
   }
 
   const resolvedPublicKeyPath = resolveEnvOrCliString(cli?.publicKeyPath, "publicKeyPath", "public-key-path");
@@ -2999,6 +3145,14 @@ export const configureSshKeyStoreCommand = (program: Command, session?: TuiSessi
     .option("--token-name <name>", t("cli.command.gitServerStore.options.tokenName"))
     .option("--token-scopes <scopes>", t("cli.command.gitServerStore.options.tokenScopes"))
     .option("--token-expires-at <date>", t("cli.command.gitServerStore.options.tokenExpiresAt"))
+    .option("--use-basic-auth", t("cli.command.gitServerStore.options.useBasicAuth"), false)
+    .option("--user-email <email>", t("cli.command.gitServerStore.options.userEmail"))
+    .option("--password <password>", t("cli.command.gitServerStore.options.password"))
+    .option("--base-dir <dir>", t("cli.command.gitServerStore.options.baseDir"))
+    .option("--no-public-repos [value]", t("cli.command.gitServerStore.options.noPublicRepos"), false)
+    .option("--no-archived-repos [value]", t("cli.command.gitServerStore.options.noArchivedRepos"), false)
+    .option("-f, --filter <pattern>", t("cli.command.gitServerStore.options.filter"))
+    .option("--sync-repos <pattern>", t("cli.command.gitServerStore.options.syncRepos"))
     .option("--locale <locale>", t("cli.command.gitServerStore.options.locale"))
     .action(async (options: SshKeyStoreCliOptions) => {
       setLocale(options.locale);
@@ -3018,8 +3172,17 @@ export const configureSshKeyStoreCommand = (program: Command, session?: TuiSessi
         id: baseUrl,
         name: serverName,
         baseUrl,
-        useBasicAuth: true,
+        useBasicAuth: options.useBasicAuth ?? true,
         username,
+        userEmail: options.userEmail,
+        baseDir: options.baseDir,
+        noPublicRepos: options.noPublicRepos,
+        noArchivedRepos: options.noArchivedRepos,
+        filter: options.filter,
+        syncRepos: options.syncRepos,
+        tokenName: options.tokenName,
+        tokenScopes: options.tokenScopes,
+        tokenExpiresAt: options.tokenExpiresAt,
       };
 
       await storeSshKeyOnly(server, session, options);

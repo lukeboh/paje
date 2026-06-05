@@ -190,6 +190,7 @@ const enUS = {
       tokenNameMissing: "Token name not provided.",
       skipRemoteToken: "Skipping remote token creation/validation (PAJE_SKIP_SSH_STORE=1).",
       skipRemoteStore: "Skipping remote SSH key registration (PAJE_SKIP_SSH_STORE=1).",
+      notInformed: "not informed",
     },
     command: {
       gitSync: {
@@ -226,6 +227,14 @@ const enUS = {
           serverName: "GitLab server name",
           baseUrl: "GitLab base URL",
           username: "GitLab username",
+          useBasicAuth: "Use HTTPS authentication with token (no SSH)",
+          userEmail: "Git email to configure in repositories",
+          password: "GitLab password for basic authentication",
+          baseDir: "Base directory for repository cloning",
+          noPublicRepos: "Hide public repositories",
+          noArchivedRepos: "Hide archived repositories",
+          filter: "Ant/Glob filter for path_with_namespace",
+          syncRepos: "Repos/branches to sync",
           keyLabel: "SSH key name to be generated",
           passphrase: "SSH key passphrase",
           publicKeyPath: "Path to existing public key (.pub)",
@@ -240,6 +249,7 @@ const enUS = {
       },
       sshKeyStore: {
         description: "(Deprecated) Use git-server-store",
+        renamed: "This command was renamed to git-server-store. Use: paje git-server-store",
       },
     },
     prompt: {
@@ -281,6 +291,8 @@ const enUS = {
         confirmKnownHost: "Host {{server}} is not in ~/.ssh/known_hosts. Add via ssh-keyscan?",
         cannotAddHost:
           "Unable to add {{server}} to ~/.ssh/known_hosts via ssh-keyscan. Host unreachable: {{server}}. Check connectivity/port 22 and permissions.",
+        sshPort22Guidance:
+          "If port 22 is blocked, use --use-basic-auth with a GitLab Personal Access Token. To generate a token: GitLab → Settings → Access Tokens → create with scopes: read_repository, read_api, self_rotate.",
       },
       persistence: {
         missing: "Unable to write {{paths}}. Check ~/.ssh permissions (recommended 700).",

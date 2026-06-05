@@ -190,6 +190,7 @@ const ptBR = {
       tokenNameMissing: "Nome do token não informado.",
       skipRemoteToken: "Pulo de criação/validação de token remoto (PAJE_SKIP_SSH_STORE=1).",
       skipRemoteStore: "Pulo de registro remoto de chave SSH (PAJE_SKIP_SSH_STORE=1).",
+      notInformed: "não informado",
     },
     command: {
       gitSync: {
@@ -226,6 +227,14 @@ const ptBR = {
           serverName: "Nome do servidor GitLab",
           baseUrl: "URL base do GitLab",
           username: "Usuário do GitLab",
+          useBasicAuth: "Usar autenticação HTTPS com token (sem SSH)",
+          userEmail: "Email do Git para configurar nos repositórios",
+          password: "Senha do GitLab para autenticação básica",
+          baseDir: "Diretório base para clonagem dos repositórios",
+          noPublicRepos: "Ocultar repositórios públicos",
+          noArchivedRepos: "Ocultar repositórios arquivados",
+          filter: "Filtro Ant/Glob para path_with_namespace",
+          syncRepos: "Repos/branchs para sincronizar",
           keyLabel: "Nome da chave SSH a ser gerada",
           passphrase: "Passphrase da chave SSH",
           publicKeyPath: "Caminho para chave pública existente (.pub)",
@@ -240,6 +249,7 @@ const ptBR = {
       },
       sshKeyStore: {
         description: "(Obsoleto) Use git-server-store",
+        renamed: "Este comando foi renomeado para git-server-store. Use: paje git-server-store",
       },
     },
     prompt: {
@@ -281,6 +291,8 @@ const ptBR = {
         confirmKnownHost: "Host {{server}} não está em ~/.ssh/known_hosts. Adicionar via ssh-keyscan?",
         cannotAddHost:
           "Não foi possível adicionar {{server}} ao ~/.ssh/known_hosts via ssh-keyscan. Host inacessível: {{server}}. Verifique conectividade/porte 22 e permissões.",
+        sshPort22Guidance:
+          "Se a porta 22 estiver bloqueada, use --use-basic-auth com um Personal Access Token do GitLab. Para gerar um token: GitLab → Settings → Access Tokens → crie com escopos: read_repository, read_api, self_rotate.",
       },
       persistence: {
         missing: "Não foi possível gravar {{paths}}. Verifique permissões de ~/.ssh (recomendado 700).",
