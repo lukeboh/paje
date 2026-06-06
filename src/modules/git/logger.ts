@@ -1,33 +1,39 @@
-import fs from "node:fs";
+import pino from "pino";
 import path from "node:path";
 import { ensurePajeDirs, resolvePajePaths } from "./persistence.js";
 
 export type LogLevel = "info" | "warn" | "error";
 
+export const resolveLogFilePath = (): string => {
+  const paths = resolvePajePaths();
+  ensurePajeDirs(paths);
+  const date = new Date().toISOString().slice(0, 10);
+  return path.join(paths.logsDir, `git-sync-${date}.log`);
+};
+
+// Thin wrapper used by TUI components for internal debug logging.
+// Writes JSON-structured lines to the daily log file via pino.
 export class PajeLogger {
-  private readonly logFile: string;
+  private readonly pinoInst: pino.Logger;
 
   constructor() {
-    const paths = resolvePajePaths();
-    ensurePajeDirs(paths);
-    const date = new Date().toISOString().slice(0, 10);
-    this.logFile = path.join(paths.logsDir, `git-sync-${date}.log`);
-  }
-
-  private write(level: LogLevel, message: string): void {
-    const line = `[${new Date().toISOString()}] [${level.toUpperCase()}] ${message}\n`;
-    fs.appendFileSync(this.logFile, line);
+    const filePath = resolveLogFilePath();
+    const dest = pino.destination({ dest: filePath, sync: true });
+    this.pinoInst = pino(
+      { level: "info", base: null, timestamp: pino.stdTimeFunctions.isoTime },
+      dest
+    );
   }
 
   info(message: string): void {
-    this.write("info", message);
+    this.pinoInst.info(message);
   }
 
   warn(message: string): void {
-    this.write("warn", message);
+    this.pinoInst.warn(message);
   }
 
   error(message: string): void {
-    this.write("error", message);
+    this.pinoInst.error(message);
   }
 }

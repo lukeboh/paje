@@ -1,41 +1,54 @@
+import pino from "pino";
+import pinoPretty from "pino-pretty";
 import { appendLogRecord } from "../tui/logStore.js";
-import { PajeLogger } from "../logger.js";
+import { resolveLogFilePath } from "../logger.js";
 import type { LogEntry, LogLevel, LogTransport } from "./loggerBroker.js";
 
+const PRETTY_TIMESTAMP_FORMAT = "yyyy-mm-dd HH:MM:ss";
+const PRETTY_IGNORE = "pid,hostname";
+
+const createPrettyConsoleTransport = (): pino.Logger =>
+  pino(
+    { level: "debug", base: null },
+    pinoPretty({
+      colorize: true,
+      sync: true,
+      translateTime: PRETTY_TIMESTAMP_FORMAT,
+      ignore: PRETTY_IGNORE,
+      destination: 1,
+    })
+  );
+
+const createPrettyFileTransport = (): pino.Logger =>
+  pino(
+    { level: "debug", base: null },
+    pinoPretty({
+      colorize: false,
+      sync: true,
+      translateTime: PRETTY_TIMESTAMP_FORMAT,
+      ignore: PRETTY_IGNORE,
+      destination: resolveLogFilePath(),
+    })
+  );
+
 export const createConsoleTransport = (name: string, minLevel: LogLevel): LogTransport => {
+  const pinoInst = createPrettyConsoleTransport();
   return {
     name,
     minLevel,
     log: (entry: LogEntry) => {
-      const line = `[${entry.timestamp}] [${entry.level.toUpperCase()}] ${entry.message}`;
-      if (entry.level === "error") {
-        console.error(line);
-        return;
-      }
-      console.log(line);
+      pinoInst[entry.level](entry.message);
     },
   };
 };
 
 export const createFileTransport = (name: string, minLevel: LogLevel): LogTransport => {
-  const logger = new PajeLogger();
+  const pinoInst = createPrettyFileTransport();
   return {
     name,
     minLevel,
     log: (entry: LogEntry) => {
-      if (entry.level === "debug") {
-        logger.info(`[DEBUG] ${entry.message}`);
-        return;
-      }
-      if (entry.level === "info") {
-        logger.info(entry.message);
-        return;
-      }
-      if (entry.level === "warn") {
-        logger.warn(entry.message);
-        return;
-      }
-      logger.error(entry.message);
+      pinoInst[entry.level](entry.message);
     },
   };
 };
@@ -47,27 +60,23 @@ export const createPanelTransport = (
   name: string,
   minLevel: LogLevel,
   append: PanelLogAppend
-): LogTransport => {
-  return {
-    name,
-    minLevel,
-    log: (entry: LogEntry) => {
-      append(`[${entry.timestamp}] [${entry.level.toUpperCase()}] ${entry.message}`, entry.level);
-    },
-  };
-};
+): LogTransport => ({
+  name,
+  minLevel,
+  log: (entry: LogEntry) => {
+    append(`[${entry.timestamp}] [${entry.level.toUpperCase()}] ${entry.message}`, entry.level);
+  },
+});
 
-export const createGlobalPanelTransport = (name: string, minLevel: LogLevel): LogTransport => {
-  return {
-    name,
-    minLevel,
-    log: (entry: LogEntry) => {
-      appendLogRecord({
-        id: `${entry.timestamp}-${Math.random().toString(16).slice(2)}`,
-        message: `[${entry.level.toUpperCase()}] ${entry.message}`,
-        level: entry.level,
-        timestamp: entry.timestamp,
-      });
-    },
-  };
-};
+export const createGlobalPanelTransport = (name: string, minLevel: LogLevel): LogTransport => ({
+  name,
+  minLevel,
+  log: (entry: LogEntry) => {
+    appendLogRecord({
+      id: `${entry.timestamp}-${Math.random().toString(16).slice(2)}`,
+      message: `[${entry.level.toUpperCase()}] ${entry.message}`,
+      level: entry.level,
+      timestamp: entry.timestamp,
+    });
+  },
+});
