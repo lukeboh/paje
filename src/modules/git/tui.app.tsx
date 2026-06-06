@@ -302,6 +302,7 @@ export const renderRepositoryTree = async (
     footer?: string;
     header?: string;
     parameters?: CommandParameters[];
+    initialSelectedNodeId?: string;
     onReady?: (handlers: {
       render: () => void;
       progress: TuiTreeProgress;
@@ -323,8 +324,21 @@ export const renderRepositoryTree = async (
       const [orientation, setOrientation] = useState(options?.footer ?? t("tui.tree.orientationDefault"));
       const [version, setVersion] = useState(0);
       const progressMapRef = useRef<Map<string, ProgressSnapshot>>(new Map());
-      const [selectedIndex, setSelectedIndex] = useState(0);
-      const [scrollOffset, setScrollOffset] = useState(0);
+      const initialPosRef = useRef<{ index: number; scroll: number } | null>(null);
+      if (initialPosRef.current === null) {
+        initialPosRef.current = { index: 0, scroll: 0 };
+        const initId = options?.initialSelectedNodeId;
+        if (initId) {
+          const colorMap = resolveServerColorMap(nodes);
+          const flatItems = flattenTree(nodes, new Map(), 0, colorMap);
+          const idx = flatItems.findIndex((item) => item.id === initId);
+          if (idx >= 0) {
+            initialPosRef.current = { index: idx, scroll: Math.max(0, idx - 5) };
+          }
+        }
+      }
+      const [selectedIndex, setSelectedIndex] = useState(initialPosRef.current.index);
+      const [scrollOffset, setScrollOffset] = useState(initialPosRef.current.scroll);
       const [showOnlySelected, setShowOnlySelected] = useState(false);
       const [visibleCount, setVisibleCount] = useState(1);
       const [branchModalBranches, setBranchModalBranches] = useState<string[]>([]);

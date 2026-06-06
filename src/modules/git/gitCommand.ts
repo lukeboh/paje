@@ -1950,6 +1950,22 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
       }
       tree.forEach((node) => buildProjectNodeMap(node));
 
+      const cwdGitRoot = await runGit(["rev-parse", "--show-toplevel"]).then((s) => s.trim()).catch(() => "");
+      let initialSelectedNodeId: string | undefined;
+      if (cwdGitRoot) {
+        const normalizedCwdRoot = path.resolve(cwdGitRoot);
+        const findNodeByLocalPath = (nodeList: GitLabTreeNode[]): string | undefined => {
+          for (const node of nodeList) {
+            if (node.type === "project" && node.localPath && path.resolve(node.localPath) === normalizedCwdRoot) {
+              return node.id;
+            }
+            const found = node.children ? findNodeByLocalPath(node.children) : undefined;
+            if (found) return found;
+          }
+          return undefined;
+        };
+        initialSelectedNodeId = findNodeByLocalPath(tree);
+      }
       const resolveResultLabel = (status: SyncResult["status"]): string => {
         if (status === "cloned") {
           return t("cli.sync.resultStatus.cloned");
@@ -1979,6 +1995,7 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
         header,
         footer: t("tui.tree.orientationConfirm"),
         parameters: session?.getParameters() ?? parametersSummary,
+        initialSelectedNodeId,
         onReady: (handlers) => {
           treeProgress = handlers.progress;
           handlers.render();
