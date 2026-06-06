@@ -2318,10 +2318,17 @@ export const configureSshKeyStoreCommand = (program: Command, session?: TuiSessi
       const username = String(sshKeyParameters.parameters.find((param) => param.name === "username")?.value ?? "");
 
       const serverTypeCli = options.serverType?.toLowerCase();
-      const resolvedType: "gitlab" | "github" =
-        serverTypeCli === "github" ? "github"
-        : serverTypeCli === "gitlab" ? "gitlab"
-        : detectServerType(baseUrl);
+      let resolvedType: "gitlab" | "github";
+      if (serverTypeCli === "github") {
+        resolvedType = "github";
+      } else if (serverTypeCli === "gitlab") {
+        resolvedType = "gitlab";
+      } else {
+        if (serverTypeCli) {
+          console.warn(t("cli.prompt.github.unknownType", { type: serverTypeCli }));
+        }
+        resolvedType = detectServerType(baseUrl);
+      }
 
       const server: GitServerEntry = {
         id: baseUrl,

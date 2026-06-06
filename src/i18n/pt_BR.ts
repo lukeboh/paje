@@ -319,6 +319,7 @@ const ptBR = {
         tokenValid: "Token válido. Usuário GitHub: {{login}}",
         tokenInvalid: "Token inválido ou sem permissões suficientes.",
         tokenMissing: "Token não informado.",
+        unknownType: "Tipo de servidor desconhecido: \"{{type}}\". Use gitlab ou github. Detectando pelo URL...",
       },
     },
     summary: {

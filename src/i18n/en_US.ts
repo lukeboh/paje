@@ -320,6 +320,7 @@ const enUS: PtBrTranslations = {
         tokenValid: "Valid token. GitHub user: {{login}}",
         tokenInvalid: "Invalid token or insufficient permissions.",
         tokenMissing: "Token not provided.",
+        unknownType: "Unknown server type: \"{{type}}\". Use gitlab or github. Detecting from URL...",
       },
     },
     summary: {
