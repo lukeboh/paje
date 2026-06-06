@@ -421,6 +421,11 @@ const ptBR = {
       speed: "{{speed}}",
       removeConfirm: "Tem certeza que quer remover o diretório local {{repo}}? Há alterações locais!",
     },
+    cache: {
+      hit: "Árvore carregada do cache local. Atualizando status em segundo plano...",
+      statusRefreshed: "Status dos repositórios atualizado.",
+      saved: "Cache da árvore salvo.",
+    },
   },
 };
 

@@ -1,12 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import type { GitTreeCacheEntry } from "./types.js";
 
 export type PajePaths = {
   baseDir: string;
   logsDir: string;
   serversFile: string;
   tokensFile: string;
+  treeCacheFile: string;
 };
 
 const DEFAULT_BASE_DIR = ".paje";
@@ -17,11 +19,13 @@ export const resolvePajePaths = (): PajePaths => {
   const logsDir = path.join(baseDir, "logs");
   const serversFile = path.join(baseDir, "git-servers.json");
   const tokensFile = path.join(baseDir, "git-tokens.json");
+  const treeCacheFile = path.join(baseDir, "git-tree-cache.json");
   return {
     baseDir,
     logsDir,
     serversFile,
     tokensFile,
+    treeCacheFile,
   };
 };
 
@@ -63,4 +67,14 @@ export const readGitTokens = <T>(fallback: T): T => {
 export const writeGitTokens = <T>(data: T): void => {
   const { tokensFile } = resolvePajePaths();
   writeJsonFile<T>(tokensFile, data);
+};
+
+export const readGitTreeCache = (): GitTreeCacheEntry | null => {
+  const { treeCacheFile } = resolvePajePaths();
+  return readJsonFile<GitTreeCacheEntry | null>(treeCacheFile, null);
+};
+
+export const writeGitTreeCache = (entry: GitTreeCacheEntry): void => {
+  const { treeCacheFile } = resolvePajePaths();
+  writeJsonFile(treeCacheFile, entry);
 };

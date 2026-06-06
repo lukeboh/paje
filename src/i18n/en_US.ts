@@ -422,6 +422,11 @@ const enUS: PtBrTranslations = {
       speed: "{{speed}}",
       removeConfirm: "Are you sure you want to remove local directory {{repo}}? Local changes detected!",
     },
+    cache: {
+      hit: "Tree loaded from local cache. Updating status in background...",
+      statusRefreshed: "Repository status updated.",
+      saved: "Tree cache saved.",
+    },
   },
 };
 

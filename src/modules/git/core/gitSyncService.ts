@@ -5,7 +5,7 @@ import { GitLabApi } from "../gitlabApi.js";
 import { parallelSync, runGit, type ProgressEvent } from "../parallelSync.js";
 import { antPatternToRegex, compileAntPatterns, matchesAntPatterns, splitFilterPatterns } from "../patternFilter.js";
 import { resolveLocalPathConflicts, resolveProjectLocalPath } from "../gitPathUtils.js";
-import { readGitServers, writeGitServers } from "../persistence.js";
+import { readGitServers, writeGitServers, readGitTreeCache, writeGitTreeCache } from "../persistence.js";
 import {
   addHostToKnownHosts,
   getIdentityFileForHost,
@@ -35,6 +35,7 @@ import type {
   GitLabProject,
   GitLabTreeNode,
   GitRepositoryTarget,
+  GitTreeCacheEntry,
   RepoSyncState,
   RepoSyncStatus,
 } from "../types.js";
@@ -65,6 +66,7 @@ export type GitSyncTreeView = {
   tree: GitLabTreeNode[];
   statusMap: Record<number, RepoSyncStatus>;
   projects: GitLabProject[];
+  fromCache?: boolean;
 };
 
 export type GitSyncLoadOptions = {
@@ -72,6 +74,7 @@ export type GitSyncLoadOptions = {
   logger: LoggerBroker;
   onBasicAuthRequired?: (serverName: string, username: string) => Promise<string | undefined>;
   onRequestStart?: (serverName: string, requestCount: number) => void;
+  onStatusRefreshed?: (projectId: number, status: RepoSyncStatus) => void;
 };
 
 export type GitSyncProgressHandlers = {
@@ -102,6 +105,15 @@ export type GitSyncCore = {
 };
 
 const normalizeBaseUrl = (url: string): string => url.trim().replace(/\/+$/, "");
+
+const computeConfigHash = (servers: GitServerEntry[]): string => {
+  return servers
+    .map((s) =>
+      [s.name, normalizeBaseUrl(s.baseUrl), s.filter ?? "", String(s.noPublicRepos ?? false), String(s.noArchivedRepos ?? false)].join("|")
+    )
+    .sort()
+    .join(";");
+};
 
 const buildServerPrefix = (server: GitServerEntry): string => {
   const suffix = server.useBasicAuth ? " (basic)" : "";
@@ -545,10 +557,98 @@ export const createGitSyncCore = (): GitSyncCore => {
 
       return servers;
     },
-    loadTree: async ({ config, logger, onBasicAuthRequired, onRequestStart }) => {
+    loadTree: async ({ config, logger, onBasicAuthRequired, onRequestStart, onStatusRefreshed }) => {
       const servers = await createGitSyncCore().listServers({ config, logger });
       if (servers.length === 0) {
         return { header: "GitLab", tree: [], statusMap: {}, projects: [] };
+      }
+
+      const configHash = computeConfigHash(servers);
+      const cached = readGitTreeCache();
+
+      if (cached?.version === 1 && cached.configHash === configHash) {
+        logger.info(t("cli.cache.hit"));
+
+        const serversByName = new Map(servers.map((s) => [s.name, s]));
+        const cachedServerResults = cached.servers
+          .map(({ serverName, groups, projects }) => {
+            const server = serversByName.get(serverName);
+            if (!server) return null;
+            const projectsWithHttpUrl = server.token
+              ? projects.map((project) => {
+                  try {
+                    const url = new URL(project.http_url_to_repo);
+                    url.username = "oauth2";
+                    url.password = server.token as string;
+                    return { ...project, pajeHttpUrl: url.toString() };
+                  } catch {
+                    return project;
+                  }
+                })
+              : projects;
+            return { server, groups, projects: projectsWithHttpUrl };
+          })
+          .filter((r): r is { server: GitServerEntry; groups: GitLabGroup[]; projects: GitLabProject[] } => r !== null);
+
+        if (cachedServerResults.length > 0) {
+          const { groups, idMapByServer } = mergeGroupsByPath(
+            cachedServerResults.map((r) => ({ server: r.server, groups: r.groups }))
+          );
+          const { projects } = mergeProjectsByPath(
+            cachedServerResults.map((r) => ({ server: r.server, projects: r.projects })),
+            idMapByServer
+          );
+          const header = buildServersHeader(cachedServerResults.map((r) => r.server));
+
+          const filteredProjects = filterProjects(projects, config);
+          await ensureLocalDirsIfNeeded(filteredProjects, config.baseDir, config.prepareLocalDirs ?? false);
+          const resolvedPaths = resolveLocalPathConflicts(filteredProjects);
+
+          const statusMap = cached.statusMap;
+          const tree = buildGitLabTree(groups, filteredProjects);
+          const applyStatusToTree = (node: GitLabTreeNode): void => {
+            if (node.type === "project" && node.project) {
+              node.status = statusMap[node.project.id];
+              node.localPath = path.join(
+                node.project.pajeBaseDir ?? config.baseDir,
+                resolvedPaths.get(node.project.id) ?? resolveProjectLocalPath(node.project)
+              );
+              return;
+            }
+            node.children?.forEach((child) => applyStatusToTree(child));
+          };
+          tree.forEach((node) => applyStatusToTree(node));
+          applyInitialSelectionFromStatusMap(tree, statusMap);
+
+          setImmediate(async () => {
+            const freshEntries = await Promise.all(
+              filteredProjects.map(async (project) => {
+                const targetPath = path.join(
+                  project.pajeBaseDir ?? config.baseDir,
+                  resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project)
+                );
+                const status = await resolveRepoStatus({
+                  targetPath,
+                  defaultBranch: project.default_branch,
+                  knownRemote: true,
+                });
+                return [project.id, status] as const;
+              })
+            );
+            const freshStatusMap = Object.fromEntries(freshEntries) as Record<number, RepoSyncStatus>;
+            try {
+              writeGitTreeCache({ ...cached, statusMap: freshStatusMap });
+              logger.info(t("cli.cache.statusRefreshed"));
+            } catch {
+              // non-critical
+            }
+            if (onStatusRefreshed) {
+              freshEntries.forEach(([id, status]) => onStatusRefreshed(id as number, status));
+            }
+          });
+
+          return { header, tree, statusMap, projects: filteredProjects, fromCache: true };
+        }
       }
 
       const listStartAt = Date.now();
@@ -684,6 +784,24 @@ export const createGitSyncCore = (): GitSyncCore => {
         })
       );
       const statusMap = Object.fromEntries(statusEntries) as Record<number, RepoSyncStatus>;
+
+      try {
+        const cacheEntry: GitTreeCacheEntry = {
+          version: 1,
+          configHash,
+          servers: validServerResults.map((r) => ({
+            serverName: r.server.name,
+            groups: r.groups,
+            projects: r.projects.map(({ pajeHttpUrl: _url, ...rest }) => rest),
+          })),
+          statusMap,
+        };
+        writeGitTreeCache(cacheEntry);
+        logger.info(t("cli.cache.saved"));
+      } catch {
+        // non-critical
+      }
+
       const tree = buildGitLabTree(groups, filteredProjects);
       const applyStatusToTree = (node: GitLabTreeNode): void => {
         if (node.type === "project" && node.project) {

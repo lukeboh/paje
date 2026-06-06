@@ -82,3 +82,14 @@ export type GitLabServerConfig = {
   baseUrl: string;
   token: string;
 };
+
+export type GitTreeCacheEntry = {
+  version: 1;
+  configHash: string;
+  servers: Array<{
+    serverName: string;
+    groups: GitLabGroup[];
+    projects: GitLabProject[];
+  }>;
+  statusMap: Record<number, RepoSyncStatus>;
+};

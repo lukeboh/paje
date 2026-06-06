@@ -1651,6 +1651,17 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
           })
         : null;
 
+      let treeProgress: TuiTreeProgress | null = null;
+      const treeProgressRef = (): TuiTreeProgress | null => treeProgress;
+      const projectNodeMap = new Map<number, string>();
+      const buildProjectNodeMap = (node: GitLabTreeNode): void => {
+        if (node.type === "project" && node.project) {
+          projectNodeMap.set(node.project.id, node.id);
+          return;
+        }
+        node.children?.forEach((child) => buildProjectNodeMap(child));
+      };
+
       const core = createGitSyncCore();
       const { header, tree, statusMap, projects: filteredProjects } = await core.loadTree({
         config: mergedOptions,
@@ -1664,6 +1675,12 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
           logToTui(t("cli.http.accessServers", { frame, count: requestCount }));
           logToTui(t("cli.http.start", { server: serverName, label: "...", count: requestCount }));
         },
+        onStatusRefreshed: session
+          ? (projectId, status) => {
+              const nodeId = projectNodeMap.get(projectId);
+              if (nodeId) treeProgressRef()?.updateStatus(nodeId, status);
+            }
+          : undefined,
       }).finally(() => loadingHandle?.stop());
 
       if (filteredProjects.length === 0 && tree.length === 0) {
@@ -1931,18 +1948,8 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
         });
         renderSummaryLines(summary).forEach((line) => logInfo(line));
       }
-      const projectNodeMap = new Map<number, string>();
-      const buildProjectNodeMap = (node: GitLabTreeNode): void => {
-        if (node.type === "project" && node.project) {
-          projectNodeMap.set(node.project.id, node.id);
-          return;
-        }
-        node.children?.forEach((child) => buildProjectNodeMap(child));
-      };
       tree.forEach((node) => buildProjectNodeMap(node));
 
-      let treeProgress: TuiTreeProgress | null = null;
-      const treeProgressRef = (): TuiTreeProgress | null => treeProgress;
       const resolveResultLabel = (status: SyncResult["status"]): string => {
         if (status === "cloned") {
           return t("cli.sync.resultStatus.cloned");
