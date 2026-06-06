@@ -49,6 +49,7 @@ const resolveShortcutKey = (input: string, key: Key): string | null => {
       g: "Ctrl+G",
       h: "Ctrl+H",
       p: "Ctrl+P",
+      e: "Ctrl+E",
       l: "Ctrl+L",
       w: "Ctrl+W",
       b: "Ctrl+B",
@@ -118,6 +119,7 @@ const buildGroups = (options: { logMaximized: boolean; workspaceMaximized: boole
       shortcuts: [
         { id: "help", key: "Ctrl+H", description: t("helpModal.shortcuts.help"), contexts: ["menu", "tree", "loading"] },
         { id: "parameters", key: "Ctrl+P", description: t("helpModal.shortcuts.parameters"), contexts: ["menu", "tree", "loading"] },
+        { id: "edit-params", key: "Ctrl+E", description: t("helpModal.shortcuts.editParams"), contexts: ["tree"] },
         {
           id: "workspace",
           key: "Ctrl+W",

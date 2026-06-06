@@ -45,6 +45,20 @@ const enUS: PtBrTranslations = {
       prompt: "PROMPT",
     },
   },
+  editParamsModal: {
+    title: "Edit env.yaml",
+    hint: "↑/↓ navigate | Enter edit | Ctrl+S save | Esc close",
+    hintEditing: "Type value | Enter confirm | Esc cancel",
+    saved: "Parameters saved to {{path}}",
+    saveError: "Error saving: {{message}}",
+    noChanges: "No pending changes.",
+    pendingCount: "{{count}} pending change(s)",
+    cliLocked: "[CLI - not editable]",
+    resolvedLocked: "[computed]",
+    noParams: "No parameters available for editing.",
+    pendingBadge: "pending",
+    emptyValue: "(empty)",
+  },
   helpModal: {
     title: "System help",
     hint: "Press a shortcut to execute | Esc to close",
@@ -60,6 +74,7 @@ const enUS: PtBrTranslations = {
     shortcuts: {
       help: "open help",
       parameters: "open loaded parameters",
+      editParams: "edit env.yaml",
       workspace: "toggle workspace ({{state}})",
       log: "toggle log panel ({{state}})",
       escape: "back/close modal",

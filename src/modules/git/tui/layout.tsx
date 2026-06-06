@@ -10,6 +10,7 @@ import { TitleBar } from "./components/TitleBar.js";
 import { Workspace } from "./components/Workspace.js";
 import { PanelFrame } from "./components/PanelFrame.js";
 import { ParametersModal } from "./components/ParametersModal.js";
+import { EditParamsModal } from "./components/EditParamsModal.js";
 import { BranchModal, type BranchChoice } from "./components/BranchModal.js";
 import { HelpModal, type HelpContext } from "./components/HelpModal.js";
 import { t } from "../../../i18n/index.js";
@@ -36,6 +37,7 @@ export type LayoutProps = {
   };
   helpContext?: HelpContext;
   onHelpShortcut?: (input: string, key: Key) => void;
+  envFilePath?: string;
   children: React.ReactNode;
 };
 
@@ -62,6 +64,7 @@ export const Layout: React.FC<LayoutProps> = ({
   branchModal,
   helpContext,
   onHelpShortcut,
+  envFilePath,
   children,
 }) => {
   const panelState = usePanelStateController({
@@ -208,6 +211,14 @@ export const Layout: React.FC<LayoutProps> = ({
       modalState.toggleModal();
       return;
     }
+    if (key.ctrl && lower === "e") {
+      if (modalState.modalOpen && modalState.modalType === "edit-params") {
+        modalState.closeModal();
+      } else {
+        modalState.openModal("edit-params");
+      }
+      return;
+    }
     if (modalState.modalOpen) {
       return;
     }
@@ -277,6 +288,14 @@ export const Layout: React.FC<LayoutProps> = ({
                       workspaceMaximized={panelState.workspaceMaximized}
                       onClose={() => modalState.closeModal()}
                       onShortcut={(input, key) => onHelpShortcut?.(input, key)}
+                    />
+                  ) : modalState.modalType === "edit-params" ? (
+                    <EditParamsModal
+                      isOpen={modalState.modalOpen}
+                      width={modalWidth}
+                      height={modalHeight}
+                      parameters={resolvedParameters}
+                      envFilePath={envFilePath}
                     />
                   ) : (
                     <ParametersModal

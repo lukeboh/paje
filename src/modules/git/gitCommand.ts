@@ -2096,6 +2096,7 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
         header,
         footer: t("tui.tree.orientationConfirm"),
         parameters: session?.getParameters() ?? parametersSummary,
+        envFilePath: mergedOptions.envFile,
         initialSelectedNodeId,
         onReady: (handlers) => {
           treeProgress = handlers.progress;

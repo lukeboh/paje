@@ -43,6 +43,20 @@ const ptBR = {
       prompt: "PROMPT",
     },
   },
+  editParamsModal: {
+    title: "Editar env.yaml",
+    hint: "↑/↓ navegar | Enter editar | Ctrl+S salvar | Esc fechar",
+    hintEditing: "Digite o valor | Enter confirmar | Esc cancelar",
+    saved: "Parâmetros salvos em {{path}}",
+    saveError: "Erro ao salvar: {{message}}",
+    noChanges: "Nenhuma alteração pendente.",
+    pendingCount: "{{count}} alteração(ões) pendente(s)",
+    cliLocked: "[CLI - não editável]",
+    resolvedLocked: "[calculado]",
+    noParams: "Nenhum parâmetro disponível para edição.",
+    pendingBadge: "pendente",
+    emptyValue: "(vazio)",
+  },
   helpModal: {
     title: "Ajuda do sistema",
     hint: "Digite uma tecla para executar | Esc para fechar",
@@ -58,6 +72,7 @@ const ptBR = {
     shortcuts: {
       help: "abrir ajuda",
       parameters: "abrir parâmetros carregados",
+      editParams: "editar env.yaml",
       workspace: "alternar área de trabalho ({{state}})",
       log: "alternar painel de log ({{state}})",
       escape: "voltar/fechar modal",

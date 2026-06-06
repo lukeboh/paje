@@ -302,6 +302,7 @@ export const renderRepositoryTree = async (
     footer?: string;
     header?: string;
     parameters?: CommandParameters[];
+    envFilePath?: string;
     initialSelectedNodeId?: string;
     onReady?: (handlers: {
       render: () => void;
@@ -569,6 +570,7 @@ export const renderRepositoryTree = async (
           title={headerTitle}
           orientation={orientation}
           parameters={parametersSnapshot}
+          envFilePath={options?.envFilePath}
           modalState={modalState}
           helpContext="tree"
           onHelpShortcut={(input, key) => {
