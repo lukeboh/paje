@@ -6,6 +6,7 @@ import { parallelSync, runGit, type ProgressEvent } from "../parallelSync.js";
 import { antPatternToRegex, compileAntPatterns, matchesAntPatterns, splitFilterPatterns } from "../patternFilter.js";
 import { resolveLocalPathConflicts, resolveProjectLocalPath } from "../gitPathUtils.js";
 import { readGitServers, writeGitServers, readGitTreeCache, writeGitTreeCache } from "../persistence.js";
+import { GitHubApi } from "../githubApi.js";
 import {
   addHostToKnownHosts,
   getIdentityFileForHost,
@@ -46,6 +47,7 @@ export type GitServerEntry = {
   id: string;
   name: string;
   baseUrl: string;
+  type?: "gitlab" | "github";
   useBasicAuth?: boolean;
   username?: string;
   userEmail?: string;
@@ -405,7 +407,13 @@ const ensureKnownHost = async (server: string, logger: LoggerBroker, verbose?: b
   }
 };
 
-const ensureSshKey = async (api: GitLabApi, logger: LoggerBroker, config: GitSyncConfig): Promise<void> => {
+type SshCapableApi = {
+  getServerHost: () => string;
+  hasAuth: () => boolean;
+  createSshKey: (title: string, key: string) => Promise<{ id: number }>;
+};
+
+const ensureSshKey = async (api: SshCapableApi, logger: LoggerBroker, config: GitSyncConfig): Promise<void> => {
   const server = api.getServerHost();
   let associatedIdentityPath = getIdentityFileForHost(server);
   if (associatedIdentityPath) {
@@ -670,6 +678,50 @@ export const createGitSyncCore = (): GitSyncCore => {
 
       const serverResults = await Promise.all(
         servers.map(async (server) => {
+          if (server.type === "github") {
+            if (!server.token) {
+              logger.warn(t("cli.sync.noAuthConfigured", { server: server.name }));
+              return null;
+            }
+            const api = new GitHubApi({
+              baseUrl: server.baseUrl,
+              token: server.token,
+              verbose: config.verbose ?? false,
+              logger: (message) => logger.debug(message),
+            });
+            try {
+              const [groups, userProjects] = await Promise.all([
+                wrapRequest(server, t("cli.http.listGroups"), () => api.listGroups()),
+                wrapRequest(server, t("cli.http.listUserProjects"), () => api.listUserProjects()),
+              ]);
+              const projects = userProjects.filter((project, index, all) => {
+                return all.findIndex((item) => item.id === project.id) === index;
+              });
+              const projectsWithMetadata: GitLabProject[] = projects.map((project) => {
+                const meta: Partial<GitLabProject> = {};
+                if (server.baseDir) meta.pajeBaseDir = server.baseDir;
+                if (server.userEmail) meta.pajeUserEmail = server.userEmail;
+                try {
+                  const url = new URL(project.http_url_to_repo);
+                  url.username = "x-access-token";
+                  url.password = server.token as string;
+                  meta.pajeHttpUrl = url.toString();
+                } catch {
+                  // keep without pajeHttpUrl
+                }
+                return { ...project, ...meta };
+              });
+              const serverFiltered = filterProjects(projectsWithMetadata, {
+                filter: server.filter,
+                noPublicRepos: server.noPublicRepos,
+                noArchivedRepos: server.noArchivedRepos,
+              } as GitSyncConfig);
+              return { server, groups, projects: serverFiltered };
+            } catch {
+              return null;
+            }
+          }
+
           const serverHost = new URL(server.baseUrl).hostname;
           const hasSshAssociation = hasValidSshAssociation(serverHost);
           let basicAuth: { username: string; password: string } | undefined;

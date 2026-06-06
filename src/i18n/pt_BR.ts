@@ -220,14 +220,16 @@ const ptBR = {
         },
       },
       gitServerStore: {
-        description: "Gerar e armazenar chave SSH e token no GitLab sem sincronizar repositórios",
+        description: "Registrar servidor GitLab ou GitHub e armazenar credenciais",
         options: {
           verbose: "Exibe detalhes das operações executadas",
           locale: "Idioma da interface (pt_BR/en_US)",
-          serverName: "Nome do servidor GitLab",
-          baseUrl: "URL base do GitLab",
+          serverName: "Nome do servidor",
+          baseUrl: "URL base do servidor (ex: https://github.com ou https://gitlab.com)",
+          serverType: "Tipo de servidor: gitlab ou github (detectado automaticamente pela URL)",
+          token: "Token de acesso pessoal (PAT) para GitHub",
           username: "Usuário do GitLab",
-          useBasicAuth: "Usar autenticação HTTPS com token (sem SSH)",
+          useBasicAuth: "Usar autenticação HTTPS com token (sem SSH) — apenas GitLab",
           userEmail: "Email do Git para configurar nos repositórios",
           password: "Senha do GitLab para autenticação básica",
           baseDir: "Diretório base para clonagem dos repositórios",
@@ -309,6 +311,14 @@ const ptBR = {
       },
       verbose: {
         title: "SSH - Detalhes",
+      },
+      github: {
+        title: "GitHub",
+        tokenLabel: "Personal Access Token (PAT)",
+        tokenDesc: "Crie em: github.com/settings/tokens | Escopos recomendados: repo, read:org",
+        tokenValid: "Token válido. Usuário GitHub: {{login}}",
+        tokenInvalid: "Token inválido ou sem permissões suficientes.",
+        tokenMissing: "Token não informado.",
       },
     },
     summary: {

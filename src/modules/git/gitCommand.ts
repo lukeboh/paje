@@ -6,6 +6,7 @@ import path from "node:path";
 import { Command } from "commander";
 import { setLocale, t } from "../../i18n/index.js";
 import { GitLabApi } from "./gitlabApi.js";
+import { GitHubApi } from "./githubApi.js";
 import { resolveGitSyncConfig } from "./core/gitSyncConfig.js";
 import { buildParameter, type CommandParameters, type ParameterSource } from "./core/parameters.js";
 import {
@@ -491,9 +492,11 @@ type SshKeyStoreCliOptions = {
   verbose?: boolean;
   serverName?: string;
   baseUrl?: string;
+  serverType?: string;
   username?: string;
   userEmail?: string;
   password?: string;
+  token?: string;
   useBasicAuth?: boolean;
   keyLabel?: string;
   passphrase?: string;
@@ -841,6 +844,104 @@ export const resolveHomePath = (value?: string): string | undefined => {
     return path.join(os.homedir(), trimmed.slice(2));
   }
   return value;
+};
+
+const detectServerType = (baseUrl: string): "gitlab" | "github" => {
+  try {
+    const host = new URL(baseUrl).hostname.toLowerCase();
+    if (host === "github.com" || host === "www.github.com" || host.endsWith(".github.com")) {
+      return "github";
+    }
+  } catch {
+    // ignore
+  }
+  return "gitlab";
+};
+
+const storeGitHubServer = async (
+  server: GitServerEntry,
+  session?: TuiSession,
+  cli?: SshKeyStoreCliOptions
+): Promise<void> => {
+  const logger = session
+    ? (message: string) => {
+        session.showMessage({ title: t("cli.prompt.github.title"), message });
+      }
+    : console.log;
+
+  const existingServers = readGitServers<GitServerEntry[]>([]);
+  const normalizedUrl = normalizeBaseUrl(server.baseUrl);
+  const existingServer = existingServers.find((s) => normalizeBaseUrl(s.baseUrl) === normalizedUrl);
+
+  let token = cli?.token?.trim() ?? existingServer?.token;
+
+  if (token) {
+    const api = new GitHubApi({ baseUrl: server.baseUrl, token });
+    try {
+      const user = await api.getAuthenticatedUser();
+      logger(t("cli.prompt.github.tokenValid", { login: user.login }));
+      const serverWithToken: GitServerEntry = {
+        ...server,
+        type: "github",
+        token,
+        username: existingServer?.username ?? user.login,
+      };
+      const merged = mergeServer(existingServers, serverWithToken);
+      writeGitServers(merged.servers);
+      return;
+    } catch {
+      logger(t("cli.prompt.github.tokenInvalid"));
+    }
+  }
+
+  if (session) {
+    const form = await session.promptForm<{ token: string }>({
+      title: t("cli.prompt.github.title"),
+      fields: [
+        {
+          name: "token",
+          label: t("cli.prompt.github.tokenLabel"),
+          description: t("cli.prompt.github.tokenDesc"),
+          secret: true,
+        },
+      ],
+    });
+    token = form?.token?.trim();
+  } else {
+    const promptResult = (await inquirer.prompt([
+      {
+        name: "token",
+        message: t("cli.prompt.github.tokenLabel"),
+        type: "password",
+      },
+    ])) as { token?: string };
+    token = promptResult.token?.trim();
+  }
+
+  if (!token) {
+    logger(t("cli.prompt.github.tokenMissing"));
+    return;
+  }
+
+  const api = new GitHubApi({ baseUrl: server.baseUrl, token, verbose: cli?.verbose });
+  let login: string;
+  try {
+    const user = await api.getAuthenticatedUser();
+    login = user.login;
+    logger(t("cli.prompt.github.tokenValid", { login }));
+  } catch {
+    logger(t("cli.prompt.github.tokenInvalid"));
+    return;
+  }
+
+  const serverWithToken: GitServerEntry = {
+    ...server,
+    type: "github",
+    token,
+    username: login,
+  };
+  const merged = mergeServer(existingServers, serverWithToken);
+  writeGitServers(merged.servers);
 };
 
 const storeSshKeyOnly = async (
@@ -2179,7 +2280,9 @@ export const configureSshKeyStoreCommand = (program: Command, session?: TuiSessi
     .option("-v, --verbose", t("cli.command.gitServerStore.options.verbose"), false)
     .option("--server-name <name>", t("cli.command.gitServerStore.options.serverName"))
     .option("--base-url <url>", t("cli.command.gitServerStore.options.baseUrl"))
+    .option("--server-type <type>", t("cli.command.gitServerStore.options.serverType"))
     .option("--username <username>", t("cli.command.gitServerStore.options.username"))
+    .option("--token <token>", t("cli.command.gitServerStore.options.token"))
     .option("--key-label <label>", t("cli.command.gitServerStore.options.keyLabel"), "paje")
     .option("--passphrase <passphrase>", t("cli.command.gitServerStore.options.passphrase"))
     .option("--public-key-path <path>", t("cli.command.gitServerStore.options.publicKeyPath"))
@@ -2213,10 +2316,18 @@ export const configureSshKeyStoreCommand = (program: Command, session?: TuiSessi
       const baseUrl = String(sshKeyParameters.parameters.find((param) => param.name === "baseUrl")?.value ?? "");
       const serverName = String(sshKeyParameters.parameters.find((param) => param.name === "serverName")?.value ?? "");
       const username = String(sshKeyParameters.parameters.find((param) => param.name === "username")?.value ?? "");
+
+      const serverTypeCli = options.serverType?.toLowerCase();
+      const resolvedType: "gitlab" | "github" =
+        serverTypeCli === "github" ? "github"
+        : serverTypeCli === "gitlab" ? "gitlab"
+        : detectServerType(baseUrl);
+
       const server: GitServerEntry = {
         id: baseUrl,
         name: serverName,
         baseUrl,
+        type: resolvedType,
         useBasicAuth: options.useBasicAuth ?? false,
         username,
         userEmail: options.userEmail,
@@ -2230,7 +2341,11 @@ export const configureSshKeyStoreCommand = (program: Command, session?: TuiSessi
         tokenExpiresAt: options.tokenExpiresAt,
       };
 
-      await storeSshKeyOnly(server, session, options);
+      if (resolvedType === "github") {
+        await storeGitHubServer(server, session, options);
+      } else {
+        await storeSshKeyOnly(server, session, options);
+      }
     });
 
   program

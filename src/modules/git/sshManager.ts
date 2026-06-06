@@ -5,7 +5,6 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import * as cheerio from "cheerio";
 import { CookieJar } from "tough-cookie";
-import { GitLabApi } from "./gitlabApi.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -334,7 +333,7 @@ export const generatePajeKeyPair = async (passphrase?: string, keyLabel?: string
 };
 
 export const registerKeyInGitLab = async (
-  api: GitLabApi,
+  api: { createSshKey: (title: string, key: string) => Promise<{ id: number }> },
   title: string,
   publicKey: string
 ): Promise<void> => {
