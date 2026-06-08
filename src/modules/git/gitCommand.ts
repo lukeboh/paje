@@ -556,6 +556,18 @@ const resolveSyncTargets = (projects: GitLabProject[], specs: SyncRepoSpec[]): G
   return Array.from(uniqueByPath.values());
 };
 
+export const filterSyncTargetsBySelection = (
+  syncTargets: GitRepositoryTarget[],
+  selectionNodes: GitLabTreeNode[],
+  selectionMode?: TuiSelectionResult["mode"]
+): GitRepositoryTarget[] => {
+  if (selectionMode !== "single") {
+    return syncTargets;
+  }
+  const validIds = new Set(selectionNodes.map((node) => node.project?.id).filter(Boolean) as number[]);
+  return syncTargets.filter((target) => validIds.has(target.id));
+};
+
 const resolveRepoStatus = async (options: {
   targetPath: string;
   defaultBranch?: string;
@@ -2777,6 +2789,11 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
           handlers.render();
         },
         onConfirm: async (selection: TuiSelectionResult) => {
+          logBroker.info(
+            selection.mode === "single"
+              ? t("cli.sync.scopeSingle")
+              : t("cli.sync.scopeAll")
+          );
           if (!session) {
             logBroker.warn(t("session.errorPrefix", { error: t("cli.log.tuiUnavailable") }));
             return;
@@ -2809,11 +2826,6 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
             .map((node) => node.project)
             .filter((project): project is GitLabProject => Boolean(project));
 
-          if (selected.length === 0) {
-            logBroker.warn(t("tui.tree.empty"));
-            return;
-          }
-
           const selectedIds = new Set(selected.map((project) => project.id));
           const removalCandidates = selectionNodes
             .filter((node) => node.type === "project" && node.project)
@@ -2821,6 +2833,7 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
             .filter((project): project is GitLabProject => Boolean(project))
             .filter((project) => !selectedIds.has(project.id));
 
+          let hasRemovalCandidate = false;
           for (const project of removalCandidates) {
             const status = statusMap[project.id];
             if (!status || status.state === "EMPTY") {
@@ -2830,6 +2843,7 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
             if (!fs.existsSync(localPath)) {
               continue;
             }
+            hasRemovalCandidate = true;
             const confirmed = await confirmRemoval({
               repoLabel: project.path_with_namespace,
               status,
@@ -2868,6 +2882,13 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
             }
           }
 
+          if (selected.length === 0) {
+            if (!hasRemovalCandidate) {
+              logBroker.warn(t("cli.sync.noneSelected"));
+            }
+            return;
+          }
+
           const resolvedUserName = mergedOptions.username?.trim() || undefined;
           const resolvedUserEmail = mergedOptions.userEmail?.trim() || undefined;
           const syncSpecs = selectionMode === "single" ? [] : resolveSyncReposSpecs(mergedOptions.syncRepos);
@@ -2882,6 +2903,13 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
                 ...target,
                 localPath: path.join(defaultBaseDir, resolvedPaths.get(target.id) ?? target.pathWithNamespace),
               }));
+
+          if (selectionMode === "single") {
+            const validIds = new Set(selectionNodes.map((node) => node.project?.id).filter(Boolean) as number[]);
+            const filteredTargets = syncTargets.filter((target) => validIds.has(target.id));
+            syncTargets.length = 0;
+            syncTargets.push(...filteredTargets);
+          }
 
           if (syncTargets.length === 0) {
             logBroker.warn(t("cli.sync.noSyncMatches"));

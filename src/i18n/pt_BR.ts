@@ -346,6 +346,8 @@ const ptBR = {
       listDuration: "Listagem concluída em {{seconds}}s.",
       noneSelected: "Nenhum repositório selecionado.",
       noSyncMatches: "Nenhum repositório corresponde aos filtros.",
+      scopeSingle: "Escopo da sincronização: linha/grupo destacado (Ctrl+S).",
+      scopeAll: "Escopo da sincronização: todas as linhas (S).",
       defaultServerLabel: "GitLab",
       serverSingle: "servidor",
       serverPlural: "servidores",

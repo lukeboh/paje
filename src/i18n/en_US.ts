@@ -345,6 +345,8 @@ const enUS = {
       listDuration: "Listing completed in {{seconds}}s.",
       noneSelected: "No repositories selected.",
       noSyncMatches: "No repositories match the filters.",
+      scopeSingle: "Sync scope: highlighted row/group (Ctrl+S).",
+      scopeAll: "Sync scope: all rows (S).",
       defaultServerLabel: "GitLab",
       serverSingle: "server",
       serverPlural: "servers",
