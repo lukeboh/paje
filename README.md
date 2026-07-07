@@ -21,7 +21,7 @@ O PAJÉ é um facilitador de ambiente de desenvolvimento. Ele automatiza tarefas
 Execute o instalador em uma única linha (Linux/Bash):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lukeboh/paje/main/install-page.sh -o install-page.sh && chmod +x install-page.sh && ./install-page.sh
+curl -fsSL https://raw.githubusercontent.com/lukeboh/paje/main/install-paje.sh -o install-page.sh && chmod +x install-page.sh && ./install-page.sh
 ```
 
 O instalador:
