@@ -34,4 +34,4 @@ flowchart TD
 ## Ajustes em testes e docs
 - Validar persistência no fluxo de troca de telas (`menu` -> `prompts` -> `árvore`).
 - Revisar testes TUI em [`tests/tui_menu_dashboard_test.ts`](tests/tui_menu_dashboard_test.ts:1), [`tests/tui_render_test.ts`](tests/tui_render_test.ts:1) e similares.
-- Documentar correção em [`docs/bugs-conhecidos.md`](docs/bugs-conhecidos.md:1).
+- Documentar correção em [`docs/auditoria-codigo.md`](docs/auditoria-codigo.md:1).

@@ -49,6 +49,14 @@ Este documento define os requisitos da funcionalidade **Sincronizar repositório
 - As cores devem seguir o mesmo padrão da CLI.
 - Branchs conhecidas devem ter destaque (ex.: `main`, `master`, `develop`, `desenvolvimento`, `feature-*`).
 
+#### Decisão de design — estado DIVERGED exibido como AHEAD
+
+Quando um repositório está **divergido** (`ahead > 0` e `behind > 0`), o sistema exibe o estado como **AHEAD** (com delta `+N/-M`).
+
+**Motivação:** a presença de commits locais não enviados ao servidor é a informação mais crítica para o usuário — commits não publicados podem ser perdidos. Exibir o estado como "adiantado" (AHEAD) destaca essa urgência de forma mais visível do que "divergido" (que pode ser interpretado como um estado neutro). O delta `+N/-M` ainda informa que há commits remotos a receber.
+
+**Consequência intencional:** repositórios divergidos usam a cor azul (AHEAD) em vez do vermelho/magenta que seria aplicado ao estado DIVERGED.
+
 ### RF-04 — Seleção por checkbox
 
 - Cada nó exibido deve ter checkbox (`[ ]`, `[~]`, `[x]`).
@@ -65,7 +73,7 @@ Este documento define os requisitos da funcionalidade **Sincronizar repositório
 
 ### RF-06 — Confirmação e execução
 
-- O texto de orientação deve indicar `S para sincronizar`.
+- O texto de orientação deve indicar `Ctrl+S` para sincronizar todos e `Enter` para sincronizar o escopo destacado.
 - Ao confirmar, a sincronização deve se comportar como CLI:
   - Remover diretórios locais recém desmarcados, com confirmação apenas para estados `UNCOMMITTED`, `AHEAD` e `DIVERGED`.
   - Respeitar paralelismo configurado.
@@ -84,6 +92,22 @@ Este documento define os requisitos da funcionalidade **Sincronizar repositório
   - Lista ordenada de repositórios com métricas (objetos/volume/velocidade)
 - Quando houver múltiplos servidores, o resumo deve indicar o total consolidado e, quando aplicável, destacar o servidor de cada repositório.
 
+### RF-09 — Carga instantânea com cache
+
+- Quando existir cache válido (`~/.paje/git-tree-cache.json` com `configHash` igual ao da configuração atual de servidores), a árvore deve abrir imediatamente a partir do cache.
+- O status local de cada repositório deve ser recalculado em segundo plano com concorrência limitada (4 repositórios por vez) — nunca todos simultaneamente, para não saturar a máquina nem travar a TUI.
+- Cada status recalculado deve ser entregue **incrementalmente** à árvore (atualização linha a linha), e não em bloco ao final.
+- Statuses que chegarem antes de a árvore montar devem ser bufferizados e aplicados assim que ela estiver pronta — nenhum update pode ser perdido.
+- Ao final do refresh, o cache deve ser regravado com o `statusMap` atualizado.
+- O cache não tem TTL; é invalidado apenas por mudança na configuração de servidores.
+- O cache nunca pode conter tokens (URLs autenticadas são reidratadas a cada carga).
+
+### RF-10 — Posicionamento inicial do cursor
+
+- Quando `paje git-sync` for executado de dentro de um diretório de trabalho git, a árvore deve abrir com o cursor posicionado na linha do repositório correspondente (comparação por caminho local resolvido).
+- O scroll inicial deve deixar algumas linhas de contexto acima do repositório selecionado.
+- Quando não houver correspondência, o cursor inicia na primeira linha.
+
 ## Requisitos de usabilidade
 
 ### RU-01 — Estrutura da TUI
@@ -100,30 +124,33 @@ Este documento define os requisitos da funcionalidade **Sincronizar repositório
 ### RU-02 — Orientações
 
 - A linha de orientações deve indicar ações básicas: navegar, selecionar, sincronizar, cancelar.
-- Deve exibir o atalho `C` para alternar o filtro de itens marcados.
-- Deve exibir os atalhos `W` para maximizar/restaurar a área de trabalho e `L` para maximizar/restaurar o log.
+- Deve exibir o atalho `Ctrl+F` para alternar o filtro de itens marcados.
+- Deve exibir os atalhos `Ctrl+W` para maximizar/restaurar a área de trabalho e `Ctrl+L` para maximizar/restaurar o log.
+- Deve exibir `Ctrl+B` para a modal de branch e `Ctrl+H` para a modal de ajuda.
 
 ### RU-03 — Log de operações
 
 - O log deve exibir tudo que o sistema está fazendo, incluindo comandos executados e respostas.
 - Cada linha deve ter data/hora com precisão de segundos.
-- Mensagens de erro devem aparecer em vermelho.
+- Colorização por nível: debug em cinza (dim), info na cor padrão, warn em amarelo, erro em vermelho — com códigos ANSI aplicados manualmente (independentes de detecção de TTY).
+- Cada entrada deve ocupar exatamente uma linha física (truncamento; linhas longas não podem quebrar e estourar a altura do painel).
 - Scroll do log deve ser automático.
-- Ao pressionar `L`, o log deve ocupar a tela inteira e retornar ao layout padrão ao pressionar `L` novamente.
-- Ao pressionar `W`, a área de trabalho deve ocupar a tela inteira e retornar ao layout padrão ao pressionar `W` novamente.
-- O pipeline de log deve usar LoggerBroker com transport dedicado ao painel.
-- O painel deve iniciar em nível `warn` (erros em vermelho).
+- Ao pressionar `Ctrl+L`, o log deve ocupar a tela inteira e retornar ao layout padrão ao pressionar `Ctrl+L` novamente.
+- Ao pressionar `Ctrl+W`, a área de trabalho deve ocupar a tela inteira e retornar ao layout padrão ao pressionar `Ctrl+W` novamente.
+- O pipeline de log deve usar LoggerBroker (motor pino) com transport dedicado ao painel.
+- O painel deve iniciar em nível `info`; com `--verbose`, em nível `debug`.
 
 ### RU-04 — Filtro de selecionados
 
-- Ao pressionar `C`, a árvore deve alternar entre exibir todos os itens e apenas os itens marcados.
+- Ao pressionar `Ctrl+F`, a árvore deve alternar entre exibir todos os itens e apenas os itens marcados.
 - Quando o filtro estiver ativo, os ancestrais dos itens marcados devem permanecer visíveis.
-- Ao pressionar `C` novamente, a árvore completa deve ser restaurada.
+- Ao pressionar `Ctrl+F` novamente, a árvore completa deve ser restaurada.
 
 ### RU-05 — Esc
 
 - `Esc` retorna à tela anterior.
 - Se o usuário estiver digitando, confirmar desistência.
+- Em modais de workflow (editor de env.yaml e branch), `Esc` é tratado pelo próprio modal: durante uma edição inline, cancela apenas a edição; fora dela, fecha o modal.
 
 ### RU-06 — Cenários multi-servidor
 
@@ -133,6 +160,25 @@ Este documento define os requisitos da funcionalidade **Sincronizar repositório
 - Grupos com o mesmo `full_path` em servidores diferentes devem ser consolidados em um único nó.
 - Os rótulos dos grupos devem exibir apenas o último segmento do caminho (sem prefixo de servidor).
 - Em colisão de caminho local (mesmo `path_with_namespace` em servidores diferentes), o diretório local deve receber sufixo `-<Servidor>`.
+
+### RU-07 — Editor de parâmetros (`Ctrl+E`)
+
+- `Ctrl+E` abre o editor do `env.yaml` sobreposto à árvore.
+- `Enter` inicia edição inline do valor; `Esc` durante a edição cancela apenas a edição.
+- Alterações confirmadas ficam pendentes (badge) até `Ctrl+S`, que grava no arquivo preservando comentários e convertendo chaves para kebab-case.
+- Parâmetros com origem `cli`/`resolved` são somente leitura.
+- A descrição do parâmetro selecionado aparece em rodapé fixo; o conteúdo do modal nunca excede sua altura.
+- Enquanto aberto, `Ctrl+P`/`Ctrl+H` são bloqueados; `Ctrl+C` continua encerrando a aplicação.
+
+### RU-08 — Filtro por digitação
+
+- Digitar caracteres imprimíveis na árvore filtra os itens em tempo real, casando com o rótulo do nó ou com o `path_with_namespace` (case-insensitive).
+- Grupos cujo nome casa com a consulta mantêm toda a subárvore; ancestrais de itens correspondentes permanecem visíveis.
+- Um indicador acima da lista exibe a consulta atual e a contagem de itens visíveis; a lista desconta essa linha da altura disponível (sem estourar o quadro).
+- `Backspace` apaga o último caractere da consulta (não pode abrir a ajuda enquanto o filtro está ativo).
+- `Esc` com filtro ativo limpa a consulta e restaura a árvore — **não** cancela a tela; um segundo `Esc` (sem filtro) cancela normalmente.
+- A navegação, a seleção por checkbox e a sincronização continuam funcionando sobre a lista filtrada; o cursor volta ao topo a cada alteração da consulta.
+- O filtro por digitação compõe com o filtro de selecionados (`Ctrl+F`).
 
 ## Requisitos não funcionais
 

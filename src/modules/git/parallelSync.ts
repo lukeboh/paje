@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import os from "node:os";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
@@ -132,7 +133,7 @@ const runGitWithProgress = async (options: {
 };
 
 export const ensureParentDir = async (targetPath: string): Promise<void> => {
-  await execFileAsync("mkdir", ["-p", path.dirname(targetPath)]);
+  await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
 };
 
 const hasGitDir = async (targetPath: string): Promise<boolean> => {
@@ -338,7 +339,7 @@ export const syncRepository = async (
 export const parallelSync = async (
   targets: GitRepositoryTarget[],
   options?: ParallelSyncOptions,
-  onProgress?: (result: SyncResult) => void,
+  onResult?: (result: SyncResult) => void,
   onProgressUpdate?: (event: ProgressEvent) => void
 ): Promise<SyncResult[]> => {
   const concurrency = resolveConcurrency(options);
@@ -354,7 +355,7 @@ export const parallelSync = async (
       }
       const result = await syncRepository(target, options, workerId, onProgressUpdate);
       results.push(result);
-      onProgress?.(result);
+      onResult?.(result);
     }
   });
 

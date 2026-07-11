@@ -2,6 +2,9 @@ import { appendLogRecord } from "../tui/logStore.js";
 import { PajeLogger } from "../logger.js";
 import type { LogEntry, LogLevel, LogTransport } from "./loggerBroker.js";
 
+// The console transport MUST go through console.log/console.error: Ink patches
+// the console to render output above the UI, so writing straight to fd 1 would
+// corrupt the frame whenever a TUI is mounted.
 export const createConsoleTransport = (name: string, minLevel: LogLevel): LogTransport => {
   return {
     name,

@@ -10,6 +10,7 @@ import { TitleBar } from "./components/TitleBar.js";
 import { Workspace } from "./components/Workspace.js";
 import { PanelFrame } from "./components/PanelFrame.js";
 import { ParametersModal } from "./components/ParametersModal.js";
+import { EditParamsModal } from "./components/EditParamsModal.js";
 import { BranchModal, type BranchChoice } from "./components/BranchModal.js";
 import { HelpModal, type HelpContext } from "./components/HelpModal.js";
 import { t } from "../../../i18n/index.js";
@@ -36,6 +37,8 @@ export type LayoutProps = {
   };
   helpContext?: HelpContext;
   onHelpShortcut?: (input: string, key: Key) => void;
+  envFilePath?: string;
+  helpOnBackspace?: boolean;
   children: React.ReactNode;
 };
 
@@ -62,6 +65,8 @@ export const Layout: React.FC<LayoutProps> = ({
   branchModal,
   helpContext,
   onHelpShortcut,
+  envFilePath,
+  helpOnBackspace = false,
   children,
 }) => {
   const panelState = usePanelStateController({
@@ -72,7 +77,12 @@ export const Layout: React.FC<LayoutProps> = ({
   const modalState = modalStateOverride ?? useModalStateController();
   const { exit } = useApp();
   const { stdout } = useStdout();
-  const terminalHeight = stdout?.rows ?? 24;
+  // One row below the terminal height: when a frame is as tall as the
+  // terminal, Ink abandons incremental rendering and clears the whole screen
+  // (ESC[2J) on every frame — the entire TUI flashes on each update,
+  // painfully so over SSH. Staying below the threshold keeps Ink on the
+  // erase-lines path: a single atomic write per frame, no blank flash.
+  const terminalHeight = Math.max(8, (stdout?.rows ?? 24) - 1);
   const terminalWidth = stdout?.columns ?? 80;
   const headerLeft = useMemo(() => formatHeaderLeft(title, breadcrumbs), [title, breadcrumbs]);
   const globalLogEntries = useLogEntries();
@@ -178,14 +188,28 @@ export const Layout: React.FC<LayoutProps> = ({
 
   useInput((input = "", key) => {
     const lower = typeof input === "string" ? input.toLowerCase() : "";
-    const metaKey = (key as { meta?: boolean }).meta ?? false;
-    const isPlainLetter = input.length === 1 && !key.ctrl && !metaKey;
+    // Ctrl+C must always work, even with a modal open.
+    if (key.ctrl && input === "c") {
+      onCtrlC?.();
+      exit();
+      return;
+    }
+    // Workflow modals own the keyboard while open: edit-params handles its own
+    // Esc (cancel edit vs close) and branch handles its own Esc (onCancel).
+    // Switching to another modal from here would silently discard their state.
+    const workflowModalOpen =
+      modalState.modalOpen &&
+      (modalState.modalType === "edit-params" || modalState.modalType === "branch");
     if (key.escape) {
       debugLogger.info(
         `[TUI][ESC] layout escapeEnabled=${escapeEnabled} modalOpen=${modalState.modalOpen} logMax=${panelState.logMaximized} workspaceMax=${panelState.workspaceMaximized}`
       );
       if (!escapeEnabled) {
         debugLogger.info("[TUI][ESC] layout ignored (escapeEnabled=false)");
+        return;
+      }
+      if (workflowModalOpen) {
+        debugLogger.info("[TUI][ESC] layout deferring ESC to workflow modal");
         return;
       }
       if (modalState.modalOpen) {
@@ -202,28 +226,34 @@ export const Layout: React.FC<LayoutProps> = ({
       onEscape?.();
       return;
     }
-    if (isPlainLetter && lower === "h") {
+    if (workflowModalOpen) {
+      return;
+    }
+    // Terminals send byte 0x08 for Ctrl+H, which Ink reports as key.backspace
+    // (the physical Backspace key sends 0x7f = key.delete). Accepting
+    // key.backspace here is opt-in per screen so text prompts keep erasing.
+    if ((key.ctrl && lower === "h") || (helpOnBackspace && key.backspace)) {
       modalState.openModal("help");
       return;
     }
-    if (isPlainLetter && lower === "p") {
+    if (key.ctrl && lower === "p") {
       modalState.toggleModal();
+      return;
+    }
+    if (key.ctrl && lower === "e") {
+      modalState.openModal("edit-params");
       return;
     }
     if (modalState.modalOpen) {
       return;
     }
-    if (isPlainLetter && lower === "l") {
+    if (key.ctrl && lower === "l") {
       panelState.toggleLog();
       return;
     }
-    if (isPlainLetter && lower === "w") {
+    if (key.ctrl && lower === "w") {
       panelState.toggleWorkspace();
       return;
-    }
-    if (key.ctrl && input === "c") {
-      onCtrlC?.();
-      exit();
     }
   });
 
@@ -279,6 +309,15 @@ export const Layout: React.FC<LayoutProps> = ({
                       workspaceMaximized={panelState.workspaceMaximized}
                       onClose={() => modalState.closeModal()}
                       onShortcut={(input, key) => onHelpShortcut?.(input, key)}
+                    />
+                  ) : modalState.modalType === "edit-params" ? (
+                    <EditParamsModal
+                      isOpen={modalState.modalOpen}
+                      width={modalWidth}
+                      height={modalHeight}
+                      parameters={resolvedParameters}
+                      envFilePath={envFilePath}
+                      onClose={() => modalState.closeModal()}
                     />
                   ) : (
                     <ParametersModal

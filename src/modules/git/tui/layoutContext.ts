@@ -13,7 +13,7 @@ export type PanelState = {
   resetPanels: () => void;
 };
 
-export type ModalType = "parameters" | "branch" | "help";
+export type ModalType = "parameters" | "branch" | "help" | "edit-params";
 
 export type ModalState = {
   modalOpen: boolean;
@@ -30,10 +30,6 @@ export const useModalStateController = (): ModalState => {
   const toggleModal = (): void => {
     setModalOpen((current) => {
       if (current && modalType === "parameters") {
-        setModalType(undefined);
-        return false;
-      }
-      if (current && modalType === "help") {
         setModalType(undefined);
         return false;
       }

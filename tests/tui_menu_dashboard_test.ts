@@ -82,7 +82,7 @@ const normalized = normalizeOutput(output);
 assert.ok(normalized.includes("Sincronizar repositórios GitLab"), "Deve renderizar o cartão S");
 assert.ok(normalized.includes("Registrar servidor GitLab"), "Deve renderizar o cartão G");
 assert.ok(normalized.includes("Sincroniza projetos e repositórios."), "Deve renderizar a descrição selecionada");
-assert.ok(MENU_ORIENTATION_MESSAGE.includes("S/G"), "Mensagem de orientação deve citar atalhos");
+assert.ok(MENU_ORIENTATION_MESSAGE.includes("Ctrl+S"), "Mensagem de orientação deve citar atalhos");
 assert.ok(MENU_ORIENTATION_MESSAGE.includes("Esc"), "Mensagem de orientação deve citar Esc");
 
 unmount();

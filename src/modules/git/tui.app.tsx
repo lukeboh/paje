@@ -7,7 +7,7 @@ import { useLayoutMetrics, useModalStateController } from "./tui/layoutContext.j
 import { appendLogEntry } from "./tui/logStore.js";
 import type { GitLabTreeNode, RepoSyncStatus, RepoSyncState } from "./types.js";
 import type { TuiSession } from "./tuiSession.js";
-import { filterTreeBySelection } from "./treeBuilder.js";
+import { filterTreeBySelection, filterTreeByText } from "./treeBuilder.js";
 import { t } from "../../i18n/index.js";
 import { checkoutBranch, createBranchAndPush, listLocalBranches, resolveRepoStatus } from "./core/gitBranchService.js";
 
@@ -24,6 +24,8 @@ type FlatTreeItem = {
   id: string;
   depth: number;
   label: string;
+  serverName?: string;
+  serverColor?: string;
   status?: RepoSyncStatus;
   progress?: string;
   selected: boolean;
@@ -57,6 +59,25 @@ const STATUS_COLOR: Record<RepoSyncState, string> = {
   LOCAL: "red",
   UNCOMMITTED: "red",
   DIVERGED: "red",
+};
+
+const SERVER_COLOR_PALETTE = ["cyan", "magenta", "yellow", "blue", "green", "white", "red"] as const;
+
+const resolveServerColorMap = (nodes: GitLabTreeNode[]): Map<string, string> => {
+  const seen = new Set<string>();
+  const visit = (node: GitLabTreeNode): void => {
+    const name = node.project?.pajeServerName;
+    if (name) {
+      seen.add(name);
+    }
+    node.children?.forEach(visit);
+  };
+  nodes.forEach(visit);
+  const map = new Map<string, string>();
+  Array.from(seen).forEach((name, index) => {
+    map.set(name, SERVER_COLOR_PALETTE[index % SERVER_COLOR_PALETTE.length]);
+  });
+  return map;
 };
 
 const BRANCH_COLOR: Record<string, string> = {
@@ -104,20 +125,28 @@ const renderStatusLabel = (status: RepoSyncStatus): { branch: string; branchColo
   };
 };
 
-const flattenTree = (items: GitLabTreeNode[], progressMap: Map<string, ProgressSnapshot>, depth = 0): FlatTreeItem[] => {
+const flattenTree = (
+  items: GitLabTreeNode[],
+  progressMap: Map<string, ProgressSnapshot>,
+  depth = 0,
+  serverColorMap?: Map<string, string>
+): FlatTreeItem[] => {
   const output: FlatTreeItem[] = [];
   items.forEach((node) => {
+    const serverName = node.project?.pajeServerName;
     output.push({
       id: node.id,
       depth,
       label: node.label,
+      serverName,
+      serverColor: serverName ? serverColorMap?.get(serverName) : undefined,
       status: node.status,
       progress: progressMap.get(node.id)?.text,
       selected: node.selected ?? false,
       partiallySelected: node.partiallySelected ?? false,
     });
     if (node.children && node.children.length > 0) {
-      output.push(...flattenTree(node.children, progressMap, depth + 1));
+      output.push(...flattenTree(node.children, progressMap, depth + 1, serverColorMap));
     }
   });
   return output;
@@ -133,6 +162,7 @@ const TreeRowComponent: React.FC<{ item: FlatTreeItem; selected: boolean }> = (
   const progressLabel = item.progress ? item.progress : "";
   const textColor = selected ? "white" : undefined;
   const backgroundColor = selected ? "blue" : undefined;
+  const hasInfo = Boolean(item.serverName || statusLabel);
 
   return (
     <Box flexDirection="row" width="100%">
@@ -141,12 +171,22 @@ const TreeRowComponent: React.FC<{ item: FlatTreeItem; selected: boolean }> = (
         {indicator} {item.label}
       </Text>
       <Box flexGrow={1} justifyContent="flex-end">
-        {statusLabel && (
+        {hasInfo && (
           <Text color={textColor} backgroundColor={backgroundColor}>
             {" "}[
-            <Text color={statusLabel.branchColor ?? textColor}>{statusLabel.branch}</Text>
-            {", "}
-            <Text color={statusLabel.stateColor ?? textColor}>{statusLabel.state}</Text>]
+            {item.serverName && (
+              <Text color={item.serverColor ?? textColor}>{item.serverName}</Text>
+            )}
+            {item.serverName && statusLabel && (
+              <Text color={textColor}>{", "}</Text>
+            )}
+            {statusLabel && (
+              <>
+                <Text color={statusLabel.branchColor ?? textColor}>{statusLabel.branch}</Text>
+                <Text color={textColor}>{", "}</Text>
+                <Text color={statusLabel.stateColor ?? textColor}>{statusLabel.state}</Text>
+              </>
+            )}]
           </Text>
         )}
         {progressLabel && (
@@ -169,6 +209,8 @@ const TreeRow = React.memo(
     prev.item.selected === next.item.selected &&
     prev.item.partiallySelected === next.item.partiallySelected &&
     prev.item.progress === next.item.progress &&
+    prev.item.serverName === next.item.serverName &&
+    prev.item.serverColor === next.item.serverColor &&
     prev.item.status?.branch === next.item.status?.branch &&
     prev.item.status?.state === next.item.status?.state &&
     prev.item.status?.delta === next.item.status?.delta
@@ -225,15 +267,20 @@ const TreeListContainerComponent: React.FC<{
   selectedIndex: number;
   scrollOffset: number;
   onVisibleCountChange: (value: number) => void;
-}> = ({ items, selectedIndex, scrollOffset, onVisibleCountChange }) => {
+  reservedLines?: number;
+}> = ({ items, selectedIndex, scrollOffset, onVisibleCountChange, reservedLines = 0 }) => {
   const { workspaceHeight } = useLayoutMetrics();
-  const visibleCount = Math.max(1, workspaceHeight);
+  // reservedLines: rows taken by extra chrome above the list (e.g. the
+  // type-to-filter indicator) — without discounting them the list overflows
+  // the workspace frame.
+  const availableHeight = Math.max(1, workspaceHeight - reservedLines);
+  const visibleCount = availableHeight;
 
   useEffect(() => {
     onVisibleCountChange(visibleCount);
   }, [visibleCount, onVisibleCountChange]);
 
-  return <TreeList items={items} selectedIndex={selectedIndex} scrollOffset={scrollOffset} workspaceHeight={workspaceHeight} />;
+  return <TreeList items={items} selectedIndex={selectedIndex} scrollOffset={scrollOffset} workspaceHeight={availableHeight} />;
 };
 
 const TreeListContainer = React.memo(
@@ -242,7 +289,8 @@ const TreeListContainer = React.memo(
     prev.items === next.items &&
     prev.selectedIndex === next.selectedIndex &&
     prev.scrollOffset === next.scrollOffset &&
-    prev.onVisibleCountChange === next.onVisibleCountChange
+    prev.onVisibleCountChange === next.onVisibleCountChange &&
+    prev.reservedLines === next.reservedLines
 );
 
 export type TuiTreeProgress = {
@@ -260,6 +308,9 @@ export const renderRepositoryTree = async (
     footer?: string;
     header?: string;
     parameters?: CommandParameters[];
+    envFilePath?: string;
+    initialSelectedNodeId?: string;
+    renderOptions?: RenderOptions;
     onReady?: (handlers: {
       render: () => void;
       progress: TuiTreeProgress;
@@ -281,9 +332,23 @@ export const renderRepositoryTree = async (
       const [orientation, setOrientation] = useState(options?.footer ?? t("tui.tree.orientationDefault"));
       const [version, setVersion] = useState(0);
       const progressMapRef = useRef<Map<string, ProgressSnapshot>>(new Map());
-      const [selectedIndex, setSelectedIndex] = useState(0);
-      const [scrollOffset, setScrollOffset] = useState(0);
+      const initialPosRef = useRef<{ index: number; scroll: number } | null>(null);
+      if (initialPosRef.current === null) {
+        initialPosRef.current = { index: 0, scroll: 0 };
+        const initId = options?.initialSelectedNodeId;
+        if (initId) {
+          const colorMap = resolveServerColorMap(nodes);
+          const flatItems = flattenTree(nodes, new Map(), 0, colorMap);
+          const idx = flatItems.findIndex((item) => item.id === initId);
+          if (idx >= 0) {
+            initialPosRef.current = { index: idx, scroll: Math.max(0, idx - 5) };
+          }
+        }
+      }
+      const [selectedIndex, setSelectedIndex] = useState(initialPosRef.current.index);
+      const [scrollOffset, setScrollOffset] = useState(initialPosRef.current.scroll);
       const [showOnlySelected, setShowOnlySelected] = useState(false);
+      const [textFilter, setTextFilter] = useState("");
       const [visibleCount, setVisibleCount] = useState(1);
       const [branchModalBranches, setBranchModalBranches] = useState<string[]>([]);
       const [branchModalCurrent, setBranchModalCurrent] = useState<string | undefined>(undefined);
@@ -293,10 +358,19 @@ export const renderRepositoryTree = async (
       const resolvedRef = useRef(false);
       const syncInProgressRef = useRef(false);
 
+      const serverColorMap = useMemo(() => resolveServerColorMap(nodes), [nodes]);
+
       const items = useMemo(() => {
-        const visibleNodes = showOnlySelected ? filterTreeBySelection(nodes) : nodes;
-        return flattenTree(visibleNodes, progressMapRef.current);
-      }, [nodes, version, showOnlySelected]);
+        const selectionFiltered = showOnlySelected ? filterTreeBySelection(nodes) : nodes;
+        const visibleNodes = textFilter ? filterTreeByText(selectionFiltered, textFilter) : selectionFiltered;
+        return flattenTree(visibleNodes, progressMapRef.current, 0, serverColorMap);
+      }, [nodes, version, showOnlySelected, textFilter, serverColorMap]);
+
+      const updateTextFilter = useCallback((next: string) => {
+        setTextFilter(next);
+        setSelectedIndex(0);
+        setScrollOffset(0);
+      }, []);
 
       useEffect(() => {
         if (items.length === 0) {
@@ -420,55 +494,80 @@ export const renderRepositoryTree = async (
         (input: string, key: Key) => {
           const navigationKey = key as Key & { home?: boolean; end?: boolean };
           const lower = input.toLowerCase();
-          const isCtrlS = key.ctrl && (lower === "s" || input === "\u0013");
-          if (lower === "p") {
-            return;
-          }
-          if (lower === "b") {
+          if (key.ctrl && lower === "b") {
             openBranchModal();
             return;
           }
-          if (isCtrlS) {
+          if (key.return) {
             commitResolve(true, "single");
+            return;
+          }
+          if (key.ctrl && lower === "s") {
+            commitResolve(true, "all");
             return;
           }
           if (key.upArrow) {
             const nextIndex = Math.max(0, selectedIndex - 1);
             setSelectedIndex(nextIndex);
             ensureVisible(nextIndex);
+            return;
           }
           if (key.downArrow) {
             const nextIndex = Math.min(items.length - 1, selectedIndex + 1);
             setSelectedIndex(nextIndex);
             ensureVisible(nextIndex);
+            return;
           }
           if (key.pageUp) {
             const nextIndex = Math.max(0, selectedIndex - visibleCount);
             setSelectedIndex(nextIndex);
             ensureVisible(nextIndex);
+            return;
           }
           if (key.pageDown) {
             const nextIndex = Math.min(items.length - 1, selectedIndex + visibleCount);
             setSelectedIndex(nextIndex);
             ensureVisible(nextIndex);
+            return;
           }
           if (navigationKey.home) {
             setSelectedIndex(0);
             setScrollOffset(0);
+            return;
           }
           if (navigationKey.end) {
             const lastIndex = Math.max(0, items.length - 1);
             setSelectedIndex(lastIndex);
             setScrollOffset(Math.max(0, lastIndex - visibleCount + 1));
+            return;
           }
           if (input === " ") {
             toggleSelected();
+            return;
           }
-          if (lower === "c") {
+          // Ctrl+F: terminals send the same byte for Ctrl+M and Enter (0x0d),
+          // so Ctrl+M can never be detected as a distinct shortcut.
+          if (key.ctrl && lower === "f") {
             toggleSelectionFilter();
+            return;
           }
-          if (lower === "s") {
-            commitResolve(true, "all");
+          // Type-to-filter: printable characters narrow the tree as you type.
+          // Esc clears the filter (the Layout skips Esc while it is active);
+          // backspace erases the last character.
+          if (key.escape) {
+            if (textFilter) {
+              updateTextFilter("");
+            }
+            return;
+          }
+          if (key.backspace || key.delete) {
+            if (textFilter) {
+              updateTextFilter(textFilter.slice(0, -1));
+            }
+            return;
+          }
+          if (input && !key.ctrl && !key.meta && !key.tab) {
+            updateTextFilter(textFilter + input);
           }
         },
         { isActive: !modalState.modalOpen }
@@ -514,20 +613,22 @@ export const renderRepositoryTree = async (
           title={headerTitle}
           orientation={orientation}
           parameters={parametersSnapshot}
+          envFilePath={options?.envFilePath}
           modalState={modalState}
+          escapeEnabled={modalState.modalOpen || textFilter.length === 0}
+          helpOnBackspace={textFilter.length === 0}
           helpContext="tree"
           onHelpShortcut={(input, key) => {
             const lower = input.toLowerCase();
-            const isCtrlS = key.ctrl && (lower === "s" || input === "\u0013");
-            if (lower === "b") {
+            if (key.ctrl && lower === "b") {
               openBranchModal();
               return;
             }
-            if (lower === "c") {
+            if (key.ctrl && lower === "f") {
               toggleSelectionFilter();
               return;
             }
-            if (isCtrlS) {
+            if (key.return) {
               commitResolve(true, "single");
               return;
             }
@@ -563,7 +664,7 @@ export const renderRepositoryTree = async (
             if (input === " ") {
               toggleSelected();
             }
-            if (lower === "s") {
+            if (key.ctrl && lower === "s") {
               commitResolve(true, "all");
             }
           }}
@@ -611,17 +712,25 @@ export const renderRepositoryTree = async (
             commitResolve(false);
           }}
         >
-          <TreeListContainer
-            items={items}
-            selectedIndex={selectedIndex}
-            scrollOffset={scrollOffset}
-            onVisibleCountChange={setVisibleCount}
-          />
+          <Box flexDirection="column" width="100%">
+            {textFilter ? (
+              <Text color="yellow" wrap="truncate-end">
+                {t("tui.tree.textFilterIndicator", { query: textFilter, count: String(items.length) })}
+              </Text>
+            ) : null}
+            <TreeListContainer
+              items={items}
+              selectedIndex={selectedIndex}
+              scrollOffset={scrollOffset}
+              onVisibleCountChange={setVisibleCount}
+              reservedLines={textFilter ? 1 : 0}
+            />
+          </Box>
         </Layout>
       );
     };
 
-    const { unmount } = render(<App />);
+    const { unmount } = render(<App />, options?.renderOptions);
     unmountRef.current = unmount;
   });
 };
@@ -650,6 +759,7 @@ export const renderLoadingScreen = (options: LoadingScreenOptions): LoadingScree
         orientation={options.orientation ?? t("tui.loading.orientation")}
         parameters={options.parameters ?? []}
         modalState={modalState}
+        helpOnBackspace
         helpContext="loading"
         onHelpShortcut={() => undefined}
       >

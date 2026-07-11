@@ -41,11 +41,27 @@ const splitShortcutKey = (value: string): string[] =>
     .filter(Boolean);
 
 const resolveShortcutKey = (input: string, key: Key): string | null => {
-  if (key.ctrl && input.toLowerCase() === "c") {
-    return "Ctrl+C";
+  if (key.ctrl) {
+    const lower = input.toLowerCase();
+    const ctrlMap: Record<string, string> = {
+      c: "Ctrl+C",
+      s: "Ctrl+S",
+      g: "Ctrl+G",
+      h: "Ctrl+H",
+      p: "Ctrl+P",
+      e: "Ctrl+E",
+      f: "Ctrl+F",
+      l: "Ctrl+L",
+      w: "Ctrl+W",
+      b: "Ctrl+B",
+    };
+    if (ctrlMap[lower]) {
+      return ctrlMap[lower];
+    }
   }
-  if (key.ctrl && input.toLowerCase() === "s") {
-    return "Ctrl+S";
+  // Terminals send byte 0x08 for Ctrl+H, which Ink reports as key.backspace.
+  if (key.backspace) {
+    return "Ctrl+H";
   }
   if (key.return) {
     return "Enter";
@@ -105,17 +121,18 @@ const buildGroups = (options: { logMaximized: boolean; workspaceMaximized: boole
       id: "global",
       title: t("helpModal.groups.global"),
       shortcuts: [
-        { id: "help", key: "H", description: t("helpModal.shortcuts.help"), contexts: ["menu", "tree", "loading"] },
-        { id: "parameters", key: "P", description: t("helpModal.shortcuts.parameters"), contexts: ["menu", "tree", "loading"] },
+        { id: "help", key: "Ctrl+H", description: t("helpModal.shortcuts.help"), contexts: ["menu", "tree", "loading"] },
+        { id: "parameters", key: "Ctrl+P", description: t("helpModal.shortcuts.parameters"), contexts: ["menu", "tree", "loading"] },
+        { id: "edit-params", key: "Ctrl+E", description: t("helpModal.shortcuts.editParams"), contexts: ["tree"] },
         {
           id: "workspace",
-          key: "W",
+          key: "Ctrl+W",
           description: t("helpModal.shortcuts.workspace", { state: workspaceState }),
           contexts: ["menu", "tree", "loading"],
         },
         {
           id: "log",
-          key: "L",
+          key: "Ctrl+L",
           description: t("helpModal.shortcuts.log", { state: logState }),
           contexts: ["menu", "tree", "loading"],
         },
@@ -127,10 +144,10 @@ const buildGroups = (options: { logMaximized: boolean; workspaceMaximized: boole
       id: "menu",
       title: t("helpModal.groups.menu"),
       shortcuts: [
-        { id: "menu-select-git-sync", key: "S", description: t("helpModal.shortcuts.menu.gitSync"), contexts: ["menu"] },
+        { id: "menu-select-git-sync", key: "Ctrl+S", description: t("helpModal.shortcuts.menu.gitSync"), contexts: ["menu"] },
         {
           id: "menu-select-git-server",
-          key: "G",
+          key: "Ctrl+G",
           description: t("helpModal.shortcuts.menu.gitServerStore"),
           contexts: ["menu"],
         },
@@ -150,10 +167,10 @@ const buildGroups = (options: { logMaximized: boolean; workspaceMaximized: boole
         { id: "tree-nav-page", key: "PgUp/PgDn", description: t("helpModal.shortcuts.tree.navPage"), contexts: ["tree"] },
         { id: "tree-nav-edge", key: "Home/End", description: t("helpModal.shortcuts.tree.navEdge"), contexts: ["tree"] },
         { id: "tree-toggle", key: "Espaço", description: t("helpModal.shortcuts.tree.toggle"), contexts: ["tree"] },
-        { id: "tree-confirm", key: "S", description: t("helpModal.shortcuts.tree.confirm"), contexts: ["tree"] },
-        { id: "tree-confirm-single", key: "Ctrl+S", description: t("helpModal.shortcuts.tree.confirmSingle"), contexts: ["tree"] },
-        { id: "tree-filter", key: "C", description: t("helpModal.shortcuts.tree.filter"), contexts: ["tree"] },
-        { id: "tree-branch", key: "B", description: t("helpModal.shortcuts.tree.branch"), contexts: ["tree"] },
+        { id: "tree-confirm", key: "Ctrl+S", description: t("helpModal.shortcuts.tree.confirm"), contexts: ["tree"] },
+        { id: "tree-confirm-single", key: "Enter", description: t("helpModal.shortcuts.tree.confirmSingle"), contexts: ["tree"] },
+        { id: "tree-filter", key: "Ctrl+F", description: t("helpModal.shortcuts.tree.filter"), contexts: ["tree"] },
+        { id: "tree-branch", key: "Ctrl+B", description: t("helpModal.shortcuts.tree.branch"), contexts: ["tree"] },
       ],
     },
   ];
@@ -192,7 +209,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({
 }) => {
   const backgroundColor = "#2C2C2C";
   const headerHeight = 2;
-  const contentHeight = Math.max(1, height - headerHeight - 2);
+  const contentHeight = Math.max(1, height - headerHeight - 2 - 1);
   const groups = useMemo(() => buildGroups({ logMaximized, workspaceMaximized }), [logMaximized, workspaceMaximized]);
   const lines = useMemo(() => buildLines(groups, context), [groups, context]);
 

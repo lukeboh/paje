@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import {
-  filterSyncTargetsBySelection,
   mergeServer,
   normalizeBaseUrl,
   promptBasicAuthPassword,
@@ -12,7 +11,6 @@ import {
   resolveEnvStringArray,
   resolveHomePath,
 } from "../src/modules/git/gitCommand.js";
-import { GitLabProject, GitRepositoryTarget, GitLabTreeNode } from "../src/modules/git/types.js";
 
 const envConfig = {
   str: "valor",
@@ -60,42 +58,6 @@ const sessionMock = {
 } as any;
 const serverResult = await promptGitServer(sessionMock, { name: "X" });
 assert.strictEqual(serverResult.name, "GitLab");
-
-const selectionProjects: GitLabProject[] = [
-  {
-    id: 101,
-    name: "Repo A",
-    path_with_namespace: "grupo/repo-a",
-    ssh_url_to_repo: "git@gitlab.com:grupo/repo-a.git",
-    http_url_to_repo: "https://gitlab.com/grupo/repo-a.git",
-  },
-  {
-    id: 102,
-    name: "Repo B",
-    path_with_namespace: "outro/repo-b",
-    ssh_url_to_repo: "git@gitlab.com:outro/repo-b.git",
-    http_url_to_repo: "https://gitlab.com/outro/repo-b.git",
-  },
-];
-const selectionNodes: GitLabTreeNode[] = selectionProjects.map((project) => ({
-  id: `project-${project.id}`,
-  label: project.name,
-  type: "project",
-  project,
-}));
-const syncTargets: GitRepositoryTarget[] = selectionProjects.map((project) => ({
-  id: project.id,
-  name: project.name,
-  pathWithNamespace: project.path_with_namespace,
-  sshUrl: project.ssh_url_to_repo,
-  localPath: "",
-}));
-const filteredSingle = filterSyncTargetsBySelection(syncTargets, selectionNodes, "single");
-assert.strictEqual(filteredSingle.length, 2, "Deve filtrar targets pelo escopo em single");
-const filteredAll = filterSyncTargetsBySelection(syncTargets, selectionNodes, "all");
-assert.strictEqual(filteredAll.length, 2, "Não deve filtrar targets quando modo=all");
-const filteredUndefined = filterSyncTargetsBySelection(syncTargets, selectionNodes, undefined);
-assert.strictEqual(filteredUndefined.length, 2, "Não deve filtrar targets sem modo explícito");
 
 const password = await promptBasicAuthPassword("usuario", undefined, "segredo");
 assert.strictEqual(password, "segredo");

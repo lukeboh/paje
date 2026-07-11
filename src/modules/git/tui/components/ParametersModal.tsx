@@ -92,7 +92,7 @@ export const ParametersModal: React.FC<ParametersModalProps> = ({ isOpen, width,
   const [scrollOffset, setScrollOffset] = useState(0);
   const lines = useMemo(() => buildLines(parameters), [parameters]);
   const headerHeight = 2;
-  const contentHeight = Math.max(1, height - headerHeight - 2);
+  const contentHeight = Math.max(1, height - headerHeight - 2 - 1);
   const maxOffset = Math.max(0, lines.length - contentHeight);
 
   useEffect(() => {

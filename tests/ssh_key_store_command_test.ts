@@ -171,7 +171,8 @@ console.log = (...args: unknown[]) => {
   logMessages.push(args.map((item) => String(item)).join(" ").trim());
 };
 process.env.PAJE_SKIP_SSH_STORE = "0";
-await program.parseAsync([
+const originalArgv = process.argv;
+const parseArgs = [
   "node",
   "cli.ts",
   "git-server-store",
@@ -181,6 +182,7 @@ await program.parseAsync([
   "TSE-GIT",
   "--base-url",
   "https://git.tse.jus.br",
+  "--use-basic-auth",
   "--username",
   "usuario",
   "--key-label",
@@ -191,7 +193,10 @@ await program.parseAsync([
   "1",
   "--retry-delay-ms",
   "0",
-]);
+];
+process.argv = parseArgs;
+await program.parseAsync(parseArgs);
+process.argv = originalArgv;
 process.env.PAJE_SKIP_SSH_STORE = "1";
 
 const responseBody = await (await mockFetch("https://git.tse.jus.br/-/user_settings/ssh_keys")).text();

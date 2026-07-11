@@ -21,6 +21,8 @@ export type GitLabProject = {
   pajeOriginalPathWithNamespace?: string;
   pajeServerName?: string;
   pajeHttpUrl?: string;
+  pajeBaseDir?: string;
+  pajeUserEmail?: string;
 };
 
 export type RepoSyncState =
@@ -79,4 +81,15 @@ export type GitLabServerConfig = {
   name: string;
   baseUrl: string;
   token: string;
+};
+
+export type GitTreeCacheEntry = {
+  version: 1;
+  configHash: string;
+  servers: Array<{
+    serverName: string;
+    groups: GitLabGroup[];
+    projects: GitLabProject[];
+  }>;
+  statusMap: Record<number, RepoSyncStatus>;
 };

@@ -14,7 +14,7 @@ const LEVEL_ORDER: Record<LogLevel, number> = {
 class LogStore {
   private entries: LogEntry[] = [];
   private listeners = new Set<LogListener>();
-  private minLevel: LogLevel = "info";
+  private minLevel: LogLevel = "warn";
 
   append(message: string, level: LogLevel = "info"): void {
     this.appendEntry(createLogEntry(message, level));

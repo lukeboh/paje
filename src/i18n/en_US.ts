@@ -1,4 +1,6 @@
-const enUS = {
+import type { PtBrTranslations } from "./pt_BR.js";
+
+const enUS: PtBrTranslations = {
   app: {
     name: "PAJE",
     description: "PAJE - Engineer Journey Support Platform",
@@ -10,7 +12,7 @@ const enUS = {
     descriptionLabel: "Description",
     commandHint: "Command: paje {{command}}",
     orientation:
-      "S/G to select | Arrows to navigate | Enter to confirm | Esc to exit | W to expand workspace | L to expand log | H for help",
+      "Ctrl+S/Ctrl+G to select | Arrows to navigate | Enter to confirm | Esc to exit | Ctrl+W to expand workspace | Ctrl+L to expand log | Ctrl+H for help",
     log: {
       selectFeature: "[DEBUG] Select a feature",
       selected: "[DEBUG] Selected: {{label}}",
@@ -32,7 +34,7 @@ const enUS = {
   },
   parametersModal: {
     title: "Loaded parameters",
-    hint: "P/Esc to close | ↑/↓ PgUp/PgDn to scroll",
+    hint: "Ctrl+P/Esc to close | ↑/↓ PgUp/PgDn to scroll",
     empty: "No parameters loaded for this execution.",
     emptyGroup: "(No parameters declared)",
     source: {
@@ -42,6 +44,20 @@ const enUS = {
       cli: "CLI",
       prompt: "PROMPT",
     },
+  },
+  editParamsModal: {
+    title: "Edit env.yaml",
+    hint: "↑/↓ navigate | Enter edit | Ctrl+S save | Esc close",
+    hintEditing: "Type value | Enter confirm | Esc cancel",
+    saved: "Parameters saved to {{path}}",
+    saveError: "Error saving: {{message}}",
+    noChanges: "No pending changes.",
+    pendingCount: "{{count}} pending change(s)",
+    cliLocked: "[CLI - not editable]",
+    resolvedLocked: "[computed]",
+    noParams: "No parameters available for editing.",
+    pendingBadge: "pending",
+    emptyValue: "(empty)",
   },
   helpModal: {
     title: "System help",
@@ -58,6 +74,7 @@ const enUS = {
     shortcuts: {
       help: "open help",
       parameters: "open loaded parameters",
+      editParams: "edit env.yaml",
       workspace: "toggle workspace ({{state}})",
       log: "toggle log panel ({{state}})",
       escape: "back/close modal",
@@ -88,16 +105,17 @@ const enUS = {
     tree: {
       empty: "(No repositories found)",
       orientationDefault:
-        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | S to sync all | Ctrl+S to sync highlighted scope | Esc to cancel | C to filter selected | B to branch | W to expand workspace | L to expand log | H for help",
+        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | Ctrl+S to sync all | Enter to sync highlighted scope | Esc to cancel | Type to filter by text | Ctrl+F to filter selected | Ctrl+B to branch | Ctrl+W to expand workspace | Ctrl+L to expand log | Ctrl+H for help",
       orientationConfirm:
-        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | S to confirm selection (all) | Ctrl+S to confirm selection (scope) | Esc to cancel | C to filter selected | B to branch | W to expand workspace | L to expand log | H for help",
+        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | Ctrl+S to confirm selection (all) | Enter to confirm selection (scope) | Esc to cancel | Type to filter by text | Ctrl+F to filter selected | Ctrl+B to branch | Ctrl+W to expand workspace | Ctrl+L to expand log | Ctrl+H for help",
+      textFilterIndicator: 'Filter: "{{query}}" — {{count}} item(s) | Esc clears | Backspace erases',
       filterAll: "[DEBUG] Showing all repositories.",
       filterSelected: "[DEBUG] Showing only selected repositories.",
       singleInvalid: "Select a valid repository to sync a single item.",
     },
     loading: {
       repositories: "Loading repositories...",
-      orientation: "Please wait while we query the servers | Esc to cancel | H for help",
+      orientation: "Please wait while we query the servers | Esc to cancel | Ctrl+H for help",
     },
   },
   branchModal: {
@@ -178,7 +196,6 @@ const enUS = {
   },
   cli: {
     log: {
-      preselection: "Preselection: {{displayPath}} → {{targetPath}} ({{state}})",
       tokenValid: "Valid token for {{baseUrl}}.",
       tokenDetails: "Token details: active={{active}}, expires={{expiresAt}}, scopes={{scopes}}",
       tokenReuse: "Reusing existing token.",
@@ -190,6 +207,8 @@ const enUS = {
       tokenNameMissing: "Token name not provided.",
       skipRemoteToken: "Skipping remote token creation/validation (PAJE_SKIP_SSH_STORE=1).",
       skipRemoteStore: "Skipping remote SSH key registration (PAJE_SKIP_SSH_STORE=1).",
+      notInformed: "not informed",
+      tuiUnavailable: "TUI session unavailable.",
     },
     command: {
       gitSync: {
@@ -219,13 +238,23 @@ const enUS = {
         },
       },
       gitServerStore: {
-        description: "Generate and store SSH key and token in GitLab without syncing repositories",
+        description: "Register a GitLab or GitHub server and store credentials",
         options: {
           verbose: "Show detailed logs",
           locale: "Interface language (pt_BR/en_US)",
-          serverName: "GitLab server name",
-          baseUrl: "GitLab base URL",
+          serverName: "Server name",
+          baseUrl: "Server base URL (e.g. https://github.com or https://gitlab.com)",
+          serverType: "Server type: gitlab or github (auto-detected from URL)",
+          token: "Personal access token (PAT) for GitHub",
           username: "GitLab username",
+          useBasicAuth: "Use HTTPS authentication with token (no SSH) — GitLab only",
+          userEmail: "Git email to configure in repositories",
+          password: "GitLab password for basic authentication",
+          baseDir: "Base directory for repository cloning",
+          noPublicRepos: "Hide public repositories",
+          noArchivedRepos: "Hide archived repositories",
+          filter: "Ant/Glob filter for path_with_namespace",
+          syncRepos: "Repos/branches to sync",
           keyLabel: "SSH key name to be generated",
           passphrase: "SSH key passphrase",
           publicKeyPath: "Path to existing public key (.pub)",
@@ -240,6 +269,7 @@ const enUS = {
       },
       sshKeyStore: {
         description: "(Deprecated) Use git-server-store",
+        renamed: "This command was renamed to git-server-store. Use: paje git-server-store",
       },
     },
     prompt: {
@@ -275,12 +305,16 @@ const enUS = {
         passphrasePrompt: "Passphrase (optional)",
         passphraseDesc: "Protects the private key with a password. It can be empty.",
         keyExists: "A key named \"{{label}}\" already exists. Choose another name.",
+        noKeyInSsh: "No SSH key configured in ~/.ssh. Configure a key to continue.",
       },
       trust: {
         title: "SSH Trust",
         confirmKnownHost: "Host {{server}} is not in ~/.ssh/known_hosts. Add via ssh-keyscan?",
         cannotAddHost:
           "Unable to add {{server}} to ~/.ssh/known_hosts via ssh-keyscan. Host unreachable: {{server}}. Check connectivity/port 22 and permissions.",
+        sshPort22Guidance:
+          "If port 22 is blocked, use --use-basic-auth with a Personal Access Token (PAT).\n\nGitLab:\n  1. GitLab → Settings → Access Tokens → Add new token\n  2. Set a name (e.g. paje) and an optional expiry date\n  3. Required scopes: read_repository, read_api, self_rotate\n  4. Click \"Create personal access token\" and copy the value\n  5. Run: paje git-server-store --use-basic-auth\n\nGitHub (coming soon):\n  1. GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)\n  2. Generate new token (classic)\n  3. Set a name and an optional expiry date\n  4. Required scopes: repo, read:user\n  5. Click \"Generate token\" and copy the value",
+        port22Blocked: "Port 22 is unreachable for {{server}}. The SSH flow is not available.",
       },
       persistence: {
         missing: "Unable to write {{paths}}. Check ~/.ssh permissions (recommended 700).",
@@ -291,6 +325,18 @@ const enUS = {
         noAuthConfigured: "No authentication configured for {{server}}. Configure a token or basic authentication to continue.",
         userMissingBasicAuth: "Basic auth username missing for {{server}}. Register the server again with a username.",
         noValidServer: "No server with valid authentication found.",
+      },
+      verbose: {
+        title: "SSH - Details",
+      },
+      github: {
+        title: "GitHub",
+        tokenLabel: "Personal Access Token (PAT)",
+        tokenDesc: "Create at: github.com/settings/tokens | Recommended scopes: repo, read:org",
+        tokenValid: "Valid token. GitHub user: {{login}}",
+        tokenInvalid: "Invalid token or insufficient permissions.",
+        tokenMissing: "Token not provided.",
+        unknownType: "Unknown server type: \"{{type}}\". Use gitlab or github. Detecting from URL...",
       },
     },
     summary: {
@@ -325,6 +371,9 @@ const enUS = {
     errors: {
       unknown: "Unknown error.",
       inline: "Error",
+      gitlab: {
+        registerKeyFail: "Failed to register SSH key in GitLab: {{message}}",
+      },
     },
     parallel: {
       errorExecute: "Failed to execute command: {{message}}",
@@ -345,8 +394,8 @@ const enUS = {
       listDuration: "Listing completed in {{seconds}}s.",
       noneSelected: "No repositories selected.",
       noSyncMatches: "No repositories match the filters.",
-      scopeSingle: "Sync scope: highlighted row/group (Ctrl+S).",
-      scopeAll: "Sync scope: all rows (S).",
+      usernameMissingBasicAuth: "Username not provided for basic authentication on {{server}}.",
+      singleModeSyncReposIgnored: "Single-selection mode active: --sync-repos parameter will be ignored.",
       defaultServerLabel: "GitLab",
       serverSingle: "server",
       serverPlural: "servers",
@@ -399,6 +448,11 @@ const enUS = {
       objectsCopiedSingle: "{{received}} objects",
       speed: "{{speed}}",
       removeConfirm: "Are you sure you want to remove local directory {{repo}}? Local changes detected!",
+    },
+    cache: {
+      hit: "Tree loaded from local cache. Updating status in background...",
+      statusRefreshed: "Repository status updated.",
+      saved: "Tree cache saved.",
     },
   },
 };

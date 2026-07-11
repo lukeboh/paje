@@ -10,13 +10,13 @@ const buildMenuItems = (): MenuItem[] => [
   {
     label: t("menu.items.gitSync.label"),
     command: "git-sync",
-    shortcut: "S",
+    shortcut: "Ctrl+S",
     description: t("menu.items.gitSync.description"),
   },
   {
     label: t("menu.items.gitServerStore.label"),
     command: "git-server-store",
-    shortcut: "G",
+    shortcut: "Ctrl+G",
     description: t("menu.items.gitServerStore.description"),
   },
 ];
@@ -38,7 +38,9 @@ const resolveLocaleArg = (args: string[]): string | undefined => {
   return candidate.trim();
 };
 
-const hasCommandArg = (args: string[]): boolean => args.some((arg) => !arg.startsWith("-"));
+const HELP_FLAGS = new Set(["--help", "-h", "--version", "-V"]);
+const hasCommandArg = (args: string[]): boolean =>
+  args.some((arg) => HELP_FLAGS.has(arg) || !arg.startsWith("-"));
 
 const runMenu = async (locale?: string, suppressInitialEscapeMs?: number, appendLog?: (message: string) => void) => {
   const parameters = buildInitialParameters(locale);

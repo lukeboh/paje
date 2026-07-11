@@ -10,7 +10,7 @@ const ptBR = {
     descriptionLabel: "Descrição",
     commandHint: "Comando: paje {{command}}",
     orientation:
-      "S/G para selecionar | Setas para navegar | Enter para confirmar | Esc para sair | W para ampliar área de trabalho | L para ampliar log | H para ajuda",
+      "Ctrl+S/Ctrl+G para selecionar | Setas para navegar | Enter para confirmar | Esc para sair | Ctrl+W para ampliar área de trabalho | Ctrl+L para ampliar log | Ctrl+H para ajuda",
     log: {
       selectFeature: "[DEBUG] Selecione uma funcionalidade",
       selected: "[DEBUG] Selecionado: {{label}}",
@@ -32,7 +32,7 @@ const ptBR = {
   },
   parametersModal: {
     title: "Parâmetros carregados",
-    hint: "P/Esc para fechar | ↑/↓ PgUp/PgDn para rolar",
+    hint: "Ctrl+P/Esc para fechar | ↑/↓ PgUp/PgDn para rolar",
     empty: "Nenhum parâmetro carregado nesta execução.",
     emptyGroup: "(Sem parâmetros declarados)",
     source: {
@@ -42,6 +42,20 @@ const ptBR = {
       cli: "CLI",
       prompt: "PROMPT",
     },
+  },
+  editParamsModal: {
+    title: "Editar env.yaml",
+    hint: "↑/↓ navegar | Enter editar | Ctrl+S salvar | Esc fechar",
+    hintEditing: "Digite o valor | Enter confirmar | Esc cancelar",
+    saved: "Parâmetros salvos em {{path}}",
+    saveError: "Erro ao salvar: {{message}}",
+    noChanges: "Nenhuma alteração pendente.",
+    pendingCount: "{{count}} alteração(ões) pendente(s)",
+    cliLocked: "[CLI - não editável]",
+    resolvedLocked: "[calculado]",
+    noParams: "Nenhum parâmetro disponível para edição.",
+    pendingBadge: "pendente",
+    emptyValue: "(vazio)",
   },
   helpModal: {
     title: "Ajuda do sistema",
@@ -58,6 +72,7 @@ const ptBR = {
     shortcuts: {
       help: "abrir ajuda",
       parameters: "abrir parâmetros carregados",
+      editParams: "editar env.yaml",
       workspace: "alternar área de trabalho ({{state}})",
       log: "alternar painel de log ({{state}})",
       escape: "voltar/fechar modal",
@@ -88,16 +103,17 @@ const ptBR = {
     tree: {
       empty: "(Nenhum repositório encontrado)",
       orientationDefault:
-        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | S para sincronizar tudo | Ctrl+S para sincronizar apenas o escopo destacado | Esc para cancelar | C para filtrar selecionados | B para branch | W para ampliar área de trabalho | L para ampliar log | H para ajuda",
+        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | Ctrl+S para sincronizar tudo | Enter para sincronizar apenas o escopo destacado | Esc para cancelar | Digite para filtrar por texto | Ctrl+F para filtrar selecionados | Ctrl+B para branch | Ctrl+W para ampliar área de trabalho | Ctrl+L para ampliar log | Ctrl+H para ajuda",
       orientationConfirm:
-        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | S para confirmar seleção (tudo) | Ctrl+S para confirmar seleção (escopo) | Esc para cancelar | C para filtrar selecionados | B para branch | W para ampliar área de trabalho | L para ampliar log | H para ajuda",
+        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | Ctrl+S para confirmar seleção (tudo) | Enter para confirmar seleção (escopo) | Esc para cancelar | Digite para filtrar por texto | Ctrl+F para filtrar selecionados | Ctrl+B para branch | Ctrl+W para ampliar área de trabalho | Ctrl+L para ampliar log | Ctrl+H para ajuda",
+      textFilterIndicator: 'Filtro: "{{query}}" — {{count}} item(ns) | Esc limpa | Backspace apaga',
       filterAll: "[DEBUG] Exibindo todos os repositórios.",
       filterSelected: "[DEBUG] Exibindo apenas repositórios marcados.",
       singleInvalid: "Selecione um repositório válido para sincronizar apenas um item.",
     },
     loading: {
       repositories: "Carregando repositórios...",
-      orientation: "Aguarde enquanto consultamos os servidores | Esc para cancelar | H para ajuda",
+      orientation: "Aguarde enquanto consultamos os servidores | Esc para cancelar | Ctrl+H para ajuda",
     },
   },
   branchModal: {
@@ -178,7 +194,6 @@ const ptBR = {
   },
   cli: {
     log: {
-      preselection: "Pré-seleção: {{displayPath}} → {{targetPath}} ({{state}})",
       tokenValid: "Token válido para {{baseUrl}}.",
       tokenDetails: "Detalhes do token: ativo={{active}}, expira={{expiresAt}}, escopos={{scopes}}",
       tokenReuse: "Reutilizando token existente.",
@@ -190,6 +205,8 @@ const ptBR = {
       tokenNameMissing: "Nome do token não informado.",
       skipRemoteToken: "Pulo de criação/validação de token remoto (PAJE_SKIP_SSH_STORE=1).",
       skipRemoteStore: "Pulo de registro remoto de chave SSH (PAJE_SKIP_SSH_STORE=1).",
+      notInformed: "não informado",
+      tuiUnavailable: "Sessão TUI indisponível.",
     },
     command: {
       gitSync: {
@@ -219,13 +236,23 @@ const ptBR = {
         },
       },
       gitServerStore: {
-        description: "Gerar e armazenar chave SSH e token no GitLab sem sincronizar repositórios",
+        description: "Registrar servidor GitLab ou GitHub e armazenar credenciais",
         options: {
           verbose: "Exibe detalhes das operações executadas",
           locale: "Idioma da interface (pt_BR/en_US)",
-          serverName: "Nome do servidor GitLab",
-          baseUrl: "URL base do GitLab",
+          serverName: "Nome do servidor",
+          baseUrl: "URL base do servidor (ex: https://github.com ou https://gitlab.com)",
+          serverType: "Tipo de servidor: gitlab ou github (detectado automaticamente pela URL)",
+          token: "Token de acesso pessoal (PAT) para GitHub",
           username: "Usuário do GitLab",
+          useBasicAuth: "Usar autenticação HTTPS com token (sem SSH) — apenas GitLab",
+          userEmail: "Email do Git para configurar nos repositórios",
+          password: "Senha do GitLab para autenticação básica",
+          baseDir: "Diretório base para clonagem dos repositórios",
+          noPublicRepos: "Ocultar repositórios públicos",
+          noArchivedRepos: "Ocultar repositórios arquivados",
+          filter: "Filtro Ant/Glob para path_with_namespace",
+          syncRepos: "Repos/branchs para sincronizar",
           keyLabel: "Nome da chave SSH a ser gerada",
           passphrase: "Passphrase da chave SSH",
           publicKeyPath: "Caminho para chave pública existente (.pub)",
@@ -240,6 +267,7 @@ const ptBR = {
       },
       sshKeyStore: {
         description: "(Obsoleto) Use git-server-store",
+        renamed: "Este comando foi renomeado para git-server-store. Use: paje git-server-store",
       },
     },
     prompt: {
@@ -275,12 +303,16 @@ const ptBR = {
         passphrasePrompt: "Passphrase (opcional)",
         passphraseDesc: "Protege a chave privada com uma senha. Pode ficar em branco.",
         keyExists: "Já existe uma chave com o nome \"{{label}}\". Escolha outro nome.",
+        noKeyInSsh: "Nenhuma chave SSH configurada em ~/.ssh. Configure uma chave para continuar.",
       },
       trust: {
         title: "Confiança SSH",
         confirmKnownHost: "Host {{server}} não está em ~/.ssh/known_hosts. Adicionar via ssh-keyscan?",
         cannotAddHost:
           "Não foi possível adicionar {{server}} ao ~/.ssh/known_hosts via ssh-keyscan. Host inacessível: {{server}}. Verifique conectividade/porte 22 e permissões.",
+        sshPort22Guidance:
+          "Se a porta 22 estiver bloqueada, use --use-basic-auth com um Personal Access Token (PAT).\n\nGitLab:\n  1. GitLab → Settings → Access Tokens → Add new token\n  2. Defina nome (ex: paje) e data de expiração\n  3. Escopos obrigatórios: read_repository, read_api, self_rotate\n  4. Clique em \"Create personal access token\" e copie o valor\n  5. Execute: paje git-server-store --use-basic-auth\n\nGitHub (suporte em breve):\n  1. GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)\n  2. Generate new token (classic)\n  3. Defina nome e data de expiração\n  4. Escopos obrigatórios: repo, read:user\n  5. Clique em \"Generate token\" e copie o valor",
+        port22Blocked: "Porta 22 inacessível para {{server}}. O fluxo SSH não está disponível.",
       },
       persistence: {
         missing: "Não foi possível gravar {{paths}}. Verifique permissões de ~/.ssh (recomendado 700).",
@@ -292,6 +324,18 @@ const ptBR = {
         userMissingBasicAuth:
           "Usuário não informado para autenticação básica em {{server}}. Cadastre o servidor novamente informando o usuário.",
         noValidServer: "Nenhum servidor com autenticação válida encontrado.",
+      },
+      verbose: {
+        title: "SSH - Detalhes",
+      },
+      github: {
+        title: "GitHub",
+        tokenLabel: "Personal Access Token (PAT)",
+        tokenDesc: "Crie em: github.com/settings/tokens | Escopos recomendados: repo, read:org",
+        tokenValid: "Token válido. Usuário GitHub: {{login}}",
+        tokenInvalid: "Token inválido ou sem permissões suficientes.",
+        tokenMissing: "Token não informado.",
+        unknownType: "Tipo de servidor desconhecido: \"{{type}}\". Use gitlab ou github. Detectando pelo URL...",
       },
     },
     summary: {
@@ -326,6 +370,9 @@ const ptBR = {
     errors: {
       unknown: "Erro desconhecido.",
       inline: "Erro",
+      gitlab: {
+        registerKeyFail: "Falha ao registrar chave SSH no GitLab: {{message}}",
+      },
     },
     parallel: {
       errorExecute: "Erro ao executar comando: {{message}}",
@@ -346,8 +393,8 @@ const ptBR = {
       listDuration: "Listagem concluída em {{seconds}}s.",
       noneSelected: "Nenhum repositório selecionado.",
       noSyncMatches: "Nenhum repositório corresponde aos filtros.",
-      scopeSingle: "Escopo da sincronização: linha/grupo destacado (Ctrl+S).",
-      scopeAll: "Escopo da sincronização: todas as linhas (S).",
+      usernameMissingBasicAuth: "Usuário não informado para autenticação básica em {{server}}.",
+      singleModeSyncReposIgnored: "Modo de seleção individual ativo: o parâmetro --sync-repos será ignorado.",
       defaultServerLabel: "GitLab",
       serverSingle: "servidor",
       serverPlural: "servidores",
@@ -400,6 +447,11 @@ const ptBR = {
       objectsCopiedSingle: "{{received}} objetos",
       speed: "{{speed}}",
       removeConfirm: "Tem certeza que quer remover o diretório local {{repo}}? Há alterações locais!",
+    },
+    cache: {
+      hit: "Árvore carregada do cache local. Atualizando status em segundo plano...",
+      statusRefreshed: "Status dos repositórios atualizado.",
+      saved: "Cache da árvore salvo.",
     },
   },
 };

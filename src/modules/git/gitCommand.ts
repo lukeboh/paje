@@ -1,10 +1,12 @@
 import inquirer from "inquirer";
 import fs from "node:fs";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { Command } from "commander";
 import { setLocale, t } from "../../i18n/index.js";
 import { GitLabApi } from "./gitlabApi.js";
+import { GitHubApi } from "./githubApi.js";
 import { resolveGitSyncConfig } from "./core/gitSyncConfig.js";
 import { buildParameter, type CommandParameters, type ParameterSource } from "./core/parameters.js";
 import {
@@ -36,7 +38,6 @@ import {
   GitLabGroup,
   GitLabProject,
   GitLabTreeNode,
-  GitRepositoryTarget,
   ParallelSyncOptions,
   RepoSyncStatus,
   RepoSyncState,
@@ -48,7 +49,7 @@ import {
   createFileTransport,
   createGlobalPanelTransport,
 } from "./core/loggerTransports.js";
-import { antPatternToRegex, compileAntPatterns, matchesAntPatterns, splitFilterPatterns } from "./patternFilter.js";
+import { resolveLocalPathConflicts, resolveProjectLocalPath } from "./gitPathUtils.js";
 import {
   addHostToKnownHosts,
   getIdentityFileForHost,
@@ -74,15 +75,7 @@ import {
   type SshKeyInfo,
 } from "./sshManager.js";
 import { readGitServers, writeGitServers } from "./persistence.js";
-
-type GitServerEntry = {
-  id: string;
-  name: string;
-  baseUrl: string;
-  useBasicAuth?: boolean;
-  username?: string;
-  token?: string;
-};
+import { type GitServerEntry, type GitSyncSummary, createGitSyncCore, resolveRepoStatus, resolveParallels } from "./core/gitSyncService.js";
 
 const buildServerPrefix = (server: GitServerEntry): string => {
   const normalizedName = server.name?.trim() || t("cli.sync.defaultServerLabel");
@@ -230,12 +223,6 @@ const parseBooleanFlag = (value?: string | boolean): boolean | undefined => {
   return normalized === "true";
 };
 
-type RepoSummary = {
-  total: number;
-  publicCount: number;
-  archivedCount: number;
-  byStatus: Record<RepoSyncState, number>;
-};
 
 export type TreePrintNode = {
   label: string;
@@ -297,10 +284,11 @@ const resolveBranchColor = (branch: string): string | undefined => {
   return undefined;
 };
 
-const createSummary = (): RepoSummary => ({
+const createSummary = (): GitSyncSummary => ({
   total: 0,
   publicCount: 0,
   archivedCount: 0,
+  failed: 0,
   byStatus: {
     SYNCED: 0,
     BEHIND: 0,
@@ -313,7 +301,7 @@ const createSummary = (): RepoSummary => ({
   },
 });
 
-const renderSummaryLines = (summary: RepoSummary): string[] => {
+const renderSummaryLines = (summary: GitSyncSummary): string[] => {
   const entries: Array<[string, number]> = [
     [t("cli.summary.repositoriesIdentified"), summary.total],
     [t("cli.summary.public"), summary.publicCount],
@@ -431,184 +419,6 @@ export const buildHierarchyTree = (
   return root.children ?? [];
 };
 
-const resolveProjectLocalPath = (project: GitLabProject): string => {
-  return project.pajeOriginalPathWithNamespace ?? project.path_with_namespace;
-};
-
-const resolveLocalPathConflicts = (projects: GitLabProject[]): Map<number, string> => {
-  const byPath = new Map<string, GitLabProject[]>();
-  const resolved = new Map<number, string>();
-
-  projects.forEach((project) => {
-    const basePath = resolveProjectLocalPath(project);
-    const entries = byPath.get(basePath) ?? [];
-    entries.push(project);
-    byPath.set(basePath, entries);
-  });
-
-  byPath.forEach((entries, basePath) => {
-    if (entries.length === 1) {
-      resolved.set(entries[0].id, basePath);
-      return;
-    }
-    entries.forEach((project) => {
-      const serverName = project.pajeServerName?.trim();
-      const suffix = serverName && serverName.length > 0 ? `-${serverName}` : "-servidor";
-      resolved.set(project.id, `${basePath}${suffix}`);
-    });
-  });
-
-  return resolved;
-};
-
-const ensureLocalDirsIfNeeded = async (
-  projects: GitLabProject[],
-  baseDir: string,
-  enabled: boolean
-): Promise<void> => {
-  if (!enabled) {
-    return;
-  }
-  const resolvedPaths = resolveLocalPathConflicts(projects);
-  await Promise.all(
-    projects.map(async (project) => {
-      const targetPath = path.join(baseDir, resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project));
-      await fs.promises.mkdir(targetPath, { recursive: true });
-    })
-  );
-};
-
-type SyncRepoSpec = {
-  projectPath: string;
-  branch?: string;
-};
-
-const extractSyncRepoSpec = (pattern: string): SyncRepoSpec => {
-  const trimmed = pattern.trim();
-  if (!trimmed) {
-    return { projectPath: "" };
-  }
-  const [pathPart, branchPart] = trimmed.split("#");
-  let projectPath = pathPart.trim();
-  if (projectPath.endsWith(".git")) {
-    projectPath = projectPath.slice(0, -4);
-  }
-  const branch = branchPart?.trim();
-  return {
-    projectPath,
-    branch: branch && branch.length > 0 ? branch : undefined,
-  };
-};
-
-const resolveProjectMatchPath = (project: GitLabProject): string => {
-  return project.path_with_namespace;
-};
-
-const resolveSyncReposSpecs = (rawPatterns?: string): SyncRepoSpec[] => {
-  const specs: SyncRepoSpec[] = [];
-  splitFilterPatterns(rawPatterns).forEach((rawPattern: string) => {
-    const spec = extractSyncRepoSpec(rawPattern);
-    if (!spec.projectPath) {
-      return;
-    }
-    specs.push(spec);
-  });
-  return specs;
-};
-
-const buildSyncPattern = (spec: SyncRepoSpec): RegExp => {
-  return antPatternToRegex(spec.projectPath);
-};
-
-const resolveSyncTargets = (projects: GitLabProject[], specs: SyncRepoSpec[]): GitRepositoryTarget[] => {
-  if (specs.length === 0) {
-    return [];
-  }
-  const normalizedProjects = projects.map((project) => ({
-    project,
-    matchPaths: [resolveProjectMatchPath(project), project.pajeOriginalPathWithNamespace].filter(Boolean) as string[],
-  }));
-  const matches: GitRepositoryTarget[] = [];
-  specs.forEach((spec) => {
-    const pattern = buildSyncPattern(spec);
-    normalizedProjects.forEach(({ project, matchPaths }) => {
-      if (!matchPaths.some((matchPath) => pattern.test(matchPath))) {
-        return;
-      }
-      matches.push({
-        id: project.id,
-        name: project.name,
-        pathWithNamespace: resolveProjectLocalPath(project),
-        sshUrl: project.ssh_url_to_repo,
-        localPath: "",
-        defaultBranch: project.default_branch,
-        branch: spec.branch,
-      });
-    });
-  });
-  const uniqueByPath = new Map<string, GitRepositoryTarget>();
-  matches.forEach((target) => {
-    const key = `${target.pathWithNamespace}#${target.branch ?? ""}`;
-    if (!uniqueByPath.has(key)) {
-      uniqueByPath.set(key, target);
-    }
-  });
-  return Array.from(uniqueByPath.values());
-};
-
-export const filterSyncTargetsBySelection = (
-  syncTargets: GitRepositoryTarget[],
-  selectionNodes: GitLabTreeNode[],
-  selectionMode?: TuiSelectionResult["mode"]
-): GitRepositoryTarget[] => {
-  if (selectionMode !== "single") {
-    return syncTargets;
-  }
-  const validIds = new Set(selectionNodes.map((node) => node.project?.id).filter(Boolean) as number[]);
-  return syncTargets.filter((target) => validIds.has(target.id));
-};
-
-const resolveRepoStatus = async (options: {
-  targetPath: string;
-  defaultBranch?: string;
-  knownRemote: boolean;
-}): Promise<RepoSyncStatus> => {
-  const branchFallback = options.defaultBranch ?? "main";
-  const hasRepo = await hasGitDir(options.targetPath);
-  if (!hasRepo) {
-    return {
-      branch: branchFallback,
-      state: options.knownRemote ? "EMPTY" : "LOCAL",
-    };
-  }
-
-  const repoInfo = await readLocalRepoInfo(options.targetPath);
-  const branch = repoInfo.currentBranch ?? branchFallback;
-  if (!repoInfo.remoteUrl) {
-    return {
-      branch,
-      state: options.knownRemote ? "REMOTE" : "LOCAL",
-    };
-  }
-
-  const pendingChanges = await getStatusPorcelain(options.targetPath);
-  if (pendingChanges) {
-    return { branch, state: "UNCOMMITTED" };
-  }
-
-  await runGit(["-C", options.targetPath, "fetch", "--quiet"]).catch(() => undefined);
-  const { ahead, behind } = await getAheadBehind(options.targetPath, branch);
-  if (ahead === 0 && behind === 0) {
-    return { branch, state: "SYNCED" };
-  }
-  if (behind > 0 && ahead === 0) {
-    return { branch, state: "BEHIND", delta: `-${behind}` };
-  }
-  if (ahead > 0 && behind === 0) {
-    return { branch, state: "AHEAD", delta: `+${ahead}` };
-  }
-  return { branch, state: "DIVERGED", delta: `+${ahead}/-${behind}` };
-};
 
 const buildLocalStatusMap = async (
   baseDir: string,
@@ -682,7 +492,12 @@ type SshKeyStoreCliOptions = {
   verbose?: boolean;
   serverName?: string;
   baseUrl?: string;
+  serverType?: string;
   username?: string;
+  userEmail?: string;
+  password?: string;
+  token?: string;
+  useBasicAuth?: boolean;
   keyLabel?: string;
   passphrase?: string;
   publicKeyPath?: string;
@@ -693,10 +508,26 @@ type SshKeyStoreCliOptions = {
   tokenName?: string;
   tokenScopes?: string;
   tokenExpiresAt?: string;
+  baseDir?: string;
+  noPublicRepos?: boolean;
+  noArchivedRepos?: boolean;
+  filter?: string;
+  syncRepos?: string;
   locale?: string;
 };
 
 export const normalizeBaseUrl = (url: string): string => url.trim().replace(/\/+$/, "");
+
+const probePort = (host: string, port: number, timeoutMs = 3000): Promise<boolean> =>
+  new Promise((resolve) => {
+    const socket = new net.Socket();
+    const done = (result: boolean) => { socket.destroy(); resolve(result); };
+    socket.setTimeout(timeoutMs);
+    socket.on("connect", () => done(true));
+    socket.on("timeout", () => done(false));
+    socket.on("error", () => done(false));
+    socket.connect(port, host);
+  });
 
 type MergeResult = {
   servers: GitServerEntry[];
@@ -830,278 +661,6 @@ export const promptBasicAuthPassword = async (
   return answers.password;
 };
 
-const ensureSshKey = async (
-  api: GitLabApi,
-  session?: TuiSession,
-  verbose?: boolean,
-  cli?: GitSyncCliOptions
-): Promise<void> => {
-  const existingKeys = listSshPublicKeys();
-  const server = api.getServerHost();
-  let associatedIdentityPath = getIdentityFileForHost(server);
-  if (associatedIdentityPath) {
-    const resolved = resolveSshIdentityPath(associatedIdentityPath);
-    if (!fs.existsSync(resolved)) {
-      const message = t("cli.prompt.sshKey.missingKey", { server, path: associatedIdentityPath });
-      if (session) {
-        await session.showMessage({ title: t("cli.prompt.sshKey.title"), message });
-      } else {
-        console.log(message);
-      }
-      associatedIdentityPath = null;
-    }
-  }
-
-  if (associatedIdentityPath) {
-    await ensureKnownHost(server, session, verbose);
-    await reportSshPersistenceStatus(server, session);
-    return;
-  }
-
-  if (!associatedIdentityPath && existingKeys.length > 0) {
-    if (cli?.publicKeyPath) {
-      const selectedKey = cli.publicKeyPath;
-      if (!fs.existsSync(selectedKey)) {
-        const message = t("cli.prompt.sshKey.missingProvidedKey", { path: selectedKey });
-        if (session) {
-          await session.showMessage({ title: t("cli.prompt.sshKey.title"), message });
-        } else {
-          console.log(message);
-        }
-        return;
-      }
-      const key = sanitizePublicKey(readPublicKey(selectedKey));
-      upsertSshConfigHost(server, selectedKey.replace(/\.pub$/, ""));
-      await ensureKnownHost(server, session, verbose);
-      await reportSshPersistenceStatus(server, session);
-      if (api.hasAuth()) {
-        try {
-          await registerKeyInGitLab(api, `paje-existing-${Date.now()}`, key);
-        } catch (error) {
-          const details = (error as { details?: { method: string; url: string; status: number; responseBody: string; curl: string } })
-            .details;
-          const message = details
-            ? t("cli.errors.gitlab.registerKeyDetails", {
-                status: details.status,
-                url: details.url,
-                response: details.responseBody,
-                curl: details.curl,
-              })
-            : t("cli.errors.gitlab.registerKey", {
-                message: error instanceof Error ? error.message : t("cli.errors.unknown"),
-              });
-          if (session) {
-            await session.showMessage({ title: t("cli.prompt.gitlab.title"), message });
-          } else {
-            console.log(message);
-          }
-        }
-      }
-      return;
-    }
-    let choice: "existing" | "generate" = "generate";
-    if (session) {
-      const selection = await session.promptList({
-        title: t("cli.prompt.sshKey.title"),
-        message: t("cli.prompt.sshKey.selectOption"),
-        choices: [
-          {
-            label: t("cli.prompt.sshKey.optionExisting"),
-            value: "existing",
-            description: t("cli.prompt.sshKey.optionExistingDesc"),
-          },
-          {
-            label: t("cli.prompt.sshKey.optionGenerate"),
-            value: "generate",
-            description: t("cli.prompt.sshKey.optionGenerateDesc"),
-          },
-        ],
-      });
-      choice = (selection ?? "generate") as "existing" | "generate";
-    } else {
-      const promptChoice = (await inquirer.prompt([
-        {
-          name: "choice",
-          type: "list",
-          message: t("cli.prompt.sshKey.title"),
-          choices: [
-            { name: t("cli.prompt.sshKey.optionExisting"), value: "existing" },
-            { name: t("cli.prompt.sshKey.optionGenerate"), value: "generate" },
-          ],
-        },
-      ])) as { choice: "existing" | "generate" };
-      choice = promptChoice.choice;
-    }
-
-    if (choice === "existing") {
-      let selectedKey: string | null = null;
-      if (session) {
-        selectedKey = await session.promptList({
-          title: t("cli.prompt.sshKey.title"),
-          message: t("cli.prompt.sshKey.selectPublicKey"),
-          choices: existingKeys.map((key) => ({
-            label: key,
-            value: key,
-            description: t("cli.prompt.sshKey.confirmPublicKeyDesc"),
-          })),
-        });
-      } else {
-        const promptKey = (await inquirer.prompt([
-          {
-            name: "selectedKey",
-            type: "list",
-            message: t("cli.prompt.sshKey.selectPublicKey"),
-            choices: existingKeys,
-          },
-        ])) as { selectedKey: string };
-        selectedKey = promptKey.selectedKey;
-      }
-
-      if (!selectedKey) {
-        return;
-      }
-
-      const key = sanitizePublicKey(readPublicKey(selectedKey));
-      upsertSshConfigHost(server, selectedKey.replace(/\.pub$/, ""));
-      await ensureKnownHost(server, session, verbose);
-      await reportSshPersistenceStatus(server, session);
-      if (api.hasAuth()) {
-        try {
-          await registerKeyInGitLab(api, `paje-existing-${Date.now()}`, key);
-        } catch (error) {
-          const details = (error as { details?: { method: string; url: string; status: number; responseBody: string; curl: string } })
-            .details;
-          const message = details
-            ? t("cli.errors.gitlab.registerKeyDetails", {
-                status: details.status,
-                url: details.url,
-                response: details.responseBody,
-                curl: details.curl,
-              })
-            : t("cli.errors.gitlab.registerKey", {
-                message: error instanceof Error ? error.message : t("cli.errors.unknown"),
-              });
-          if (session) {
-            await session.showMessage({ title: t("cli.prompt.gitlab.title"), message });
-          } else {
-            console.log(message);
-          }
-        }
-      }
-      return;
-    }
-  }
-
-  let passphrase: string | null = cli?.passphrase ?? null;
-  let keyLabel: string | null = cli?.keyLabel ?? null;
-  if (session) {
-    if (cli?.keyLabel) {
-      keyLabel = cli.keyLabel;
-    }
-    if (cli?.passphrase) {
-      passphrase = cli.passphrase;
-    }
-    if (cli?.keyLabel || cli?.passphrase) {
-      // não abrir formulário se parâmetros foram fornecidos
-    } else {
-      const form = await session.promptForm<{ keyLabel: string; passphrase: string }>({
-        title: t("cli.prompt.sshKey.title"),
-        fields: [
-        {
-          name: "keyLabel",
-          label: t("cli.prompt.sshKey.keyLabelPrompt"),
-          defaultValue: "paje",
-          description: t("cli.prompt.sshKey.keyLabelDesc"),
-        },
-        {
-          name: "passphrase",
-          label: t("cli.prompt.sshKey.passphrasePrompt"),
-          secret: true,
-          description: t("cli.prompt.sshKey.passphraseDesc"),
-        },
-        ],
-      });
-      keyLabel = form?.keyLabel ?? "paje";
-      passphrase = form?.passphrase ?? null;
-    }
-  } else {
-    if (!cli?.keyLabel) {
-      const promptLabel = (await inquirer.prompt([
-        { name: "keyLabel", message: t("cli.prompt.sshKey.keyLabelPrompt"), type: "input", default: "paje" },
-      ])) as { keyLabel?: string };
-      keyLabel = promptLabel.keyLabel ?? "paje";
-    }
-    if (!cli?.passphrase) {
-      const promptPass = (await inquirer.prompt([
-        { name: "passphrase", message: t("cli.prompt.sshKey.passphrasePrompt"), type: "password" },
-      ])) as { passphrase?: string };
-      passphrase = promptPass.passphrase ?? null;
-    }
-  }
-
-  let resolvedLabel = keyLabel || "paje";
-  while (sshKeyExists(resolvedLabel)) {
-    if (session) {
-      session.showInlineError(t("cli.prompt.sshKey.keyExists", { label: resolvedLabel }));
-      const retryForm = await session.promptForm<{ keyLabel: string; passphrase: string }>({
-        title: t("cli.prompt.sshKey.title"),
-        fields: [
-          {
-            name: "keyLabel",
-            label: t("cli.prompt.sshKey.keyLabelPrompt"),
-            defaultValue: resolvedLabel,
-            description: t("cli.prompt.sshKey.keyLabelDesc"),
-          },
-          {
-            name: "passphrase",
-            label: t("cli.prompt.sshKey.passphrasePrompt"),
-            secret: true,
-            description: t("cli.prompt.sshKey.passphraseDesc"),
-          },
-        ],
-      });
-      resolvedLabel = retryForm?.keyLabel ?? resolvedLabel;
-      passphrase = retryForm?.passphrase ?? passphrase;
-    } else {
-      console.log(t("cli.prompt.sshKey.keyExists", { label: resolvedLabel }));
-      break;
-    }
-  }
-
-  if (sshKeyExists(resolvedLabel)) {
-    return;
-  }
-
-      const keyInfo = await generatePajeKeyPair(passphrase || undefined, resolvedLabel);
-      const sanitizedKey = sanitizePublicKey(keyInfo.publicKey);
-      upsertSshConfigHost(server, keyInfo.privateKeyPath);
-      await ensureKnownHost(server, session, verbose);
-      await reportSshPersistenceStatus(server, session);
-      if (api.hasAuth()) {
-        try {
-          await registerKeyInGitLab(api, `paje-${Date.now()}`, sanitizedKey);
-        } catch (error) {
-          const details = (error as { details?: { method: string; url: string; status: number; responseBody: string; curl: string } })
-            .details;
-          const message = details
-            ? t("cli.errors.gitlab.registerKeyDetails", {
-                status: details.status,
-                url: details.url,
-                response: details.responseBody,
-                curl: details.curl,
-              })
-            : t("cli.errors.gitlab.registerKey", {
-                message: error instanceof Error ? error.message : t("cli.errors.unknown"),
-              });
-          if (session) {
-            await session.showMessage({ title: t("cli.prompt.gitlab.title"), message });
-          } else {
-            console.log(message);
-          }
-        }
-      }
-};
-
 const ensureKnownHost = async (server: string, session?: TuiSession, verbose?: boolean): Promise<void> => {
   if (await isHostInKnownHosts(server)) {
     return;
@@ -1139,7 +698,9 @@ const ensureKnownHost = async (server: string, session?: TuiSession, verbose?: b
       : undefined,
   });
   if (!added) {
-    const message = t("cli.prompt.trust.cannotAddHost", { server });
+    const baseMessage = t("cli.prompt.trust.cannotAddHost", { server });
+    const guidance = t("cli.prompt.trust.sshPort22Guidance");
+    const message = `${baseMessage}\n${guidance}`;
     if (session) {
       await session.showMessage({ title: t("cli.prompt.trust.title"), message });
     } else {
@@ -1285,6 +846,104 @@ export const resolveHomePath = (value?: string): string | undefined => {
   return value;
 };
 
+const detectServerType = (baseUrl: string): "gitlab" | "github" => {
+  try {
+    const host = new URL(baseUrl).hostname.toLowerCase();
+    if (host === "github.com" || host === "www.github.com" || host.endsWith(".github.com")) {
+      return "github";
+    }
+  } catch {
+    // ignore
+  }
+  return "gitlab";
+};
+
+const storeGitHubServer = async (
+  server: GitServerEntry,
+  session?: TuiSession,
+  cli?: SshKeyStoreCliOptions
+): Promise<void> => {
+  const logger = session
+    ? (message: string) => {
+        session.showMessage({ title: t("cli.prompt.github.title"), message });
+      }
+    : console.log;
+
+  const existingServers = readGitServers<GitServerEntry[]>([]);
+  const normalizedUrl = normalizeBaseUrl(server.baseUrl);
+  const existingServer = existingServers.find((s) => normalizeBaseUrl(s.baseUrl) === normalizedUrl);
+
+  let token = cli?.token?.trim() ?? existingServer?.token;
+
+  if (token) {
+    const api = new GitHubApi({ baseUrl: server.baseUrl, token });
+    try {
+      const user = await api.getAuthenticatedUser();
+      logger(t("cli.prompt.github.tokenValid", { login: user.login }));
+      const serverWithToken: GitServerEntry = {
+        ...server,
+        type: "github",
+        token,
+        username: existingServer?.username ?? user.login,
+      };
+      const merged = mergeServer(existingServers, serverWithToken);
+      writeGitServers(merged.servers);
+      return;
+    } catch {
+      logger(t("cli.prompt.github.tokenInvalid"));
+    }
+  }
+
+  if (session) {
+    const form = await session.promptForm<{ token: string }>({
+      title: t("cli.prompt.github.title"),
+      fields: [
+        {
+          name: "token",
+          label: t("cli.prompt.github.tokenLabel"),
+          description: t("cli.prompt.github.tokenDesc"),
+          secret: true,
+        },
+      ],
+    });
+    token = form?.token?.trim();
+  } else {
+    const promptResult = (await inquirer.prompt([
+      {
+        name: "token",
+        message: t("cli.prompt.github.tokenLabel"),
+        type: "password",
+      },
+    ])) as { token?: string };
+    token = promptResult.token?.trim();
+  }
+
+  if (!token) {
+    logger(t("cli.prompt.github.tokenMissing"));
+    return;
+  }
+
+  const api = new GitHubApi({ baseUrl: server.baseUrl, token, verbose: cli?.verbose });
+  let login: string;
+  try {
+    const user = await api.getAuthenticatedUser();
+    login = user.login;
+    logger(t("cli.prompt.github.tokenValid", { login }));
+  } catch {
+    logger(t("cli.prompt.github.tokenInvalid"));
+    return;
+  }
+
+  const serverWithToken: GitServerEntry = {
+    ...server,
+    type: "github",
+    token,
+    username: login,
+  };
+  const merged = mergeServer(existingServers, serverWithToken);
+  writeGitServers(merged.servers);
+};
+
 const storeSshKeyOnly = async (
   server: GitServerEntry,
   session?: TuiSession,
@@ -1335,6 +994,143 @@ const storeSshKeyOnly = async (
       ])) as { username?: string };
       resolvedUsername = promptUser.username?.trim();
     }
+  }
+
+  const useBasicAuth = server.useBasicAuth ?? cli?.useBasicAuth ?? false;
+  if (useBasicAuth) {
+    if (process.env.PAJE_SKIP_SSH_STORE === "1") {
+      logger?.(t("cli.log.skipRemoteToken"));
+      return;
+    }
+
+    let basicAuthPassword = resolveEnvOrCliString(
+      hasCliArg("password") ? cli?.password : undefined,
+      "password",
+      "password"
+    );
+    if (!basicAuthPassword) {
+      if (session) {
+        const form = await session.promptForm<{ password: string }>({
+          title: t("cli.prompt.gitlab.title"),
+          fields: [
+            {
+              name: "password",
+              label: t("cli.prompt.basicAuth.passwordLabelDefault"),
+              secret: true,
+              description: t("cli.prompt.basicAuth.passwordDesc"),
+            },
+          ],
+        });
+        basicAuthPassword = form?.password ?? "";
+      } else {
+        const promptPass = (await inquirer.prompt([
+          { name: "password", message: t("cli.prompt.basicAuth.passwordLabelDefault"), type: "password" },
+        ])) as { password?: string };
+        basicAuthPassword = promptPass.password ?? "";
+      }
+    }
+
+    const basicAuthCredentials = loadGitCredentials({
+      envFilePaths: resolveEnvPaths(resolveEnvFileFromCli(cli?.envFile)),
+      allowProcessEnv: false,
+    });
+
+    const normalizedBaseUrlBA = normalizeBaseUrl(server.baseUrl);
+    const existingServersBA = readGitServers<GitServerEntry[]>([]);
+    const existingServerBA = existingServersBA.find((item) => normalizeBaseUrl(item.baseUrl) === normalizedBaseUrlBA);
+
+    if (existingServerBA?.token) {
+      try {
+        const tokenStatus = await validatePersonalAccessToken({
+          baseUrl: normalizedBaseUrlBA,
+          token: existingServerBA.token,
+          fetchImpl: globalThis.fetch,
+          logger,
+        });
+        if (tokenStatus.valid) {
+          const expiresAt = tokenStatus.expiresAt ?? t("cli.log.notInformed");
+          const scopes =
+            tokenStatus.scopes && tokenStatus.scopes.length > 0
+              ? tokenStatus.scopes.join(", ")
+              : t("cli.log.notInformed");
+          const active = tokenStatus.active ?? true;
+          logger?.(t("cli.log.tokenValid", { baseUrl: normalizedBaseUrlBA }));
+          logger?.(t("cli.log.tokenDetails", { active: String(active), expiresAt, scopes }));
+          logger?.(t("cli.log.tokenReuse"));
+          return;
+        }
+        logger?.(t("cli.log.tokenInvalid"));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : t("cli.errors.unknown");
+        logger?.(t("cli.log.tokenValidateFail", { message }));
+      }
+
+      logger?.(t("cli.log.tokenRotateStart", { baseUrl: normalizedBaseUrlBA }));
+      try {
+        const rotated = await rotatePersonalAccessToken({
+          baseUrl: normalizedBaseUrlBA,
+          token: existingServerBA.token,
+          fetchImpl: globalThis.fetch,
+          logger,
+        });
+        const serverWithTokenBA: GitServerEntry = { ...server, token: rotated.token };
+        const mergedServersBA = mergeServer(existingServersBA, serverWithTokenBA);
+        writeGitServers(mergedServersBA.servers);
+        logger?.(t("cli.log.tokenRotateSuccess", { baseUrl: normalizedBaseUrlBA }));
+        return;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : t("cli.errors.unknown");
+        logger?.(t("cli.log.tokenRotateFail", { message }));
+      }
+    }
+
+    const resolvedTokenNameBA = resolveEnvOrCliString(cli?.tokenName?.trim(), "tokenName", "token-name");
+    const resolvedTokenScopesBA = resolveEnvStringArray(
+      hasCliArg("token-scopes") ? cli?.tokenScopes : undefined,
+      envConfig,
+      "tokenScopes"
+    );
+    const resolvedTokenExpiresAtBA = resolveEnvOrCliString(cli?.tokenExpiresAt, "tokenExpiresAt", "token-expires-at");
+    const tokenNameBA = resolvedTokenNameBA ?? "";
+    const scopeListBA = resolvedTokenScopesBA
+      ? resolvedTokenScopesBA.split(",").map((item) => item.trim()).filter(Boolean)
+      : ["read_repository", "read_api", "read_virtual_registry", "self_rotate"];
+    if (!resolvedTokenNameBA) {
+      logger?.(t("cli.log.tokenNameMissing"));
+      return;
+    }
+
+    const tokenResultBA = await ensureGitLabPersonalAccessToken({
+      baseUrl: normalizedBaseUrlBA,
+      name: tokenNameBA,
+      scopes: scopeListBA,
+      expiresAt: resolvedTokenExpiresAtBA,
+      credentials: {
+        ...basicAuthCredentials,
+        username: resolvedUsername ?? basicAuthCredentials.username,
+        password: basicAuthPassword ?? basicAuthCredentials.password ?? "",
+      },
+      fetchImpl: globalThis.fetch,
+      logger,
+      maxAttempts: resolveEnvOrCliNumber(cli?.maxAttempts, "maxAttempts", "max-attempts"),
+      retryDelayMs: resolveEnvOrCliNumber(cli?.retryDelayMs, "retryDelayMs", "retry-delay-ms"),
+    });
+
+    const basicAuthServerWithToken: GitServerEntry = { ...server, token: tokenResultBA.token };
+    const basicAuthMergedServers = mergeServer(existingServersBA, basicAuthServerWithToken);
+    writeGitServers(basicAuthMergedServers.servers);
+    return;
+  }
+
+  const port22Open = await probePort(serverHost, 22);
+  if (!port22Open) {
+    const message = `${t("cli.prompt.trust.port22Blocked", { server: serverHost })}\n${t("cli.prompt.trust.sshPort22Guidance")}`;
+    if (session) {
+      await session.showMessage({ title: t("cli.prompt.trust.title"), message });
+    } else {
+      console.warn(message);
+    }
+    return;
   }
 
   const resolvedPublicKeyPath = resolveEnvOrCliString(cli?.publicKeyPath, "publicKeyPath", "public-key-path");
@@ -1511,23 +1307,6 @@ const storeSshKeyOnly = async (
   writeGitServers(mergedServers.servers);
 };
 
-const prepareTargets = (
-  projects: GitLabProject[],
-  baseDir: string,
-  gitUserName?: string,
-  gitUserEmail?: string
-): GitRepositoryTarget[] => {
-  return projects.map((project) => ({
-    id: project.id,
-    name: project.name,
-    pathWithNamespace: project.path_with_namespace,
-    sshUrl: project.ssh_url_to_repo,
-    localPath: path.join(baseDir, project.path_with_namespace),
-    gitUserName,
-    gitUserEmail,
-  }));
-};
-
 const findNodeById = (nodes: GitLabTreeNode[], id: string): GitLabTreeNode | undefined => {
   for (const node of nodes) {
     if (node.id === id) {
@@ -1550,73 +1329,6 @@ const toggleById = (nodes: GitLabTreeNode[], id: string): void => {
   }
   toggleTreeNode(node, !(node.selected ?? false));
   nodes.forEach((root) => recomputeTreeSelection(root));
-};
-
-const resolveParallelOptions = async (session?: TuiSession): Promise<ParallelSyncOptions> => {
-  if (session) {
-    const concurrency = await session.promptList<number | "auto">({
-      title: t("cli.prompt.parallel.title"),
-      message: t("cli.prompt.parallel.level"),
-      choices: [
-        { label: t("cli.prompt.parallel.auto"), value: "auto", description: t("cli.prompt.parallel.autoDesc") },
-        { label: "1", value: 1, description: t("cli.prompt.parallel.oneDesc") },
-        { label: "2", value: 2, description: t("cli.prompt.parallel.twoDesc") },
-        { label: "4", value: 4, description: t("cli.prompt.parallel.fourDesc") },
-        { label: "8", value: 8, description: t("cli.prompt.parallel.eightDesc") },
-      ],
-    });
-    const shallow = await session.promptConfirm({
-      title: t("cli.prompt.parallel.title"),
-      message: t("cli.prompt.parallel.shallow"),
-      defaultValue: false,
-    });
-
-    return {
-      concurrency: (concurrency ?? "auto") as ParallelSyncOptions["concurrency"],
-      shallow: shallow ?? false,
-    };
-  }
-
-  const { concurrency, shallow } = (await inquirer.prompt([
-    {
-      name: "concurrency",
-      type: "list",
-      message: t("cli.prompt.parallel.level"),
-      choices: [
-        { name: t("cli.prompt.parallel.auto"), value: "auto" },
-        { name: "1", value: 1 },
-        { name: "2", value: 2 },
-        { name: "4", value: 4 },
-        { name: "8", value: 8 },
-      ],
-    },
-    {
-      name: "shallow",
-      type: "confirm",
-      message: t("cli.prompt.parallel.shallow"),
-      default: false,
-    },
-  ])) as { concurrency: number | "auto"; shallow: boolean };
-
-  return { concurrency, shallow } as ParallelSyncOptions;
-};
-
-const resolveParallels = (rawValue?: string): ParallelSyncOptions["concurrency"] => {
-  if (!rawValue) {
-    return 1;
-  }
-  const trimmed = rawValue.trim().toLowerCase();
-  if (!trimmed || trimmed === "auto") {
-    return "auto";
-  }
-  const parsed = Number(trimmed);
-  if (!Number.isNaN(parsed)) {
-    if (parsed <= 0) {
-      return "auto";
-    }
-    return parsed;
-  }
-  return 1;
 };
 
 const formatProgressValue = (value?: string): string => {
@@ -1721,7 +1433,7 @@ const formatRepoLabel = (value: string, width: number): string => {
   if (value.length <= width) {
     return value.padEnd(width, " ");
   }
-  return `${value.slice(0, Math.max(0, width - 1))}?`;
+  return `${value.slice(0, Math.max(0, width - 1))}…`;
 };
 
 const buildParameterSource = (resolution: EnvResolution): ParameterSource => {
@@ -1770,7 +1482,7 @@ const buildSshKeyStoreParameters = (options: SshKeyStoreCliOptions, hasCliArg: (
     return resolveEnvStringArrayWithSource(resolvedCli, envConfig, key);
   };
 
-  const baseUrlResolution = resolveEnvOrCliString(options.baseUrl?.trim(), "baseUrl", "base-url", "https://git.tse.jus.br");
+  const baseUrlResolution = resolveEnvOrCliString(options.baseUrl?.trim(), "baseUrl", "base-url", "https://gitlab.com");
   const serverNameResolution = resolveEnvOrCliString(options.serverName, "serverName", "server-name", "GitLab");
   const usernameResolution = resolveEnvOrCliString(options.username, "username", "username");
   const keyLabelResolution = resolveEnvOrCliString(options.keyLabel, "keyLabel", "key-label", "paje");
@@ -2028,33 +1740,8 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
         return;
       }
 
-      const listStartAt = Date.now();
-      let listRequestCount = 0;
-      let spinnerFrameIndex = 0;
       const spinnerFrames = ["/", "-", "\\", "|"];
-      const renderSpinner = (): void => {
-        if (!session) {
-          return;
-        }
-        const frame = spinnerFrames[spinnerFrameIndex % spinnerFrames.length];
-        spinnerFrameIndex += 1;
-        logToTui(t("cli.http.accessServers", { frame, count: listRequestCount }));
-      };
-      const wrapRequest = async <T,>(server: GitServerEntry, label: string, fn: () => Promise<T>): Promise<T> => {
-        listRequestCount += 1;
-        renderSpinner();
-        logToTui(t("cli.http.start", { server: server.name, label, count: listRequestCount }));
-        try {
-          const result = await fn();
-          logToTui(t("cli.http.success", { server: server.name, label }));
-          return result;
-        } catch (error) {
-          const message = error instanceof Error ? error.message : t("cli.errors.unknown");
-          logToTui(t("cli.http.fail", { server: server.name, label, message }), "error");
-          throw error;
-        }
-      };
-
+      let spinnerFrameIndex = 0;
       const loadingHandle = session
         ? renderLoadingScreen({
             title: t("app.gitSyncTitle"),
@@ -2065,213 +1752,94 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
           })
         : null;
 
-      const serverResults = await Promise.all(
-        servers.map(async (server) => {
-          const serverHost = new URL(server.baseUrl).hostname;
-          const hasSshAssociation = hasValidSshAssociation(serverHost);
-          let basicAuth: { username: string; password: string } | undefined;
-
-          if (server.useBasicAuth && !hasSshAssociation) {
-            const username = server.username?.trim();
-            const resolvedUsername = username && username.length > 0 ? username : "";
-            if (!resolvedUsername) {
-              const message = t("cli.prompt.gitlab.userMissingBasicAuth", { server: server.name });
-              if (session) {
-                await session.showMessage({ title: t("cli.prompt.gitlab.title"), message });
-              } else {
-                console.log(message);
-              }
-              return null;
-            }
-            const password = await promptBasicAuthPassword(resolvedUsername, session, mergedOptions.password);
-            basicAuth = { username: resolvedUsername, password };
-          }
-
-          const api = new GitLabApi({
-            baseUrl: server.baseUrl,
-            basicAuth,
-            token: server.token,
-            verbose: mergedOptions.verbose ?? false,
-            logger: mergedOptions.verbose
-              ? (message) => {
-                  logDebug(message);
-                }
-              : undefined,
-          });
-
-          if (!api.hasAuth()) {
-            const message = t("cli.prompt.gitlab.noAuthConfigured", { server: server.name });
-            if (session) {
-              await session.showMessage({ title: t("cli.prompt.gitlab.title"), message });
-            } else {
-              console.log(message);
-            }
-            return null;
-          }
-
-          if (hasSshAssociation || api.hasAuth()) {
-            await ensureSshKey(api, session, mergedOptions.verbose ?? false, mergedOptions);
-          }
-
-          const [groups, userProjects, publicProjects] = await Promise.all([
-            wrapRequest(server, t("cli.http.listGroups"), () => api.listGroups()),
-            wrapRequest(server, t("cli.http.listUserProjects"), () => api.listUserProjects()),
-            mergedOptions.noPublicRepos
-              ? Promise.resolve([])
-              : wrapRequest(server, t("cli.http.listPublicProjects"), () => api.listPublicProjects()),
-          ]);
-          const projects = [...userProjects, ...publicProjects].filter((project, index, all) => {
-            return all.findIndex((item) => item.id === project.id) === index;
-          });
-
-          return { server, groups, projects };
-        })
-      ).finally(() => {
-        loadingHandle?.stop();
-      });
-
-      const validServerResults = serverResults.filter(
-        (result): result is { server: GitServerEntry; groups: GitLabGroup[]; projects: GitLabProject[] } =>
-          result !== null
-      );
-
-      if (validServerResults.length === 0) {
-        const message = t("cli.prompt.gitlab.noValidServer");
-        if (session) {
-          await session.showMessage({ title: t("cli.prompt.gitlab.title"), message });
-        } else {
-          console.log(message);
+      let treeProgress: TuiTreeProgress | null = null;
+      const treeProgressRef = (): TuiTreeProgress | null => treeProgress;
+      const projectNodeMap = new Map<number, string>();
+      const buildProjectNodeMap = (node: GitLabTreeNode): void => {
+        if (node.type === "project" && node.project) {
+          projectNodeMap.set(node.project.id, node.id);
+          return;
         }
+        node.children?.forEach((child) => buildProjectNodeMap(child));
+      };
+      // Background cache refresh can complete before the tree TUI mounts
+      // (treeProgress is only set in onReady); buffer those statuses and
+      // flush them once the TUI is ready instead of dropping them.
+      const pendingStatusUpdates = new Map<number, RepoSyncStatus>();
+      const deliverStatus = (projectId: number, status: RepoSyncStatus): void => {
+        const progress = treeProgressRef();
+        const nodeId = projectNodeMap.get(projectId);
+        if (progress && nodeId) {
+          progress.updateStatus(nodeId, status);
+          return;
+        }
+        pendingStatusUpdates.set(projectId, status);
+      };
+      const flushPendingStatuses = (): void => {
+        const progress = treeProgressRef();
+        if (!progress) return;
+        pendingStatusUpdates.forEach((status, projectId) => {
+          const nodeId = projectNodeMap.get(projectId);
+          if (nodeId) progress.updateStatus(nodeId, status);
+        });
+        pendingStatusUpdates.clear();
+      };
+
+      const core = createGitSyncCore();
+      const { header, tree, statusMap, projects: filteredProjects } = await core.loadTree({
+        config: mergedOptions,
+        logger: logBroker,
+        onBasicAuthRequired: async (serverName, username) => {
+          return promptBasicAuthPassword(username, session, mergedOptions.password);
+        },
+        onRequestStart: (serverName, requestCount) => {
+          const frame = spinnerFrames[spinnerFrameIndex % spinnerFrames.length];
+          spinnerFrameIndex += 1;
+          logToTui(t("cli.http.accessServers", { frame, count: requestCount }));
+          logToTui(t("cli.http.start", { server: serverName, label: "...", count: requestCount }));
+        },
+        onStatusRefreshed: session ? deliverStatus : undefined,
+      }).finally(() => loadingHandle?.stop());
+
+      if (filteredProjects.length === 0 && tree.length === 0) {
         return;
       }
-
-      const { groups, idMapByServer } = mergeGroupsByPath(
-        validServerResults.map((result) => ({ server: result.server, groups: result.groups }))
-      );
-      const { projects } = mergeProjectsByPath(
-        validServerResults.map((result) => ({ server: result.server, projects: result.projects })),
-        idMapByServer
-      );
-      const activeServers = validServerResults.map((result) => result.server);
-      const header = buildServersHeader(activeServers);
-      const listDurationMs = Date.now() - listStartAt;
-      const tempoLabel = t("cli.sync.durationTag");
-      const tempoValor = `${(listDurationMs / 1000).toFixed(2)}s`;
-      logInfo(t("cli.sync.listDurationInline", { label: tempoLabel, value: tempoValor }));
-
-      const filterPatterns = compileAntPatterns(mergedOptions.filter);
-      const filteredProjects = projects.filter((project) => {
-        if (mergedOptions.noPublicRepos && project.visibility === "public") {
-          return false;
-        }
-        if (mergedOptions.noArchivedRepos && project.archived) {
-          return false;
-        }
-        const matchCandidates = [
-          project.path_with_namespace,
-          project.pajeOriginalPathWithNamespace,
-          project.namespace?.full_path,
-          project.namespace?.full_path ? `${project.namespace.full_path}/${project.name}` : undefined,
-        ].filter(Boolean) as string[];
-        if (matchCandidates.length === 0) {
-          return matchesAntPatterns(project.path_with_namespace, filterPatterns);
-        }
-        return matchCandidates.some((candidate) => matchesAntPatterns(candidate, filterPatterns));
-      });
-
-      const summary = createSummary();
-      filteredProjects.forEach((project) => {
-        summary.total += 1;
-        if (project.visibility === "public") {
-          summary.publicCount += 1;
-        }
-        if (project.archived) {
-          summary.archivedCount += 1;
-        }
-      });
-
-
-      const tree = buildGitLabTree(groups, filteredProjects);
       if (!session) {
         const defaultBaseDir = mergedOptions.baseDir ?? "repos";
         const resolvedUserName = mergedOptions.username?.trim() || undefined;
         const resolvedUserEmail = mergedOptions.userEmail?.trim() || undefined;
         const resolvedPaths = resolveLocalPathConflicts(filteredProjects);
-       await ensureLocalDirsIfNeeded(filteredProjects, defaultBaseDir, mergedOptions.prepareLocalDirs ?? false);
-       const statusEntries = await Promise.all(
-         filteredProjects.map(async (project) => {
-           const targetPath = path.join(defaultBaseDir, resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project));
-           const status = await resolveRepoStatus({
-             targetPath,
-             defaultBranch: project.default_branch,
-             knownRemote: true,
-           });
-           return [project.id, status] as const;
-         })
-       );
-       const statusMap = Object.fromEntries(statusEntries) as Record<number, RepoSyncStatus>;
-       const knownPaths = new Set(
-         filteredProjects.map((project) =>
-           path.join(defaultBaseDir, resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project))
-         )
-       );
-       const localScan = await buildLocalStatusMap(defaultBaseDir, knownPaths);
-       const treeNodes = buildHierarchyTree(filteredProjects, statusMap, localScan.localPaths, localScan.statusMap);
-       renderTreeLines(header, treeNodes).forEach((line) => console.log(line));
-       Object.values(statusMap).forEach((status) => {
-         summary.byStatus[status.state] += 1;
-       });
-       if (!mergedOptions.noSummary) {
-         Object.values(localScan.statusMap).forEach((status) => {
-           summary.byStatus[status.state] += 1;
-         });
-       }
-       if (!mergedOptions.noSummary) {
-         renderSummaryLines(summary).forEach((line) => logInfo(line));
-       }
+        const knownPaths = new Set(
+          filteredProjects.map((project) =>
+            path.join(defaultBaseDir, resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project))
+          )
+        );
+        const localScan = await buildLocalStatusMap(defaultBaseDir, knownPaths);
+        const treeNodes = buildHierarchyTree(filteredProjects, statusMap, localScan.localPaths, localScan.statusMap);
+        renderTreeLines(header, treeNodes).forEach((line) => console.log(line));
+        const summary = createSummary();
+        summary.total = filteredProjects.length;
+        summary.publicCount = filteredProjects.filter((p) => p.visibility === "public").length;
+        summary.archivedCount = filteredProjects.filter((p) => p.archived).length;
+        Object.values(statusMap).forEach((status) => {
+          summary.byStatus[status.state] += 1;
+        });
+        if (!mergedOptions.noSummary) {
+          Object.values(localScan.statusMap).forEach((status) => {
+            summary.byStatus[status.state] += 1;
+          });
+        }
+        if (!mergedOptions.noSummary) {
+          renderSummaryLines(summary).forEach((line) => logInfo(line));
+        }
 
-        const syncSpecs = resolveSyncReposSpecs(mergedOptions.syncRepos);
-        if (syncSpecs.length > 0) {
-          const resolvedPaths = resolveLocalPathConflicts(filteredProjects);
-          const syncTargets = resolveSyncTargets(filteredProjects, syncSpecs)
-            .map((target) => {
-              const resolvedTargetPath = resolvedPaths.get(target.id);
-              return {
-                ...target,
-                localPath: path.join(defaultBaseDir, resolvedTargetPath ?? target.pathWithNamespace),
-                gitUserName: resolvedUserName,
-                gitUserEmail: resolvedUserEmail,
-              };
-            })
-            .sort((a, b) =>
-              `${a.pathWithNamespace}#${a.branch ?? ""}`.localeCompare(
-                `${b.pathWithNamespace}#${b.branch ?? ""}`,
-                "pt-BR",
-                { sensitivity: "base" }
-              )
-            );
-          if (syncTargets.length === 0) {
-            console.log(t("cli.log.syncNoMatch"));
-            return;
-          }
-          const tituloSync = colorize(t("cli.sync.title"), "yellow");
-          const totalLabel = colorize(String(syncTargets.length), "cyan");
-          const dryRunBadge = mergedOptions.dryRun ? ` ${colorize("DRY-RUN", "magenta")}` : "";
-          const concurrency = resolveParallels(mergedOptions.parallels);
-          const concurrencyLabel =
-            concurrency === "auto" ? colorize(t("cli.sync.concurrencyAuto"), "cyan") : colorize(String(concurrency), "cyan");
-          console.log(t("cli.sync.start", { title: tituloSync, total: totalLabel, concurrency: concurrencyLabel, dryRun: dryRunBadge }));
+        if (mergedOptions.syncRepos) {
+          let totalCount = 0;
           let completedCount = 0;
-          const totalCount = syncTargets.length;
+          let syncStartAt = 0;
+          const allResults: Array<{ status: string; message?: string; target: { id: number; pathWithNamespace: string; branch?: string; localPath: string; defaultBranch?: string | null } }> = [];
           const workerLines = new Map<number, string>();
-          const workerStates = new Map<
-            number,
-            { line: string; targetPath?: string; percent?: number; objectsReceived?: number }
-          >();
           const targetWorkerMap = new Map<string, number>();
-          const completedTargets = new Set<string>();
-          const lastPrinted = new Map<number, { percent?: number; objectsReceived?: number; line?: string }>();
-          const historyLines: string[] = [];
           const targetLastUpdateAt = new Map<string, number>();
           const targetLastLine = new Map<string, string>();
           const startedTargets = new Set<string>();
@@ -2284,93 +1852,8 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
               speed?: string;
             }
           >();
-          let overallLine = "";
-          const useTty = false;
-          const progressLineCount =
-            concurrency === "auto" ? Math.min(syncTargets.length, resolveConcurrency()) : Number(concurrency ?? 1);
           const progressWidth = 20;
-          if (useTty) {
-            for (let index = 1; index <= progressLineCount; index += 1) {
-              const placeholder = colorize(t("cli.sync.workerLabel", { index: index.toString().padStart(2, "0") }), "white");
-              const line = `${placeholder} ${t("cli.sync.workerWaiting")}`;
-              workerLines.set(index, line);
-              workerStates.set(index, { line });
-            }
-            workerLines.forEach((line) => console.log(line));
-            overallLine = "";
-            console.log(overallLine);
-          }
-          let blockLines = workerLines.size + 1;
-          const saveCursor = (): void => {
-            if (!useTty) {
-              return;
-            }
-            process.stdout.write("\u001b[s");
-          };
-          const restoreCursor = (): void => {
-            if (!useTty) {
-              return;
-            }
-            process.stdout.write("\u001b[u");
-          };
-          if (useTty) {
-            saveCursor();
-          }
-          const renderBlock = (nextOverallLine?: string): void => {
-            if (!useTty) {
-              return;
-            }
-            if (nextOverallLine !== undefined) {
-              overallLine = nextOverallLine;
-            }
-            restoreCursor();
-            const moveUp = Math.max(0, blockLines - 1);
-            if (moveUp > 0) {
-              process.stdout.write(`\u001b[${moveUp}A`);
-            }
-            historyLines.forEach((content) => {
-              process.stdout.write(`\r\u001b[2K${content}\n`);
-            });
-            workerLines.forEach((content) => {
-              process.stdout.write(`\r\u001b[2K${content}\n`);
-            });
-            process.stdout.write(`\r\u001b[2K${overallLine}\n`);
-            blockLines = historyLines.length + workerLines.size + 1;
-            saveCursor();
-          };
-          const writeLine = (line: string): void => {
-            if (useTty) {
-              console.log(line);
-              return;
-            }
-            console.log(line);
-          };
-          const appendHistoryLine = (line: string): void => {
-            if (!useTty) {
-              const last = lastPrinted.get(-1);
-              if (last?.line === line) {
-                return;
-              }
-              lastPrinted.set(-1, { line });
-              console.log(line);
-              return;
-            }
-            historyLines.push(line);
-            renderBlock();
-          };
-          const shouldPrintProgress = (workerId: number, percent?: number, objectsReceived?: number, line?: string): boolean => {
-            const previous = lastPrinted.get(workerId);
-            if (previous?.line === line) {
-              return false;
-            }
-            const percentChanged = percent !== undefined && percent !== previous?.percent;
-            const objectsChanged = objectsReceived !== undefined && objectsReceived !== previous?.objectsReceived;
-            if (!percentChanged && !objectsChanged) {
-              return false;
-            }
-            lastPrinted.set(workerId, { percent, objectsReceived, line });
-            return true;
-          };
+          const writeLine = (line: string): void => { console.log(line); };
           const renderProgressBar = (current: number, total: number): string => {
             const width = 20;
             const ratio = total === 0 ? 1 : current / total;
@@ -2378,186 +1861,81 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
             const empty = Math.max(0, width - filled);
             return `[${"#".repeat(filled)}${"-".repeat(empty)}]`;
           };
-          const buildWorkerPlaceholder = (workerId: number): string => {
-            const workerLabel = colorize(
-              t("cli.sync.workerLabel", { index: workerId.toString().padStart(2, "0") }),
-              "white"
-            );
-            return `${workerLabel} ${t("cli.sync.workerWaiting")}`;
-          };
-          const formatTransferDetail = (options: {
-            progress?: {
-              objectsReceived?: number;
-              objectsTotal?: number;
-              transferred?: string;
-              speed?: string;
-            };
-            status: "cloned" | "pulled" | "pushed" | "skipped" | "failed";
-            message?: string;
-          }): string => {
-            if (options.status === "failed") {
-              return options.message ? ` (${options.message})` : ` (${t("cli.errors.unknown")})`;
-            }
-            const parts: string[] = [];
-            const received = options.progress?.objectsReceived;
-            const total = options.progress?.objectsTotal;
-            if (total || received) {
-              if (total) {
-                parts.push(t("cli.progress.objectsCopied", { received: received ?? 0, total }));
-              } else {
-                parts.push(t("cli.progress.objectsCopiedSingle", { received: received ?? 0 }));
-              }
-            }
-            if (options.progress?.transferred) {
-              parts.push(options.progress.transferred);
-            }
-            if (options.progress?.speed) {
-              parts.push(t("cli.progress.speed", { speed: options.progress.speed }));
-            }
-            if (parts.length === 0) {
-              return "";
-            }
-            return ` ${parts.join(", ")}`;
-          };
-          const parseMiB = (value?: string, isSpeed = false): string => {
-            if (!value) {
-              return "--";
-            }
-            const trimmed = value.trim();
-            const cleaned = isSpeed ? trimmed.replace("/s", "") : trimmed;
-            const match = cleaned.match(/^([\d.,]+)\s*(KiB|MiB|GiB)$/i);
-            if (!match) {
-              return "--";
-            }
-            const raw = Number(match[1].replace(",", "."));
-            if (Number.isNaN(raw)) {
-              return "--";
-            }
-            const unit = match[2].toLowerCase();
-            const inMiB =
-              unit === "kib" ? raw / 1024 : unit === "gib" ? raw * 1024 : raw;
-            const label = inMiB.toFixed(2);
-            return isSpeed ? `${label} MiB/s` : `${label} MiB`;
-          };
-          const formatObjects = (progress?: { objectsReceived?: number; objectsTotal?: number }): string => {
-            if (!progress) {
-              return "--";
-            }
-            if (progress.objectsTotal) {
-              return `${progress.objectsReceived ?? 0}/${progress.objectsTotal}`;
-            }
-            if (progress.objectsReceived) {
-              return String(progress.objectsReceived);
-            }
-            return "--";
-          };
-          const formatRepoLabel = (value: string, width: number): string => {
-            if (value.length <= width) {
-              return value.padEnd(width, " ");
-            }
-            return `${value.slice(0, Math.max(0, width - 1))}…`;
-          };
-          const syncStartAt = Date.now();
-          const syncResults = await parallelSync(
-            syncTargets,
-            {
-              concurrency,
-              shallow: false,
-              dryRun: mergedOptions.dryRun ?? false,
-              logger: logToTuiPlain,
-            },
-            (result) => {
-              completedCount += 1;
-              const branchLabel = result.target.branch ? `#${result.target.branch}` : "";
-              const actionLabelRaw =
-                result.status === "skipped" ? t("cli.summary.statusNoAction") : result.status.toUpperCase();
-              const actionColor =
-                result.status === "cloned"
-                  ? "green"
-                  : result.status === "pulled"
-                  ? "cyan"
-                  : result.status === "pushed"
-                  ? "blue"
-                  : result.status === "failed"
-                  ? "red"
-                  : "yellow";
-              const actionLabel = colorize(actionLabelRaw, actionColor);
-              const prefix = mergedOptions.dryRun ? `${colorize("DRY-RUN", "magenta")} ` : "";
-              const bar = renderProgressBar(completedCount, totalCount);
-              const counter = colorize(`${completedCount}/${totalCount}`, "white");
-              const targetKey = `${result.target.pathWithNamespace}${branchLabel}`;
-              const progressSnapshot = targetProgress.get(targetKey);
-              if (progressSnapshot?.objectsTotal && (progressSnapshot.objectsReceived ?? 0) < progressSnapshot.objectsTotal) {
-                progressSnapshot.objectsReceived = progressSnapshot.objectsTotal;
-                targetProgress.set(targetKey, progressSnapshot);
-              }
-              const detail = formatTransferDetail({
-                progress: targetProgress.get(targetKey),
-                status: result.status,
-                message: result.message,
-              });
-              const workerId = targetWorkerMap.get(targetKey);
-              if (workerId) {
-                if (useTty) {
-                  const workerLabel = colorize(
-                    t("cli.sync.workerLabel", { index: workerId.toString().padStart(2, "0") }),
-                    "white"
-                  );
-                  const doneLabel = colorize(t("cli.sync.progressComplete"), "cyan");
-                  const doneLine = `${workerLabel} [${"#".repeat(progressWidth)}] ${doneLabel} -- -- ${actionLabel} ${result.target.pathWithNamespace}${detail}`;
-                  if (!completedTargets.has(targetKey)) {
-                    completedTargets.add(targetKey);
-                    appendHistoryLine(doneLine);
-                  }
-                  const placeholder = buildWorkerPlaceholder(workerId);
-                  workerLines.set(workerId, placeholder);
-                  workerStates.set(workerId, { line: placeholder });
+          await core.syncSelected({
+            config: mergedOptions,
+            logger: logBroker,
+            tree,
+            handlers: {
+              onBegin: (count) => {
+                totalCount = count;
+                syncStartAt = Date.now();
+                const tituloSync = colorize(t("cli.sync.title"), "yellow");
+                const totalLabel = colorize(String(totalCount), "cyan");
+                const dryRunBadge = mergedOptions.dryRun ? ` ${colorize("DRY-RUN", "magenta")}` : "";
+                const concurrency = resolveParallels(mergedOptions.parallels);
+                const concurrencyLabel =
+                  concurrency === "auto" ? colorize(t("cli.sync.concurrencyAuto"), "cyan") : colorize(String(concurrency), "cyan");
+                console.log(t("cli.sync.start", { title: tituloSync, total: totalLabel, concurrency: concurrencyLabel, dryRun: dryRunBadge }));
+              },
+              onResult: (result) => {
+                allResults.push(result);
+                completedCount += 1;
+                const branchLabel = result.target.branch ? `#${result.target.branch}` : "";
+                const actionLabelRaw =
+                  result.status === "skipped" ? t("cli.summary.statusNoAction") : result.status.toUpperCase();
+                const actionColor =
+                  result.status === "cloned"
+                    ? "green"
+                    : result.status === "pulled"
+                    ? "cyan"
+                    : result.status === "pushed"
+                    ? "blue"
+                    : result.status === "failed"
+                    ? "red"
+                    : "yellow";
+                const actionLabel = colorize(actionLabelRaw, actionColor);
+                const prefix = mergedOptions.dryRun ? `${colorize("DRY-RUN", "magenta")} ` : "";
+                const bar = renderProgressBar(completedCount, totalCount);
+                const counter = colorize(`${completedCount}/${totalCount}`, "white");
+                const targetKey = `${result.target.pathWithNamespace}${branchLabel}`;
+                const progressSnapshot = targetProgress.get(targetKey);
+                if (progressSnapshot?.objectsTotal && (progressSnapshot.objectsReceived ?? 0) < progressSnapshot.objectsTotal) {
+                  progressSnapshot.objectsReceived = progressSnapshot.objectsTotal;
+                  targetProgress.set(targetKey, progressSnapshot);
                 }
-              }
-              if (useTty) {
-                renderBlock(
-                  `${bar} ${counter} ${prefix}${result.target.pathWithNamespace}${branchLabel} ${actionLabel}${detail}`
-                );
-              } else {
+                const detail = formatTransferDetail({
+                  progress: targetProgress.get(targetKey),
+                  status: result.status as "cloned" | "pulled" | "pushed" | "skipped" | "failed",
+                  message: result.message,
+                });
                 console.log(`${bar} ${counter} ${prefix}${result.target.pathWithNamespace}${branchLabel} ${actionLabel}${detail}`);
-              }
-            },
-            (event) => {
-              if (!workerLines.has(event.workerId)) {
-                if (!useTty) {
+              },
+              onProgress: (event) => {
+                if (!workerLines.has(event.workerId)) {
                   const placeholder = colorize(
                     t("cli.sync.workerLabel", { index: event.workerId.toString().padStart(2, "0") }),
                     "white"
                   );
                   workerLines.set(event.workerId, `${placeholder} ${t("cli.sync.workerWaiting")}`);
-                  workerStates.set(event.workerId, { line: `${placeholder} ${t("cli.sync.workerWaiting")}` });
-                } else {
-                  return;
                 }
-              }
-              const workerLabel = colorize(
-                t("cli.sync.workerLabel", { index: event.workerId.toString().padStart(2, "0") }),
-                "white"
-              );
-              const branchLabel = event.target.branch ? `#${event.target.branch}` : "";
-              const targetKey = `${event.target.pathWithNamespace}${branchLabel}`;
-              targetWorkerMap.set(targetKey, event.workerId);
-              const previousProgress = targetProgress.get(targetKey);
-              const nextObjectsReceived = Math.max(
-                previousProgress?.objectsReceived ?? 0,
-                event.objectsReceived ?? 0
-              );
-              const nextObjectsTotal = Math.max(
-                previousProgress?.objectsTotal ?? 0,
-                event.objectsTotal ?? 0
-              );
-              targetProgress.set(targetKey, {
-                objectsReceived: nextObjectsReceived || undefined,
-                objectsTotal: nextObjectsTotal || undefined,
-                transferred: event.transferred ?? previousProgress?.transferred,
-                speed: event.speed ?? previousProgress?.speed,
-              });
-              if (!useTty) {
+                const branchLabel = event.target.branch ? `#${event.target.branch}` : "";
+                const targetKey = `${event.target.pathWithNamespace}${branchLabel}`;
+                targetWorkerMap.set(targetKey, event.workerId);
+                const previousProgress = targetProgress.get(targetKey);
+                const nextObjectsReceived = Math.max(
+                  previousProgress?.objectsReceived ?? 0,
+                  event.objectsReceived ?? 0
+                );
+                const nextObjectsTotal = Math.max(
+                  previousProgress?.objectsTotal ?? 0,
+                  event.objectsTotal ?? 0
+                );
+                targetProgress.set(targetKey, {
+                  objectsReceived: nextObjectsReceived || undefined,
+                  objectsTotal: nextObjectsTotal || undefined,
+                  transferred: event.transferred ?? previousProgress?.transferred,
+                  speed: event.speed ?? previousProgress?.speed,
+                });
                 const now = Date.now();
                 if (!startedTargets.has(targetKey)) {
                   startedTargets.add(targetKey);
@@ -2581,51 +1959,11 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
                 targetLastLine.set(targetKey, line);
                 targetLastUpdateAt.set(targetKey, now);
                 console.log(line);
-                return;
-              }
-              const line = `${workerLabel} ${renderWorkerLine(event, progressWidth)}`;
-              const currentState = workerStates.get(event.workerId);
-              if (currentState?.line === line) {
-                return;
-              }
-              if (completedTargets.has(targetKey)) {
-                return;
-              }
-              if (event.percent === 100) {
-                return;
-              }
-              const percent = event.percent ?? currentState?.percent ?? 0;
-              const objectsReceived = event.objectsReceived ?? currentState?.objectsReceived ?? 0;
-              if (currentState?.targetPath === event.target.pathWithNamespace) {
-                const samePercent = percent === currentState.percent;
-                const sameObjects = objectsReceived === currentState.objectsReceived;
-                if (samePercent && sameObjects) {
-                  return;
-                }
-              }
-              workerStates.set(event.workerId, {
-                line,
-                targetPath: event.target.pathWithNamespace,
-                percent,
-                objectsReceived,
-              });
-              workerLines.set(event.workerId, line);
-              renderBlock();
-            }
-          );
-          if (useTty) {
-            workerLines.forEach((line, workerId) => {
-              const placeholder = buildWorkerPlaceholder(workerId);
-              if (line === placeholder) {
-                return;
-              }
-              workerLines.set(workerId, placeholder);
-            });
-            overallLine = "";
-            renderBlock("");
-          }
+              },
+            },
+          });
           const syncDurationMs = Date.now() - syncStartAt;
-          const counts = syncResults.reduce(
+          const counts = allResults.reduce(
             (acc, result) => {
               acc.total += 1;
               if (result.status === "cloned") {
@@ -2656,7 +1994,7 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
               `${colorize(t("cli.sync.summary.failed"), "red")} ${colorize(String(counts.failed), "red")}`
           );
           writeLine("");
-          const orderedResults = [...syncResults].sort((a, b) =>
+          const orderedResults = [...allResults].sort((a, b) =>
             `${a.target.pathWithNamespace}#${a.target.branch ?? ""}`.localeCompare(
               `${b.target.pathWithNamespace}#${b.target.branch ?? ""}`,
               "pt-BR",
@@ -2696,10 +2034,10 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
             }
           });
           if (process.stdout.isTTY) {
-            process.stdout.write("\r\u001b[2K");
+            process.stdout.write("\r[2K");
           }
           if (process.stderr.isTTY) {
-            process.stderr.write("\r\u001b[2K");
+            process.stderr.write("\r[2K");
           }
         }
         return;
@@ -2707,19 +2045,6 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
 
       const defaultBaseDir = mergedOptions.baseDir ?? "repos";
       const resolvedPaths = resolveLocalPathConflicts(filteredProjects);
-      await ensureLocalDirsIfNeeded(filteredProjects, defaultBaseDir, mergedOptions.prepareLocalDirs ?? false);
-      const statusEntries = await Promise.all(
-        filteredProjects.map(async (project) => {
-          const targetPath = path.join(defaultBaseDir, resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project));
-          const status = await resolveRepoStatus({
-            targetPath,
-            defaultBranch: project.default_branch,
-            knownRemote: true,
-          });
-          return [project.id, status] as const;
-        })
-      );
-      const statusMap = Object.fromEntries(statusEntries) as Record<number, RepoSyncStatus>;
       const knownPaths = new Set(
         filteredProjects.map((project) =>
           path.join(defaultBaseDir, resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project))
@@ -2728,6 +2053,10 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
       const localScan = mergedOptions.noSummary
         ? { localPaths: [], statusMap: {} as Record<string, RepoSyncStatus> }
         : await buildLocalStatusMap(defaultBaseDir, knownPaths);
+      const summary = createSummary();
+      summary.total = filteredProjects.length;
+      summary.publicCount = filteredProjects.filter((p) => p.visibility === "public").length;
+      summary.archivedCount = filteredProjects.filter((p) => p.archived).length;
       Object.values(statusMap).forEach((status) => {
         summary.byStatus[status.state] += 1;
       });
@@ -2737,24 +2066,24 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
         });
         renderSummaryLines(summary).forEach((line) => logInfo(line));
       }
-      const projectNodeMap = new Map<number, string>();
-      const applyStatusToTree = (node: GitLabTreeNode): void => {
-        if (node.type === "project" && node.project) {
-          node.status = statusMap[node.project.id];
-          node.localPath = path.join(
-            defaultBaseDir,
-            resolvedPaths.get(node.project.id) ?? resolveProjectLocalPath(node.project)
-          );
-          projectNodeMap.set(node.project.id, node.id);
-          return;
-        }
-        node.children?.forEach((child) => applyStatusToTree(child));
-      };
-      tree.forEach((node) => applyStatusToTree(node));
-      applyInitialSelectionFromStatusMap(tree, statusMap);
+      tree.forEach((node) => buildProjectNodeMap(node));
 
-      let treeProgress: TuiTreeProgress | null = null;
-      const treeProgressRef = (): TuiTreeProgress | null => treeProgress;
+      const cwdGitRoot = await runGit(["rev-parse", "--show-toplevel"]).then((s) => s.trim()).catch(() => "");
+      let initialSelectedNodeId: string | undefined;
+      if (cwdGitRoot) {
+        const normalizedCwdRoot = path.resolve(cwdGitRoot);
+        const findNodeByLocalPath = (nodeList: GitLabTreeNode[]): string | undefined => {
+          for (const node of nodeList) {
+            if (node.type === "project" && node.localPath && path.resolve(node.localPath) === normalizedCwdRoot) {
+              return node.id;
+            }
+            const found = node.children ? findNodeByLocalPath(node.children) : undefined;
+            if (found) return found;
+          }
+          return undefined;
+        };
+        initialSelectedNodeId = findNodeByLocalPath(tree);
+      }
       const resolveResultLabel = (status: SyncResult["status"]): string => {
         if (status === "cloned") {
           return t("cli.sync.resultStatus.cloned");
@@ -2784,8 +2113,11 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
         header,
         footer: t("tui.tree.orientationConfirm"),
         parameters: session?.getParameters() ?? parametersSummary,
+        envFilePath: mergedOptions.envFile,
+        initialSelectedNodeId,
         onReady: (handlers) => {
           treeProgress = handlers.progress;
+          flushPendingStatuses();
           handlers.render();
         },
         onConfirm: async (selection: TuiSelectionResult) => {
@@ -2882,117 +2214,70 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
             }
           }
 
-          if (selected.length === 0) {
-            if (!hasRemovalCandidate) {
-              logBroker.warn(t("cli.sync.noneSelected"));
-            }
-            return;
-          }
-
-          const resolvedUserName = mergedOptions.username?.trim() || undefined;
-          const resolvedUserEmail = mergedOptions.userEmail?.trim() || undefined;
-          const syncSpecs = selectionMode === "single" ? [] : resolveSyncReposSpecs(mergedOptions.syncRepos);
-          const syncTargets = syncSpecs.length > 0
-            ? resolveSyncTargets(selected, syncSpecs).map((target) => ({
-                ...target,
-                localPath: path.join(defaultBaseDir, resolvedPaths.get(target.id) ?? target.pathWithNamespace),
-                gitUserName: resolvedUserName,
-                gitUserEmail: resolvedUserEmail,
-              }))
-            : prepareTargets(selected, defaultBaseDir, resolvedUserName, resolvedUserEmail).map((target) => ({
-                ...target,
-                localPath: path.join(defaultBaseDir, resolvedPaths.get(target.id) ?? target.pathWithNamespace),
-              }));
-
-          if (selectionMode === "single") {
-            const validIds = new Set(selectionNodes.map((node) => node.project?.id).filter(Boolean) as number[]);
-            const filteredTargets = syncTargets.filter((target) => validIds.has(target.id));
-            syncTargets.length = 0;
-            syncTargets.push(...filteredTargets);
-          }
-
-          if (syncTargets.length === 0) {
-            logBroker.warn(t("cli.sync.noSyncMatches"));
-            return;
-          }
-
-          const concurrency = resolveParallels(mergedOptions.parallels);
-          const dryRunBadge = mergedOptions.dryRun ? "DRY-RUN" : "";
-          logBroker.info(
-            t("cli.sync.start", {
-              title: t("cli.sync.title"),
-              total: String(syncTargets.length),
-              concurrency: concurrency === "auto" ? t("cli.sync.concurrencyAuto") : String(concurrency),
-              dryRun: dryRunBadge,
-            })
-          );
-
+          const counts = { total: 0, cloned: 0, pulled: 0, pushed: 0, skipped: 0, failed: 0 };
           const startedTargets = new Set<number>();
-          const syncResults = await parallelSync(
-            syncTargets,
-            {
-              concurrency,
-              shallow: false,
-              dryRun: mergedOptions.dryRun ?? false,
-              logger: (message, level) => logBroker.log(level ?? "info", message),
-            },
-            async (result) => {
-              logBroker.info(
-                t("cli.sync.repoDone", {
-                  repo: result.target.pathWithNamespace,
-                  status: resolveResultLabel(result.status),
-                })
-              );
-              const nodeId = projectNodeMap.get(result.target.id);
-              if (nodeId) {
-                treeProgressRef()?.clearProgress(nodeId);
-              }
-              const status = await resolveRepoStatus({
-                targetPath: result.target.localPath,
-                defaultBranch: result.target.defaultBranch,
-                knownRemote: true,
-              }).catch(() => undefined);
-              if (status && nodeId) {
-                treeProgressRef()?.updateStatus(nodeId, status);
-              }
-            },
-            (event) => {
-              if (!startedTargets.has(event.target.id)) {
-                startedTargets.add(event.target.id);
-                const phaseLabel = event.phase === "check" ? t("cli.sync.phaseCheck") : event.phase.toUpperCase();
+          await core.syncSelected({
+            config: mergedOptions,
+            logger: logBroker,
+            tree,
+            selectedProjects: selectionMode === "single" ? selected : undefined,
+            handlers: {
+              onBegin: (totalCount) => {
+                const concurrency = resolveParallels(mergedOptions.parallels);
                 logBroker.info(
-                  t("cli.sync.repoStart", {
-                    repo: event.target.pathWithNamespace,
-                    phase: phaseLabel,
+                  t("cli.sync.start", {
+                    title: t("cli.sync.title"),
+                    total: String(totalCount),
+                    concurrency: concurrency === "auto" ? t("cli.sync.concurrencyAuto") : String(concurrency),
+                    dryRun: mergedOptions.dryRun ? "DRY-RUN" : "",
                   })
                 );
-              }
-              const nodeId = projectNodeMap.get(event.target.id);
-              if (!nodeId) {
-                return;
-              }
-              treeProgressRef()?.updateProgress(nodeId, buildProgressLabel(event));
-            }
-          );
-
-          const counts = syncResults.reduce(
-            (acc, result) => {
-              acc.total += 1;
-              if (result.status === "cloned") {
-                acc.cloned += 1;
-              } else if (result.status === "pulled") {
-                acc.pulled += 1;
-              } else if (result.status === "pushed") {
-                acc.pushed += 1;
-              } else if (result.status === "skipped") {
-                acc.skipped += 1;
-              } else if (result.status === "failed") {
-                acc.failed += 1;
-              }
-              return acc;
+              },
+              onResult: async (result) => {
+                counts.total += 1;
+                if (result.status === "cloned") counts.cloned += 1;
+                else if (result.status === "pulled") counts.pulled += 1;
+                else if (result.status === "pushed") counts.pushed += 1;
+                else if (result.status === "skipped") counts.skipped += 1;
+                else if (result.status === "failed") counts.failed += 1;
+                logBroker.info(
+                  t("cli.sync.repoDone", {
+                    repo: result.target.pathWithNamespace,
+                    status: resolveResultLabel(result.status as SyncResult["status"]),
+                  })
+                );
+                const nodeId = projectNodeMap.get(result.target.id);
+                if (nodeId) {
+                  treeProgressRef()?.clearProgress(nodeId);
+                }
+                const status = await resolveRepoStatus({
+                  targetPath: result.target.localPath,
+                  defaultBranch: result.target.defaultBranch,
+                  knownRemote: true,
+                }).catch(() => undefined);
+                if (status && nodeId) {
+                  treeProgressRef()?.updateStatus(nodeId, status);
+                }
+              },
+              onProgress: (event) => {
+                if (!startedTargets.has(event.target.id)) {
+                  startedTargets.add(event.target.id);
+                  const phaseLabel = event.phase === "check" ? t("cli.sync.phaseCheck") : event.phase.toUpperCase();
+                  logBroker.info(
+                    t("cli.sync.repoStart", {
+                      repo: event.target.pathWithNamespace,
+                      phase: phaseLabel,
+                    })
+                  );
+                }
+                const nodeId = projectNodeMap.get(event.target.id);
+                if (!nodeId) {
+                  return;
+                }
+                treeProgressRef()?.updateProgress(nodeId, buildProgressLabel(event));
+              },
             },
-            { total: 0, cloned: 0, pulled: 0, pushed: 0, skipped: 0, failed: 0 }
-          );
+          });
           logBroker.info(t("cli.sync.summaryTitle"));
           logBroker.info(
             `${t("cli.sync.summary.total")} ${counts.total}  ` +
@@ -3016,7 +2301,9 @@ export const configureSshKeyStoreCommand = (program: Command, session?: TuiSessi
     .option("-v, --verbose", t("cli.command.gitServerStore.options.verbose"), false)
     .option("--server-name <name>", t("cli.command.gitServerStore.options.serverName"))
     .option("--base-url <url>", t("cli.command.gitServerStore.options.baseUrl"))
+    .option("--server-type <type>", t("cli.command.gitServerStore.options.serverType"))
     .option("--username <username>", t("cli.command.gitServerStore.options.username"))
+    .option("--token <token>", t("cli.command.gitServerStore.options.token"))
     .option("--key-label <label>", t("cli.command.gitServerStore.options.keyLabel"), "paje")
     .option("--passphrase <passphrase>", t("cli.command.gitServerStore.options.passphrase"))
     .option("--public-key-path <path>", t("cli.command.gitServerStore.options.publicKeyPath"))
@@ -3027,6 +2314,14 @@ export const configureSshKeyStoreCommand = (program: Command, session?: TuiSessi
     .option("--token-name <name>", t("cli.command.gitServerStore.options.tokenName"))
     .option("--token-scopes <scopes>", t("cli.command.gitServerStore.options.tokenScopes"))
     .option("--token-expires-at <date>", t("cli.command.gitServerStore.options.tokenExpiresAt"))
+    .option("--use-basic-auth", t("cli.command.gitServerStore.options.useBasicAuth"), false)
+    .option("--user-email <email>", t("cli.command.gitServerStore.options.userEmail"))
+    .option("--password <password>", t("cli.command.gitServerStore.options.password"))
+    .option("--base-dir <dir>", t("cli.command.gitServerStore.options.baseDir"))
+    .option("--no-public-repos [value]", t("cli.command.gitServerStore.options.noPublicRepos"), false)
+    .option("--no-archived-repos [value]", t("cli.command.gitServerStore.options.noArchivedRepos"), false)
+    .option("-f, --filter <pattern>", t("cli.command.gitServerStore.options.filter"))
+    .option("--sync-repos <pattern>", t("cli.command.gitServerStore.options.syncRepos"))
     .option("--locale <locale>", t("cli.command.gitServerStore.options.locale"))
     .action(async (options: SshKeyStoreCliOptions) => {
       setLocale(options.locale);
@@ -3042,15 +2337,43 @@ export const configureSshKeyStoreCommand = (program: Command, session?: TuiSessi
       const baseUrl = String(sshKeyParameters.parameters.find((param) => param.name === "baseUrl")?.value ?? "");
       const serverName = String(sshKeyParameters.parameters.find((param) => param.name === "serverName")?.value ?? "");
       const username = String(sshKeyParameters.parameters.find((param) => param.name === "username")?.value ?? "");
+
+      const serverTypeCli = options.serverType?.toLowerCase();
+      let resolvedType: "gitlab" | "github";
+      if (serverTypeCli === "github") {
+        resolvedType = "github";
+      } else if (serverTypeCli === "gitlab") {
+        resolvedType = "gitlab";
+      } else {
+        if (serverTypeCli) {
+          console.warn(t("cli.prompt.github.unknownType", { type: serverTypeCli }));
+        }
+        resolvedType = detectServerType(baseUrl);
+      }
+
       const server: GitServerEntry = {
         id: baseUrl,
         name: serverName,
         baseUrl,
-        useBasicAuth: true,
+        type: resolvedType,
+        useBasicAuth: options.useBasicAuth ?? false,
         username,
+        userEmail: options.userEmail,
+        baseDir: options.baseDir,
+        noPublicRepos: options.noPublicRepos,
+        noArchivedRepos: options.noArchivedRepos,
+        filter: options.filter,
+        syncRepos: options.syncRepos,
+        tokenName: options.tokenName,
+        tokenScopes: options.tokenScopes,
+        tokenExpiresAt: options.tokenExpiresAt,
       };
 
-      await storeSshKeyOnly(server, session, options);
+      if (resolvedType === "github") {
+        await storeGitHubServer(server, session, options);
+      } else {
+        await storeSshKeyOnly(server, session, options);
+      }
     });
 
   program

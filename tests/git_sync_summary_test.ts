@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { Command } from "commander";
 import { configureGitSyncCommand } from "../src/modules/git/gitCommand.js";
 import { writeGitServers } from "../src/modules/git/persistence.js";
@@ -78,10 +79,10 @@ const resolveApiResponse = (url: string): Response => {
       );
     }
     if (url.includes("/api/v4/projects")) {
-      return new Response(
-        JSON.stringify(mainProjects.filter((project) => project.visibility !== "public")),
-        { status: 200, headers: { "content-type": "application/json" } }
-      );
+      return new Response(JSON.stringify(mainProjects), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
     }
   }
   if (url.startsWith("https://gitlab.dev.local")) {
@@ -95,10 +96,10 @@ const resolveApiResponse = (url: string): Response => {
       );
     }
     if (url.includes("/api/v4/projects")) {
-      return new Response(
-        JSON.stringify(devProjects.filter((project) => project.visibility !== "public")),
-        { status: 200, headers: { "content-type": "application/json" } }
-      );
+      return new Response(JSON.stringify(devProjects), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
     }
   }
   return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
@@ -116,7 +117,7 @@ const runSummaryTests = async (): Promise<void> => {
 
   const originalHome = process.env.HOME;
   const originalArgv = process.argv;
-  process.env.HOME = "/tmp/paje-tests";
+  process.env.HOME = fs.mkdtempSync(path.join(os.tmpdir(), "paje-summary-home-"));
   const homeDir = process.env.HOME;
   const sshDir = path.join(homeDir, ".ssh");
   fs.mkdirSync(sshDir, { recursive: true });

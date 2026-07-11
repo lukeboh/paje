@@ -3,8 +3,10 @@ import path from "node:path";
 import { t } from "../../../i18n/index.js";
 import { GitLabApi } from "../gitlabApi.js";
 import { parallelSync, runGit, type ProgressEvent } from "../parallelSync.js";
-import { splitFilterPatterns } from "../patternFilter.js";
-import { readGitServers, writeGitServers } from "../persistence.js";
+import { antPatternToRegex, compileAntPatterns, matchesAntPatterns, splitFilterPatterns } from "../patternFilter.js";
+import { resolveLocalPathConflicts, resolveProjectLocalPath } from "../gitPathUtils.js";
+import { readGitServers, writeGitServers, readGitTreeCache, writeGitTreeCache } from "../persistence.js";
+import { GitHubApi } from "../githubApi.js";
 import {
   addHostToKnownHosts,
   getIdentityFileForHost,
@@ -34,6 +36,8 @@ import type {
   GitLabProject,
   GitLabTreeNode,
   GitRepositoryTarget,
+  GitTreeCacheEntry,
+  RepoSyncState,
   RepoSyncStatus,
 } from "../types.js";
 import { LoggerBroker } from "./loggerBroker.js";
@@ -43,42 +47,75 @@ export type GitServerEntry = {
   id: string;
   name: string;
   baseUrl: string;
+  type?: "gitlab" | "github";
   useBasicAuth?: boolean;
   username?: string;
+  userEmail?: string;
+  password?: string;
   token?: string;
+  baseDir?: string;
+  noPublicRepos?: boolean;
+  noArchivedRepos?: boolean;
+  filter?: string;
+  syncRepos?: string;
+  tokenName?: string;
+  tokenScopes?: string;
+  tokenExpiresAt?: string;
 };
 
 export type GitSyncTreeView = {
   header: string;
   tree: GitLabTreeNode[];
   statusMap: Record<number, RepoSyncStatus>;
+  projects: GitLabProject[];
+  fromCache?: boolean;
+};
+
+export type GitSyncLoadOptions = {
+  config: GitSyncConfig;
+  logger: LoggerBroker;
+  onBasicAuthRequired?: (serverName: string, username: string) => Promise<string | undefined>;
+  onRequestStart?: (serverName: string, requestCount: number) => void;
+  onStatusRefreshed?: (projectId: number, status: RepoSyncStatus) => void;
 };
 
 export type GitSyncProgressHandlers = {
+  onBegin?: (totalCount: number) => void;
   onProgress?: (event: ProgressEvent) => void;
-  onResult?: (entry: { status: string; message?: string; target: GitRepositoryTarget }) => void;
+  onResult?: (entry: { status: string; message?: string; target: GitRepositoryTarget }) => void | Promise<void>;
 };
 
 export type GitSyncSummary = {
   total: number;
   publicCount: number;
   archivedCount: number;
-  byStatus: Record<string, number>;
+  failed: number;
+  byStatus: Record<RepoSyncState, number>;
 };
 
 export type GitSyncCore = {
   listServers: (options: { config: GitSyncConfig; logger: LoggerBroker }) => Promise<GitServerEntry[]>;
-  loadTree: (options: { config: GitSyncConfig; logger: LoggerBroker }) => Promise<GitSyncTreeView>;
+  loadTree: (options: GitSyncLoadOptions) => Promise<GitSyncTreeView>;
   toggleTreeSelection: (tree: GitLabTreeNode[], id: string) => GitLabTreeNode[];
   syncSelected: (options: {
     config: GitSyncConfig;
     logger: LoggerBroker;
     tree: GitLabTreeNode[];
+    selectedProjects?: GitLabProject[];
     handlers?: GitSyncProgressHandlers;
   }) => Promise<{ summary: GitSyncSummary }>;
 };
 
 const normalizeBaseUrl = (url: string): string => url.trim().replace(/\/+$/, "");
+
+export const computeConfigHash = (servers: GitServerEntry[]): string => {
+  return servers
+    .map((s) =>
+      [s.name, normalizeBaseUrl(s.baseUrl), s.filter ?? "", String(s.noPublicRepos ?? false), String(s.noArchivedRepos ?? false)].join("|")
+    )
+    .sort()
+    .join(";");
+};
 
 const buildServerPrefix = (server: GitServerEntry): string => {
   const suffix = server.useBasicAuth ? " (basic)" : "";
@@ -193,55 +230,66 @@ const mergeProjectsByPath = (
   return { projects };
 };
 
-const resolveSyncReposSpecs = (rawPatterns?: string): Array<{ projectPath: string; branch?: string }> => {
+export const resolveSyncReposSpecs = (rawPatterns?: string): Array<{ projectPath: string; branch?: string }> => {
   const specs: Array<{ projectPath: string; branch?: string }> = [];
   splitFilterPatterns(rawPatterns).forEach((rawPattern: string) => {
-    if (!rawPattern.includes("@")) {
-      specs.push({ projectPath: rawPattern });
+    const trimmed = rawPattern.trim();
+    if (!trimmed.includes("#")) {
+      specs.push({ projectPath: trimmed.replace(/\.git$/, "") });
       return;
     }
-    const [projectPath, branch] = rawPattern.split("@");
+    const hashIndex = trimmed.indexOf("#");
+    const projectPath = trimmed.slice(0, hashIndex).replace(/\.git$/, "");
+    const branch = trimmed.slice(hashIndex + 1).trim() || undefined;
     specs.push({ projectPath, branch });
   });
   return specs;
 };
 
-const resolveSyncTargets = (
+export const resolveSyncTargets = (
   projects: GitLabProject[],
   specs: Array<{ projectPath: string; branch?: string }>
 ): GitRepositoryTarget[] => {
-  const matches: GitRepositoryTarget[] = [];
+  if (specs.length === 0) {
+    return [];
+  }
   const normalizedProjects = projects.map((project) => ({
     project,
-    matchPath: project.path_with_namespace.toLowerCase(),
+    matchPaths: [
+      project.path_with_namespace,
+      project.pajeOriginalPathWithNamespace,
+    ].filter(Boolean) as string[],
   }));
-
+  const matches: GitRepositoryTarget[] = [];
   specs.forEach((spec) => {
-    const normalizedSpec = spec.projectPath.toLowerCase();
-    normalizedProjects.forEach(({ project, matchPath }) => {
-      if (matchPath !== normalizedSpec) {
+    const pattern = antPatternToRegex(spec.projectPath);
+    normalizedProjects.forEach(({ project, matchPaths }) => {
+      if (!matchPaths.some((mp) => pattern.test(mp))) {
         return;
       }
       matches.push({
         id: project.id,
         name: project.name,
-        pathWithNamespace: project.path_with_namespace,
+        pathWithNamespace: resolveProjectLocalPath(project),
         sshUrl: project.ssh_url_to_repo,
+        httpUrl: project.pajeHttpUrl,
         localPath: "",
-        defaultBranch: spec.branch || project.default_branch,
+        defaultBranch: project.default_branch,
         branch: spec.branch,
       });
     });
   });
-
+  const uniqueByPath = new Map<string, GitRepositoryTarget>();
   matches.forEach((target) => {
-    target.pathWithNamespace = target.pathWithNamespace.trim();
+    const key = `${target.pathWithNamespace}#${target.branch ?? ""}`;
+    if (!uniqueByPath.has(key)) {
+      uniqueByPath.set(key, target);
+    }
   });
-
-  return matches;
+  return Array.from(uniqueByPath.values());
 };
 
-const resolveRepoStatus = async (options: {
+export const resolveRepoStatus = async (options: {
   targetPath: string;
   defaultBranch?: string | null;
   knownRemote?: boolean;
@@ -283,37 +331,8 @@ const resolveRepoStatus = async (options: {
   return { branch, state: "DIVERGED", delta: `+${ahead}/-${behind}` };
 };
 
-const resolveProjectLocalPath = (project: GitLabProject): string => {
-  return project.pajeOriginalPathWithNamespace ?? project.path_with_namespace;
-};
 
-const resolveLocalPathConflicts = (projects: GitLabProject[]): Map<number, string> => {
-  const byPath = new Map<string, GitLabProject[]>();
-  const resolved = new Map<number, string>();
-
-  projects.forEach((project) => {
-    const basePath = resolveProjectLocalPath(project);
-    const entries = byPath.get(basePath) ?? [];
-    entries.push(project);
-    byPath.set(basePath, entries);
-  });
-
-  byPath.forEach((entries, basePath) => {
-    if (entries.length === 1) {
-      resolved.set(entries[0].id, basePath);
-      return;
-    }
-    entries.forEach((project) => {
-      const serverName = project.pajeServerName?.trim();
-      const suffix = serverName && serverName.length > 0 ? `-${serverName}` : "-servidor";
-      resolved.set(project.id, `${basePath}${suffix}`);
-    });
-  });
-
-  return resolved;
-};
-
-const ensureLocalDirsIfNeeded = async (
+export const ensureLocalDirsIfNeeded = async (
   projects: GitLabProject[],
   baseDir: string,
   prepareLocalDirs: boolean
@@ -345,6 +364,18 @@ const findNodeById = (nodes: GitLabTreeNode[], id: string): GitLabTreeNode | und
   return undefined;
 };
 
+const collectAllProjectsFromTree = (nodes: GitLabTreeNode[]): GitLabProject[] => {
+  const projects: GitLabProject[] = [];
+  const visit = (node: GitLabTreeNode): void => {
+    if (node.type === "project" && node.project) {
+      projects.push(node.project);
+    }
+    node.children?.forEach((child) => visit(child));
+  };
+  nodes.forEach((node) => visit(node));
+  return projects;
+};
+
 const toggleById = (nodes: GitLabTreeNode[], id: string): void => {
   const target = findNodeById(nodes, id);
   if (!target) {
@@ -372,19 +403,23 @@ const ensureKnownHost = async (server: string, logger: LoggerBroker, verbose?: b
     logger: (message) => logger.debug(message),
   });
   if (!added) {
-    logger.warn(
-      `Não foi possível adicionar ${server} ao ~/.ssh/known_hosts via ssh-keyscan. Verifique conectividade e permissões.`
-    );
+    logger.warn(t("cli.prompt.trust.cannotAddHost", { server }));
   }
 };
 
-const ensureSshKey = async (api: GitLabApi, logger: LoggerBroker, config: GitSyncConfig): Promise<void> => {
+type SshCapableApi = {
+  getServerHost: () => string;
+  hasAuth: () => boolean;
+  createSshKey: (title: string, key: string) => Promise<{ id: number }>;
+};
+
+const ensureSshKey = async (api: SshCapableApi, logger: LoggerBroker, config: GitSyncConfig): Promise<void> => {
   const server = api.getServerHost();
   let associatedIdentityPath = getIdentityFileForHost(server);
   if (associatedIdentityPath) {
     const resolved = resolveSshIdentityPath(associatedIdentityPath);
     if (!fs.existsSync(resolved)) {
-      logger.warn(`A chave vinculada em ~/.ssh/config para ${server} não existe (${associatedIdentityPath}).`);
+      logger.warn(t("cli.prompt.sshKey.missingKey", { server, path: associatedIdentityPath ?? "" }));
       associatedIdentityPath = null;
     }
   }
@@ -397,7 +432,7 @@ const ensureSshKey = async (api: GitLabApi, logger: LoggerBroker, config: GitSyn
   if (config.publicKeyPath) {
     const selectedKey = config.publicKeyPath;
     if (!fs.existsSync(selectedKey)) {
-      logger.warn(`Chave pública informada não existe: ${selectedKey}`);
+      logger.warn(t("cli.prompt.sshKey.missingProvidedKey", { path: selectedKey }));
       return;
     }
     const key = sanitizePublicKey(readPublicKey(selectedKey));
@@ -407,8 +442,8 @@ const ensureSshKey = async (api: GitLabApi, logger: LoggerBroker, config: GitSyn
       try {
         await registerKeyInGitLab(api, `paje-existing-${Date.now()}`, key);
       } catch (error) {
-        const message = error instanceof Error ? error.message : "erro desconhecido";
-        logger.warn(`Falha ao registrar chave no GitLab: ${message}`);
+        const message = error instanceof Error ? error.message : t("cli.errors.unknown");
+        logger.warn(t("cli.errors.gitlab.registerKeyFail", { message }));
       }
     }
     return;
@@ -416,7 +451,7 @@ const ensureSshKey = async (api: GitLabApi, logger: LoggerBroker, config: GitSyn
 
   const existingKeys = listSshPublicKeys();
   if (existingKeys.length === 0) {
-    logger.warn("Nenhuma chave SSH configurada em ~/.ssh. Configure uma chave para continuar.");
+    logger.warn(t("cli.prompt.sshKey.noKeyInSsh"));
   }
 };
 
@@ -424,20 +459,21 @@ const buildSummary = (): GitSyncSummary => ({
   total: 0,
   publicCount: 0,
   archivedCount: 0,
+  failed: 0,
   byStatus: {
     SYNCED: 0,
-    UPDATED: 0,
-    UNPUSHED: 0,
-    UNCOMMITTED: 0,
-    AHEAD: 0,
     BEHIND: 0,
+    AHEAD: 0,
+    REMOTE: 0,
+    EMPTY: 0,
+    LOCAL: 0,
+    UNCOMMITTED: 0,
     DIVERGED: 0,
-    CLONED: 0,
-    FAILED: 0,
   },
 });
 
-const filterProjects = (projects: GitLabProject[], config: GitSyncConfig): GitLabProject[] => {
+export const filterProjects = (projects: GitLabProject[], config: GitSyncConfig): GitLabProject[] => {
+  const filterPatterns = compileAntPatterns(config.filter);
   return projects.filter((project) => {
     if (config.noArchivedRepos && project.archived) {
       return false;
@@ -445,16 +481,20 @@ const filterProjects = (projects: GitLabProject[], config: GitSyncConfig): GitLa
     if (config.noPublicRepos && project.visibility === "public") {
       return false;
     }
-    if (config.filter) {
-      const normalizedPath = project.path_with_namespace.toLowerCase();
-      const normalizedFilter = config.filter.trim().toLowerCase();
-      return normalizedPath.includes(normalizedFilter);
+    if (filterPatterns.length === 0) {
+      return true;
     }
-    return true;
+    const candidates = [
+      project.path_with_namespace,
+      project.pajeOriginalPathWithNamespace,
+      project.namespace?.full_path,
+      project.namespace?.full_path ? `${project.namespace.full_path}/${project.name}` : undefined,
+    ].filter(Boolean) as string[];
+    return candidates.some((candidate) => matchesAntPatterns(candidate, filterPatterns));
   });
 };
 
-const prepareTargets = (
+export const prepareTargets = (
   projects: GitLabProject[],
   baseDir: string,
   username?: string,
@@ -467,14 +507,14 @@ const prepareTargets = (
     pathWithNamespace: resolveProjectLocalPath(project),
     sshUrl: project.ssh_url_to_repo,
     httpUrl: project.pajeHttpUrl,
-    localPath: path.join(baseDir, resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project)),
+    localPath: path.join(project.pajeBaseDir ?? baseDir, resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project)),
     defaultBranch: project.default_branch,
     gitUserName: username,
-    gitUserEmail: userEmail,
+    gitUserEmail: project.pajeUserEmail ?? userEmail,
   }));
 };
 
-const resolveParallels = (rawValue?: string): number | "auto" => {
+export const resolveParallels = (rawValue?: string): number | "auto" => {
   if (!rawValue) {
     return "auto";
   }
@@ -509,7 +549,7 @@ export const createGitSyncCore = (): GitSyncCore => {
       }
 
       if (servers.length === 0) {
-        logger.warn("Nenhum servidor GitLab configurado.");
+        logger.warn(t("cli.prompt.gitlab.noServerConfigured"));
         return [];
       }
 
@@ -525,30 +565,173 @@ export const createGitSyncCore = (): GitSyncCore => {
 
       return servers;
     },
-    loadTree: async ({ config, logger }) => {
+    loadTree: async ({ config, logger, onBasicAuthRequired, onRequestStart, onStatusRefreshed }) => {
       const servers = await createGitSyncCore().listServers({ config, logger });
       if (servers.length === 0) {
-        return { header: "GitLab", tree: [], statusMap: {} };
+        return { header: "GitLab", tree: [], statusMap: {}, projects: [] };
+      }
+
+      const configHash = computeConfigHash(servers);
+      const cached = readGitTreeCache();
+
+      if (cached?.version === 1 && cached.configHash === configHash) {
+        logger.info(t("cli.cache.hit"));
+
+        const serversByName = new Map(servers.map((s) => [s.name, s]));
+        const cachedServerResults = cached.servers
+          .map(({ serverName, groups, projects }) => {
+            const server = serversByName.get(serverName);
+            if (!server) return null;
+            const projectsWithHttpUrl = server.token
+              ? projects.map((project) => {
+                  try {
+                    const url = new URL(project.http_url_to_repo);
+                    url.username = "oauth2";
+                    url.password = server.token as string;
+                    return { ...project, pajeHttpUrl: url.toString() };
+                  } catch {
+                    return project;
+                  }
+                })
+              : projects;
+            return { server, groups, projects: projectsWithHttpUrl };
+          })
+          .filter((r): r is { server: GitServerEntry; groups: GitLabGroup[]; projects: GitLabProject[] } => r !== null);
+
+        if (cachedServerResults.length > 0) {
+          const { groups, idMapByServer } = mergeGroupsByPath(
+            cachedServerResults.map((r) => ({ server: r.server, groups: r.groups }))
+          );
+          const { projects } = mergeProjectsByPath(
+            cachedServerResults.map((r) => ({ server: r.server, projects: r.projects })),
+            idMapByServer
+          );
+          const header = buildServersHeader(cachedServerResults.map((r) => r.server));
+
+          const filteredProjects = filterProjects(projects, config);
+          await ensureLocalDirsIfNeeded(filteredProjects, config.baseDir, config.prepareLocalDirs ?? false);
+          const resolvedPaths = resolveLocalPathConflicts(filteredProjects);
+
+          const statusMap = cached.statusMap;
+          const tree = buildGitLabTree(groups, filteredProjects);
+          const applyStatusToTree = (node: GitLabTreeNode): void => {
+            if (node.type === "project" && node.project) {
+              node.status = statusMap[node.project.id];
+              node.localPath = path.join(
+                node.project.pajeBaseDir ?? config.baseDir,
+                resolvedPaths.get(node.project.id) ?? resolveProjectLocalPath(node.project)
+              );
+              return;
+            }
+            node.children?.forEach((child) => applyStatusToTree(child));
+          };
+          tree.forEach((node) => applyStatusToTree(node));
+          applyInitialSelectionFromStatusMap(tree, statusMap);
+
+          setImmediate(async () => {
+            // Bounded worker pool: one git subprocess per repo, so spawning
+            // them all at once would saturate the machine and starve the TUI
+            // event loop (the interface stops responding to keystrokes).
+            const REFRESH_CONCURRENCY = 4;
+            const freshStatusMap: Record<number, RepoSyncStatus> = {};
+            let nextIndex = 0;
+            const worker = async (): Promise<void> => {
+              while (nextIndex < filteredProjects.length) {
+                const project = filteredProjects[nextIndex];
+                nextIndex += 1;
+                const targetPath = path.join(
+                  project.pajeBaseDir ?? config.baseDir,
+                  resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project)
+                );
+                const status = await resolveRepoStatus({
+                  targetPath,
+                  defaultBranch: project.default_branch,
+                  knownRemote: true,
+                });
+                freshStatusMap[project.id] = status;
+                // Deliver each status as soon as it is known instead of after
+                // the full sweep, so the tree updates progressively.
+                onStatusRefreshed?.(project.id, status);
+              }
+            };
+            await Promise.all(
+              Array.from({ length: Math.min(REFRESH_CONCURRENCY, filteredProjects.length) }, () => worker())
+            );
+            try {
+              writeGitTreeCache({ ...cached, statusMap: freshStatusMap });
+              logger.info(t("cli.cache.statusRefreshed"));
+            } catch {
+              // non-critical
+            }
+          });
+
+          return { header, tree, statusMap, projects: filteredProjects, fromCache: true };
+        }
       }
 
       const listStartAt = Date.now();
       let listRequestCount = 0;
       const wrapRequest = async <T,>(server: GitServerEntry, label: string, fn: () => Promise<T>): Promise<T> => {
         listRequestCount += 1;
-        logger.info(`HTTP: ${server.name} - ${label} (requisição ${listRequestCount})`);
+        onRequestStart?.(server.name, listRequestCount);
+        logger.info(t("cli.http.start", { server: server.name, label, count: String(listRequestCount) }));
         try {
           const result = await fn();
-          logger.info(`HTTP: ${server.name} - ${label} concluído`);
+          logger.info(t("cli.http.success", { server: server.name, label }));
           return result;
         } catch (error) {
-          const message = error instanceof Error ? error.message : "erro desconhecido";
-          logger.error(`HTTP: ${server.name} - ${label} falhou: ${message}`);
+          const message = error instanceof Error ? error.message : t("cli.errors.unknown");
+          logger.error(t("cli.http.fail", { server: server.name, label, message }));
           throw error;
         }
       };
 
       const serverResults = await Promise.all(
         servers.map(async (server) => {
+          if (server.type === "github") {
+            if (!server.token) {
+              logger.warn(t("cli.sync.noAuthConfigured", { server: server.name }));
+              return null;
+            }
+            const api = new GitHubApi({
+              baseUrl: server.baseUrl,
+              token: server.token,
+              verbose: config.verbose ?? false,
+              logger: (message) => logger.debug(message),
+            });
+            try {
+              const [groups, userProjects] = await Promise.all([
+                wrapRequest(server, t("cli.http.listGroups"), () => api.listGroups()),
+                wrapRequest(server, t("cli.http.listUserProjects"), () => api.listUserProjects()),
+              ]);
+              const projects = userProjects.filter((project, index, all) => {
+                return all.findIndex((item) => item.id === project.id) === index;
+              });
+              const projectsWithMetadata: GitLabProject[] = projects.map((project) => {
+                const meta: Partial<GitLabProject> = {};
+                if (server.baseDir) meta.pajeBaseDir = server.baseDir;
+                if (server.userEmail) meta.pajeUserEmail = server.userEmail;
+                try {
+                  const url = new URL(project.http_url_to_repo);
+                  url.username = "x-access-token";
+                  url.password = server.token as string;
+                  meta.pajeHttpUrl = url.toString();
+                } catch {
+                  // keep without pajeHttpUrl
+                }
+                return { ...project, ...meta };
+              });
+              const serverFiltered = filterProjects(projectsWithMetadata, {
+                filter: server.filter,
+                noPublicRepos: server.noPublicRepos,
+                noArchivedRepos: server.noArchivedRepos,
+              } as GitSyncConfig);
+              return { server, groups, projects: serverFiltered };
+            } catch {
+              return null;
+            }
+          }
+
           const serverHost = new URL(server.baseUrl).hostname;
           const hasSshAssociation = hasValidSshAssociation(serverHost);
           let basicAuth: { username: string; password: string } | undefined;
@@ -557,10 +740,13 @@ export const createGitSyncCore = (): GitSyncCore => {
             const username = server.username?.trim();
             const resolvedUsername = username && username.length > 0 ? username : "";
             if (!resolvedUsername) {
-              logger.warn(`Usuário não informado para autenticação básica em ${server.name}.`);
+              logger.warn(t("cli.sync.usernameMissingBasicAuth", { server: server.name }));
               return null;
             }
-            basicAuth = { username: resolvedUsername, password: config.password };
+            const password = onBasicAuthRequired
+              ? await onBasicAuthRequired(server.name, resolvedUsername) ?? config.password
+              : config.password;
+            basicAuth = { username: resolvedUsername, password };
           }
 
           const api = new GitLabApi({
@@ -580,28 +766,42 @@ export const createGitSyncCore = (): GitSyncCore => {
             await ensureSshKey(api, logger, config);
           }
 
-          const [groups, userProjects] = await Promise.all([
-            wrapRequest(server, t("cli.http.listGroups"), () => api.listGroups()),
-            wrapRequest(server, t("cli.http.listUserProjects"), () => api.listUserProjects()),
-          ]);
-          const projects = userProjects.filter((project, index, all) => {
-            return all.findIndex((item) => item.id === project.id) === index;
-          });
+          try {
+            const [groups, userProjects] = await Promise.all([
+              wrapRequest(server, t("cli.http.listGroups"), () => api.listGroups()),
+              wrapRequest(server, t("cli.http.listUserProjects"), () => api.listUserProjects()),
+            ]);
+            const projects = userProjects.filter((project, index, all) => {
+              return all.findIndex((item) => item.id === project.id) === index;
+            });
 
-          const projectsWithHttpUrl: GitLabProject[] = server.token
-            ? projects.map((project) => {
+            const projectsWithMetadata: GitLabProject[] = projects.map((project) => {
+              const meta: Partial<GitLabProject> = {};
+              if (server.baseDir) meta.pajeBaseDir = server.baseDir;
+              if (server.userEmail) meta.pajeUserEmail = server.userEmail;
+              if (server.token) {
                 try {
                   const url = new URL(project.http_url_to_repo);
                   url.username = "oauth2";
                   url.password = server.token as string;
-                  return { ...project, pajeHttpUrl: url.toString() };
+                  meta.pajeHttpUrl = url.toString();
                 } catch {
-                  return project;
+                  // keep without pajeHttpUrl
                 }
-              })
-            : projects;
+              }
+              return { ...project, ...meta };
+            });
 
-          return { server, groups, projects: projectsWithHttpUrl };
+            const serverFiltered = filterProjects(projectsWithMetadata, {
+              filter: server.filter,
+              noPublicRepos: server.noPublicRepos,
+              noArchivedRepos: server.noArchivedRepos,
+            } as GitSyncConfig);
+
+            return { server, groups, projects: serverFiltered };
+          } catch {
+            return null;
+          }
         })
       );
 
@@ -612,7 +812,7 @@ export const createGitSyncCore = (): GitSyncCore => {
 
       if (validServerResults.length === 0) {
         logger.warn(t("cli.sync.noValidServer"));
-        return { header: "GitLab", tree: [], statusMap: {} };
+        return { header: "GitLab", tree: [], statusMap: {}, projects: [] };
       }
 
       const { groups, idMapByServer } = mergeGroupsByPath(
@@ -628,24 +828,13 @@ export const createGitSyncCore = (): GitSyncCore => {
       logger.info(t("cli.sync.listDuration", { seconds: (listDurationMs / 1000).toFixed(2) }));
 
       const filteredProjects = filterProjects(projects, config);
-      const summary = buildSummary();
-      filteredProjects.forEach((project) => {
-        summary.total += 1;
-        if (project.visibility === "public") {
-          summary.publicCount += 1;
-        }
-        if (project.archived) {
-          summary.archivedCount += 1;
-        }
-      });
-
       await ensureLocalDirsIfNeeded(filteredProjects, config.baseDir, config.prepareLocalDirs ?? false);
 
       const resolvedPaths = resolveLocalPathConflicts(filteredProjects);
       const statusEntries = await Promise.all(
         filteredProjects.map(async (project) => {
           const targetPath = path.join(
-            config.baseDir,
+            project.pajeBaseDir ?? config.baseDir,
             resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project)
           );
           const status = await resolveRepoStatus({
@@ -657,12 +846,30 @@ export const createGitSyncCore = (): GitSyncCore => {
         })
       );
       const statusMap = Object.fromEntries(statusEntries) as Record<number, RepoSyncStatus>;
+
+      try {
+        const cacheEntry: GitTreeCacheEntry = {
+          version: 1,
+          configHash,
+          servers: validServerResults.map((r) => ({
+            serverName: r.server.name,
+            groups: r.groups,
+            projects: r.projects.map(({ pajeHttpUrl: _url, ...rest }) => rest),
+          })),
+          statusMap,
+        };
+        writeGitTreeCache(cacheEntry);
+        logger.info(t("cli.cache.saved"));
+      } catch {
+        // non-critical
+      }
+
       const tree = buildGitLabTree(groups, filteredProjects);
       const applyStatusToTree = (node: GitLabTreeNode): void => {
         if (node.type === "project" && node.project) {
           node.status = statusMap[node.project.id];
           node.localPath = path.join(
-            config.baseDir,
+            node.project.pajeBaseDir ?? config.baseDir,
             resolvedPaths.get(node.project.id) ?? resolveProjectLocalPath(node.project)
           );
           return;
@@ -671,14 +878,26 @@ export const createGitSyncCore = (): GitSyncCore => {
       };
       tree.forEach((node) => applyStatusToTree(node));
       applyInitialSelectionFromStatusMap(tree, statusMap);
-      return { header, tree, statusMap };
+      return { header, tree, statusMap, projects: filteredProjects };
     },
     toggleTreeSelection: (tree, id) => {
       toggleById(tree, id);
       return tree;
     },
-    syncSelected: async ({ config, logger, tree, handlers }) => {
-      const selected = collectSelectedProjects(tree);
+    syncSelected: async ({ config, logger, tree, selectedProjects, handlers }) => {
+      const syncSpecs = resolveSyncReposSpecs(config.syncRepos);
+      let selected: GitLabProject[];
+      if (selectedProjects !== undefined) {
+        if (config.syncRepos) {
+          logger.warn(t("cli.sync.singleModeSyncReposIgnored"));
+        }
+        selected = selectedProjects;
+      } else if (syncSpecs.length > 0) {
+        selected = collectAllProjectsFromTree(tree);
+      } else {
+        selected = collectSelectedProjects(tree);
+      }
+
       if (selected.length === 0) {
         logger.warn(t("cli.sync.noneSelected"));
         return { summary: buildSummary() };
@@ -686,9 +905,8 @@ export const createGitSyncCore = (): GitSyncCore => {
 
       const resolvedUserName = config.username?.trim() || undefined;
       const resolvedUserEmail = config.userEmail?.trim() || undefined;
-      const syncSpecs = resolveSyncReposSpecs(config.syncRepos);
       const resolvedPaths = resolveLocalPathConflicts(selected);
-      const syncTargets = syncSpecs.length > 0
+      const syncTargets = syncSpecs.length > 0 && selectedProjects === undefined
         ? resolveSyncTargets(selected, syncSpecs).map((target) => ({
             ...target,
             localPath: path.join(config.baseDir, resolvedPaths.get(target.id) ?? target.pathWithNamespace),
@@ -702,6 +920,8 @@ export const createGitSyncCore = (): GitSyncCore => {
         return { summary: buildSummary() };
       }
 
+      handlers?.onBegin?.(syncTargets.length);
+
       const concurrency = resolveParallels(config.parallels);
       const syncResults = await parallelSync(
         syncTargets,
@@ -711,8 +931,8 @@ export const createGitSyncCore = (): GitSyncCore => {
           dryRun: config.dryRun ?? false,
           logger: (message, level) => logger.log(level ?? "info", message),
         },
-        (result) => {
-          handlers?.onResult?.({ status: result.status, message: result.message, target: result.target });
+        async (result) => {
+          await handlers?.onResult?.({ status: result.status, message: result.message, target: result.target });
         },
         (event) => {
           handlers?.onProgress?.(event);
@@ -724,14 +944,16 @@ export const createGitSyncCore = (): GitSyncCore => {
         summary.total += 1;
         switch (result.status) {
           case "failed":
-            summary.byStatus.FAILED += 1;
+            summary.failed += 1;
             break;
           case "cloned":
-            summary.byStatus.CLONED += 1;
+            summary.byStatus.REMOTE += 1;
             break;
           case "pulled":
+            summary.byStatus.BEHIND += 1;
+            break;
           case "pushed":
-            summary.byStatus.UPDATED += 1;
+            summary.byStatus.AHEAD += 1;
             break;
           case "skipped":
             summary.byStatus.SYNCED += 1;

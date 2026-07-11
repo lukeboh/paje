@@ -91,9 +91,6 @@ export const createTuiSession = (_title: string): TuiSession => {
 
         useInput(
           (input, key) => {
-            if (input.toLowerCase() === "p") {
-              return;
-            }
             if (key.return) {
               resolver.finalize(value);
               return;
@@ -151,9 +148,6 @@ export const createTuiSession = (_title: string): TuiSession => {
 
         useInput(
           (input, key) => {
-            if (input.toLowerCase() === "p") {
-              return;
-            }
             if (key.return) {
               resolver.finalize(value);
               return;
@@ -215,9 +209,6 @@ export const createTuiSession = (_title: string): TuiSession => {
 
         useInput(
           (input, key) => {
-            if (input.toLowerCase() === "p") {
-              return;
-            }
             if (key.upArrow) {
               setSelectedIndex((current: number) => Math.max(0, current - 1));
               return;
@@ -296,9 +287,6 @@ export const createTuiSession = (_title: string): TuiSession => {
 
         useInput(
           (input, key) => {
-            if (input.toLowerCase() === "p") {
-              return;
-            }
             if (key.tab || key.downArrow) {
               setFocusedIndex((current: number) => Math.min(options.fields.length - 1, current + 1));
               return;
@@ -393,9 +381,6 @@ export const createTuiSession = (_title: string): TuiSession => {
 
         useInput(
           (input, key) => {
-            if (input.toLowerCase() === "p") {
-              return;
-            }
             if (key.return) {
               resolver.finalize();
             }
