@@ -25,30 +25,45 @@ Padronizar a experiência de navegação e mensagens da TUI em um layout de 4 pa
 
 ## Atalhos globais
 
-- **Esc**: fecha a modal de parâmetros/ajuda quando aberta; se algum painel estiver maximizado, restaura o layout; caso contrário, volta para a tela anterior (sem confirmação adicional) e, no menu principal, encerra a aplicação.
-- **Ctrl+H**: abre/fecha a modal de ajuda (shortcuts).
+- **Esc**: fecha a modal aberta (nos modais de workflow — editor de env.yaml e branch — o Esc é tratado pelo próprio modal); se algum painel estiver maximizado, restaura o layout; caso contrário, volta para a tela anterior (sem confirmação adicional) e, no menu principal, encerra a aplicação.
+- **Ctrl+H**: abre/fecha a modal de ajuda (shortcuts). O terminal envia o byte de backspace (`0x08`) para Ctrl+H; o layout o reconhece como ajuda apenas em telas sem campo de texto (menu, árvore, loading — prop `helpOnBackspace`).
 - **Ctrl+P**: abre/fecha a modal de parâmetros carregados na execução atual.
-- **Ctrl+C**: encerra a TUI imediatamente.
-- **Ctrl+F**: alterna filtro para exibir apenas itens marcados na árvore (quando aplicável).
+- **Ctrl+E**: abre/fecha o editor de parâmetros do `env.yaml`.
+- **Ctrl+C**: encerra a TUI imediatamente — **inclusive com modal aberto**.
+- **Ctrl+F**: alterna filtro para exibir apenas itens marcados na árvore (quando aplicável). (`Ctrl+M` não pode ser usado: o terminal envia o mesmo byte de Enter.)
 - **Ctrl+S**: confirma a seleção e sincroniza todos os repositórios marcados na árvore (contexto: menu → seleciona git-sync; contexto: árvore → sincroniza tudo).
 - **Enter**: confirma seleção e sincroniza apenas o escopo destacado (linha/grupo) na árvore.
 - **Ctrl+G**: seleciona git-server-store no menu.
+- **Ctrl+B**: abre a modal de seleção de branch (na árvore).
 - **Ctrl+W**: alterna a área de trabalho entre modo padrão e tela cheia.
 - **Ctrl+L**: alterna o painel de log entre modo padrão e tela cheia.
 
 ## Log
 
 - Cada linha deve conter timestamp no formato **YYYY-MM-DD HH:mm:ss**.
-- Mensagens de erro devem aparecer em vermelho.
+- Colorização por nível: **debug** em cinza (dim), **info** na cor padrão, **warn** em amarelo, **erro** em vermelho.
+- As cores usam códigos ANSI aplicados manualmente (chalk desabilita cores quando não detecta TTY real, o que apagaria a colorização em testes e pipes).
+- Cada entrada ocupa **exatamente uma linha física**: entradas mais largas que o terminal são truncadas (`wrap="truncate-end"`) — quebra de linha estouraria a altura do painel.
 - O log deve manter auto-scroll, exibindo sempre as últimas linhas.
 - Ao sincronizar repositórios, o log deve registrar o início e o fim de cada repositório sincronizado.
+- Nível padrão do painel: `info`; com `--verbose`, `debug`.
+
+## Editor de parâmetros (`EditParamsModal`)
+
+- Aberto com **Ctrl+E** em qualquer tela.
+- `↑/↓` e `PgUp/PgDn` navegam; `Enter` inicia a edição inline do valor; `Esc` durante a edição cancela **apenas a edição** (o modal permanece aberto).
+- Alterações confirmadas ficam **pendentes** (badge magenta) até **Ctrl+S**, que grava no `env.yaml` preservando comentários.
+- Parâmetros com origem `cli` ou `resolved` são somente leitura, com rótulo explicativo.
+- A descrição do parâmetro selecionado aparece em rodapé fixo (1 linha reservada — o conteúdo nunca excede a altura do modal).
+- Enquanto aberto, o editor é dono do teclado: `Ctrl+P`/`Ctrl+H` não trocam de modal.
 
 ## Observações de implementação
 
 - O layout deve manter o título e a linha de orientação visíveis ao maximizar o log via **Ctrl+L**.
 - A área de trabalho pode ser ocultada quando o log estiver maximizado.
-- O log pode ser ocultado quando a área de trabalho estiver maximizada via W.
-- A modal de parâmetros e a modal de ajuda devem ser sobrepostas ao layout, centralizadas e bloquear atalhos globais enquanto estiverem abertas.
+- O log pode ser ocultado quando a área de trabalho estiver maximizada via **Ctrl+W**.
+- Modais são sobrepostos ao layout e centralizados. Modais informativos (parâmetros, ajuda) bloqueiam os atalhos da tela; modais de workflow (editor de env.yaml, branch) são donos de todo o teclado enquanto abertos — exceto `Ctrl+C`, que sempre encerra.
+- Na conta de altura interna dos modais, o `marginTop` do bloco de conteúdo deve ser contabilizado — sem isso o flexbox encolhe o cabeçalho e a primeira linha (título) é cortada.
 - Componentes reutilizáveis devem ser usados para título, orientação, workspace e log.
 
 ## Componentes atuais
@@ -59,4 +74,6 @@ Padronizar a experiência de navegação e mensagens da TUI em um layout de 4 pa
 - [`Workspace`](../src/modules/git/tui/components/Workspace.tsx:1)
 - [`LoggerPanel`](../src/modules/git/tui/components/LoggerPanel.tsx:1)
 - [`ParametersModal`](../src/modules/git/tui/components/ParametersModal.tsx:1)
+- [`EditParamsModal`](../src/modules/git/tui/components/EditParamsModal.tsx:1)
 - [`HelpModal`](../src/modules/git/tui/components/HelpModal.tsx:1)
+- [`BranchModal`](../src/modules/git/tui/components/BranchModal.tsx:1)

@@ -28,8 +28,9 @@ Violar essa separação é o erro arquitetural mais grave registrado no projeto
                     │ chama apenas
 ┌───────────────────▼─────────────────────────────┐
 │  Infraestrutura                                 │
-│  gitlabApi.ts, parallelSync.ts, persistence.ts  │
-│  gitRepoScanner.ts, sshManager.ts, treeBuilder  │
+│  gitlabApi.ts, githubApi.ts, parallelSync.ts    │
+│  persistence.ts, gitRepoScanner.ts,             │
+│  sshManager.ts, treeBuilder.ts, logger.ts       │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -43,7 +44,7 @@ Violar essa separação é o erro arquitetural mais grave registrado no projeto
 
 ### Regras de chamada — o que é PROIBIDO na camada de apresentação
 
-- **Nunca** chamar `GitLabApi.listUserProjects()` ou qualquer método de API fora do core.
+- **Nunca** chamar `GitLabApi`/`GitHubApi` (ex.: `listUserProjects()`) ou qualquer método de API fora do core.
 - **Nunca** chamar `parallelSync()` diretamente — use `core.syncSelected()`.
 - **Nunca** reimplementar `filterProjects`, `prepareTargets`, `resolveLocalPathConflicts`,
   `resolveSyncTargets`, `resolveRepoStatus`, `resolveSyncReposSpecs` ou `buildSummary`.

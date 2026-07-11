@@ -1,14 +1,19 @@
 # PAJÉ — Plataforma de Apoio à Jornada do Engenheiro
 
-O PAJÉ automatiza tarefas repetitivas de ambiente de desenvolvimento, com foco inicial em GitLab: sincronização paralela de repositórios, gerenciamento de chaves SSH e tokens pessoais de acesso.
+O PAJÉ automatiza tarefas repetitivas de ambiente de desenvolvimento com servidores Git (GitLab e GitHub): sincronização paralela de repositórios, gerenciamento de chaves SSH e tokens pessoais de acesso.
 
 ## Características
 
 - **CLI + TUI**: execução por comando (`paje <comando>`) e interface textual guiada ao iniciar sem parâmetros.
-- **Sincronização paralela de repositórios GitLab**: seleção de grupos/projetos, clone/pull em paralelo, resumo de status.
-- **Multi-servidor**: múltiplos servidores GitLab simultâneos, cada um com suas próprias configurações (diretório, filtros, e-mail).
+- **Sincronização paralela de repositórios**: seleção de grupos/projetos, clone/pull em paralelo, resumo de status.
+- **GitLab e GitHub**: suporte a gitlab.com, GitLab self-hosted, github.com e GitHub Enterprise Server — tipo detectado automaticamente pela URL.
+- **Multi-servidor**: múltiplos servidores simultâneos (inclusive misturando GitLab e GitHub), cada um com suas próprias configurações (diretório, filtros, e-mail).
+- **Abertura instantânea da árvore**: cache local (`~/.paje/git-tree-cache.json`) permite exibir a árvore imediatamente; o status de cada repositório é atualizado em segundo plano.
+- **Cursor posicionado no contexto**: ao executar `paje git-sync` de dentro de um clone, a árvore abre com o cursor no repositório correspondente.
+- **Editor de parâmetros na TUI**: `Ctrl+E` abre editor do `env.yaml` com edição inline, alterações pendentes e gravação preservando comentários.
 - **Gerenciamento de SSH e tokens**: geração ou reaproveitamento de chaves, atualização de `~/.ssh/config`, `known_hosts`, criação e rotação de PAT.
-- **Persistência local**: servidores e tokens em `~/.paje/git-servers.json`; logs em `~/.paje/logs`.
+- **Logs estruturados com pino**: console, arquivo diário e painel TUI colorizado por nível.
+- **Persistência local**: servidores e tokens em `~/.paje/git-servers.json`; cache da árvore em `~/.paje/git-tree-cache.json`; logs em `~/.paje/logs`.
 - **Configuração por arquivo**: parâmetros em `~/.paje/env.yaml` (ou `--env-file`), com prioridade sobre padrões embutidos.
 
 ## Requisitos
@@ -45,9 +50,9 @@ npm run dev -- <comando>      # execução de desenvolvimento
 
 ## Funcionalidades
 
-### `git-sync` — sincronizar repositórios GitLab
+### `git-sync` — sincronizar repositórios Git
 
-Carrega a árvore de grupos/projetos de todos os servidores configurados, exibe na TUI para seleção e sincroniza em paralelo.
+Carrega a árvore de grupos/projetos de todos os servidores configurados (GitLab e GitHub), exibe na TUI para seleção e sincroniza em paralelo.
 
 **Parâmetros principais:**
 
@@ -73,24 +78,29 @@ Carrega a árvore de grupos/projetos de todos os servidores configurados, exibe 
 **Comportamento relevante:**
 
 - Opera sobre todos os servidores configurados quando nenhum filtro de servidor é fornecido.
+- **Cache da árvore**: após a primeira carga completa, a árvore é gravada em `~/.paje/git-tree-cache.json`. Nas execuções seguintes ela abre instantaneamente a partir do cache, e o status local de cada repositório é recalculado em segundo plano (até 4 repositórios por vez), atualizando a TUI linha a linha. O cache não tem TTL — é invalidado apenas quando a configuração de servidores muda (nome, URL, filtros). Tokens nunca são gravados no cache.
+- **Cursor no contexto**: se o comando é executado de dentro de um clone git, a TUI abre com o cursor posicionado no repositório correspondente.
 - A TUI pré-seleciona repositórios com clone local (`[x]`); grupos propagam seleção parcial (`[~]`).
 - Grupos com o mesmo `full_path` em servidores diferentes são consolidados em um único nó.
 - Em colisão de caminho local (mesmo `path_with_namespace` em servidores diferentes), o diretório recebe sufixo `-<Servidor>`.
 - Filtros Ant/Glob suportam `?`, `*`, `**`; múltiplos padrões separados por `;`.
-- O log usa `LoggerBroker` com transports para console (`info`), painel TUI (`warn`) e arquivo `~/.paje/logs` (`debug`).
+- Em servidores GitHub, organizações são exibidas como grupos e o login do usuário aparece como grupo pessoal.
+- O log usa `LoggerBroker` (motor pino) com transports para console (`info`), painel TUI (`info`; `debug` com `--verbose`) e arquivo diário `~/.paje/logs` via pino-pretty.
 
 ---
 
 ### `git-server-store` — registrar servidor, SSH e token
 
-Registra um servidor GitLab, gera ou reutiliza chave SSH, configura `~/.ssh/config` e cria/rotaciona PAT.
+Registra um servidor GitLab ou GitHub. Para GitLab: gera ou reutiliza chave SSH, configura `~/.ssh/config` e cria/rotaciona PAT. Para GitHub: valida um Personal Access Token e o persiste.
 
 **Parâmetros principais:**
 
 | Flag CLI | Chave env | Padrão | Descrição |
 |---|---|---|---|
-| `--base-url <url>` | `baseUrl` | `""` | URL base do GitLab |
+| `--base-url <url>` | `baseUrl` | `""` | URL base do servidor (ex.: `https://github.com` ou `https://gitlab.com`) |
 | `--server-name <name>` | `serverName` | `GitLab` | Nome do servidor |
+| `--server-type <tipo>` | — | auto | `gitlab` ou `github` (detectado pela URL quando omitido) |
+| `--token <token>` | — | `""` | PAT do GitHub (evita o prompt interativo) |
 | `--username <u>` | `username` | `""` | Usuário do GitLab |
 | `--use-basic-auth` | `useBasicAuth` | `false` | Usar HTTPS + PAT (sem SSH) |
 | `--token-name <name>` | `tokenName` | `""` | Nome do PAT no GitLab |
@@ -113,12 +123,21 @@ Registra um servidor GitLab, gera ou reutiliza chave SSH, configura `~/.ssh/conf
 5. Registra a chave pública no GitLab e cria/rotaciona PAT.
 6. Persiste o servidor e token em `~/.paje/git-servers.json`.
 
-**Fluxo HTTPS + PAT (`--use-basic-auth`):**
+**Fluxo HTTPS + PAT (`--use-basic-auth`, GitLab):**
 
 1. Valida token existente salvo (se houver) e reutiliza se válido.
 2. Se inválido, rotaciona automaticamente.
 3. Se não houver token, solicita usuário/senha ou lê do arquivo de ambiente, cria novo PAT e persiste.
 4. As operações `git clone/pull/push` passam a usar URL HTTPS com `oauth2:<token>@host` embutido.
+
+**Fluxo GitHub (auto-detectado para `github.com` ou forçado com `--server-type github`):**
+
+1. Recebe o PAT via `--token`, reutiliza o token salvo do servidor ou solicita interativamente.
+2. Valida o token via API (`GET /user`) e captura o login do usuário.
+3. Persiste o servidor com `type: "github"` em `~/.paje/git-servers.json`.
+4. As operações git usam URL HTTPS com `x-access-token:<token>@host` embutido (não há fluxo SSH para GitHub).
+
+> Crie o PAT em `github.com/settings/tokens` com escopos `repo` e `read:org`. Para GitHub Enterprise Server, a API é resolvida como `<baseUrl>/api/v3`.
 
 ---
 
@@ -128,6 +147,7 @@ Cada servidor registrado armazena suas próprias propriedades. Durante o `git-sy
 
 | Propriedade | Descrição |
 |---|---|
+| `type` | Tipo do servidor: `gitlab` (padrão) ou `github` |
 | `baseDir` | Diretório base de clone exclusivo deste servidor |
 | `userEmail` | E-mail Git aplicado aos repos deste servidor |
 | `filter` | Filtro Ant/Glob aplicado antes da mesclagem multi-servidor |
@@ -187,7 +207,16 @@ A TUI é composta por quatro quadros:
 1. **Barra de título** — 1 linha no topo com o nome da funcionalidade.
 2. **Área de trabalho** — menus, formulários e árvore de repositórios.
 3. **Barra de orientação** — 1 linha com atalhos contextuais.
-4. **Painel de log** — ~15% da tela, com timestamp por linha, erros em vermelho e auto-scroll.
+4. **Painel de log** — ~15% da tela, com timestamp por linha, colorização por nível (debug cinza, aviso amarelo, erro vermelho), truncamento em uma linha por entrada e auto-scroll.
+
+### Editor de parâmetros (`Ctrl+E`)
+
+Abre um modal para editar o `env.yaml` sem sair da TUI:
+
+- `↑/↓` navegam; `Enter` edita o valor do parâmetro selecionado; `Esc` cancela a edição em curso.
+- Alterações ficam **pendentes** (badge magenta) até `Ctrl+S`, que grava no arquivo preservando comentários e convertendo chaves para kebab-case (`baseDir` → `base-dir`).
+- Parâmetros vindos da linha de comando ou calculados são exibidos como somente leitura.
+- Enquanto o editor está aberto, `Ctrl+P`/`Ctrl+H` são bloqueados para não descartar pendências; `Esc` fora do modo edição fecha o editor.
 
 Layout detalhado em [`docs/TUI-leiaute.md`](docs/TUI-leiaute.md).
 
@@ -210,13 +239,15 @@ Layout detalhado em [`docs/TUI-leiaute.md`](docs/TUI-leiaute.md).
 | `Ctrl+S` | Selecionar git-sync |
 | `Ctrl+G` | Selecionar git-server-store |
 | `Enter` | Confirmar seleção |
-| `↑ ↓ ← →` | Navegar entre cartões |
+| `↑ ↓ ← →` / `Tab` | Navegar entre cartões |
+| `1` / `2` | Selecionar cartão pelo número |
 
 ### Atalhos da árvore git-sync
 
 | Atalho | Ação |
 |---|---|
 | `↑ ↓` / `PgUp PgDn` | Navegar |
+| `Home` / `End` | Ir ao início/fim da lista |
 | `Space` | Selecionar/deselecionar repositório |
 | `Ctrl+S` | Sincronizar todos os marcados |
 | `Enter` | Sincronizar apenas o escopo destacado (linha/grupo) |
@@ -224,18 +255,20 @@ Layout detalhado em [`docs/TUI-leiaute.md`](docs/TUI-leiaute.md).
 | `Ctrl+B` | Abrir modal de seleção de branch |
 | `Esc` | Cancelar |
 
+> Nota: o terminal envia o mesmo byte para `Ctrl+M` e `Enter`, e o byte de backspace para `Ctrl+H`. Por isso o filtro usa `Ctrl+F`, e a ajuda (`Ctrl+H`) é reconhecida pelo byte de backspace nas telas sem campo de texto.
+
 ---
 
 ## Testes
 
 ```bash
 npm run build   # compilação TypeScript — deve terminar sem erros
-npm test        # suite completa
+npm test        # suite completa (runner tolerante a falhas + resumo final)
 ```
 
-Falhas pré-existentes (infraestrutura do container, não código):
-- `git_branch_service_test` — servidor de assinatura git retorna 400.
-- `ssh_key_store_command_test` — segunda etapa requer `ssh-keygen` ausente no container.
+- O runner (`tests/run-all.ts`) é tolerante a falhas: um teste que quebra não impede os demais de rodar. Ao final é impresso `Todos os arquivos de teste passaram.` ou a lista de arquivos com falha, e o exit code reflete o resultado.
+- Os testes de TUI usam `tests/tui_test_utils.ts` (TTY simulado com bytes reais de teclado — `KEYS.ctrlP`, `KEYS.ctrlE` etc. — e captura de frames do Ink).
+- Os testes de chave SSH requerem `ssh-keygen`; em containers sem ele: `apt-get install -y openssh-client`.
 
 ---
 
@@ -243,9 +276,12 @@ Falhas pré-existentes (infraestrutura do container, não código):
 
 | Documento | Conteúdo |
 |---|---|
-| [`docs/arquitetura.md`](docs/arquitetura.md) | Separação de camadas, tabela de parâmetros, propriedades de servidor, ordem de prioridade |
+| [`docs/arquitetura.md`](docs/arquitetura.md) | Separação de camadas, tabela de parâmetros, propriedades de servidor, cache, logging, ordem de prioridade |
 | [`docs/TUI-leiaute.md`](docs/TUI-leiaute.md) | Layout obrigatório da TUI, atalhos e componentes |
 | [`docs/requisitos-tui-git-sync.md`](docs/requisitos-tui-git-sync.md) | Requisitos funcionais e de usabilidade da TUI git-sync |
+| [`docs/funcionalidades/git-sync.md`](docs/funcionalidades/git-sync.md) | Especificação da funcionalidade git-sync |
+| [`docs/funcionalidades/git-server-store.md`](docs/funcionalidades/git-server-store.md) | Especificação da funcionalidade git-server-store (GitLab e GitHub) |
+| [`docs/funcionalidades/help-shortcuts.md`](docs/funcionalidades/help-shortcuts.md) | Modal de ajuda e tabela completa de atalhos por contexto |
 | [`docs/auditoria-codigo.md`](docs/auditoria-codigo.md) | Bugs, inconsistências e débitos técnicos — abertos e resolvidos, com workarounds |
 | [`docs/auditoria-arquitetura.md`](docs/auditoria-arquitetura.md) | Histórico de problemas arquiteturais e status de resolução |
 | [`CLAUDE.md`](CLAUDE.md) | Regras obrigatórias para agentes (arquitetura, testes, i18n, commits) |

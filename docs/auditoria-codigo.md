@@ -350,6 +350,47 @@ Ao selecionar S para sincronizar, a mensagem genérica exibida no painel de log 
 
 ---
 
+## Correções da revisão de 2026-07-11 (atalhos, modais e infraestrutura de teste)
+
+Bugs identificados e corrigidos na revisão completa de funcionalidades (branch `refactor/pino-logger`), todos cobertos por testes automatizados:
+
+### ~~UX-12~~ — Atalho `Ctrl+H` inacessível em terminais reais
+**Severidade: ALTO** | **Status: RESOLVIDO**
+
+Terminais enviam o byte `0x08` (backspace) para `Ctrl+H`; o Ink o reporta como `key.backspace`, nunca como `ctrl+h` — a ajuda documentada era inalcançável pelo teclado. O `Layout` passou a aceitar `key.backspace` como abertura da ajuda em telas sem campo de texto (prop `helpOnBackspace`; a tecla Backspace física envia `0x7f` = `key.delete` e não conflita).
+
+### ~~UX-13~~ — Atalho `Ctrl+M` colidia com Enter e disparava sincronização
+**Severidade: ALTO** | **Status: RESOLVIDO**
+
+Terminais enviam o mesmo byte (`0x0d`) para `Ctrl+M` e `Enter` — o filtro de selecionados era inalcançável e a tentativa disparava a ação de Enter (sincronizar escopo). Filtro remapeado para `Ctrl+F` (código, modal de ajuda, i18n, README e docs).
+
+### ~~UX-14~~ — Letra `p` impossível de digitar em qualquer prompt de texto
+**Severidade: ALTO** | **Status: RESOLVIDO**
+
+Os 5 prompts do `tuiSession` engoliam `p`/`P` (resquício do antigo atalho "p" para o modal de parâmetros, hoje `Ctrl+P`) — impossível digitar usuário, senha ou caminho contendo "p". Blocos removidos.
+
+### ~~UX-15~~ — `Ctrl+C` não encerrava com modal aberto
+**Severidade: MÉDIO** | **Status: RESOLVIDO**
+
+O gate de modal aberto no `Layout` vinha antes do handler de `Ctrl+C`. Handler movido para antes do gate — encerrar sempre funciona.
+
+### ~~UX-16~~ — Títulos dos modais de Parâmetros e Ajuda nunca renderizavam
+**Severidade: MÉDIO** | **Status: RESOLVIDO**
+
+Off-by-one no cálculo de altura (`marginTop` do conteúdo não contabilizado) fazia o flexbox encolher o cabeçalho e cortar a linha do título. Corrigido em `ParametersModal` e `HelpModal`.
+
+### ~~UX-17~~ — Painel de log estourava a altura com linhas longas
+**Severidade: MÉDIO** | **Status: RESOLVIDO**
+
+Entradas mais largas que o terminal quebravam em múltiplas linhas físicas, empurrando o layout. Cada entrada agora é truncada em uma única linha (`wrap="truncate-end"`), com colorização por nível via ANSI manual (independente de detecção de TTY).
+
+### ~~INC-09~~ — Suíte de testes morria na primeira exceção e ocultava regressões
+**Severidade: ALTO** | **Status: RESOLVIDO**
+
+`tests/run-all.ts` abortava no primeiro arquivo com exceção (ex.: `ssh-keygen` ausente) e os arquivos seguintes — incluindo todos os de TUI — nunca executavam, mascarando testes quebrados havia meses (`tui_render_test` pressionava atalhos sem Ctrl; `git_sync_auth_guard_test` e `git_sync_summary_test` com expectativas defasadas). Runner reescrito: tolerante a falhas, resumo final e exit code correto. Testes defasados corrigidos; novos testes de regressão adicionados (`tui_edit_params_modal_test`, `logger_panel_color_test`, `env_yaml_write_test`, `git_sync_cache_refresh_test`) com utilitários compartilhados (`tests/tui_test_utils.ts`).
+
+---
+
 ## Resumo por Severidade
 
 | Severidade | Qtd | Itens principais |
@@ -361,7 +402,7 @@ Ao selecionar S para sincronizar, a mensagem genérica exibida no painel de log 
 
 ### Itens resolvidos desde a auditoria inicial
 
-BUG-02, BUG-03, BUG-04, BUG-05, BUG-06, BUG-08, BUG-09, BUG-10, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, INC-08, DC-01, DC-02, DC-03, DC-04, I18N-02, I18N-03, I18N-04, REQ-04, REQ-05, REQ-06, UX-01, UX-02, UX-05, UX-06, UX-07, UX-08, UX-09, UX-10, UX-11, REQ-01/UX-03 (35 itens)
+BUG-02, BUG-03, BUG-04, BUG-05, BUG-06, BUG-08, BUG-09, BUG-10, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, INC-08, INC-09, DC-01, DC-02, DC-03, DC-04, I18N-02, I18N-03, I18N-04, REQ-04, REQ-05, REQ-06, UX-01, UX-02, UX-05, UX-06, UX-07, UX-08, UX-09, UX-10, UX-11, UX-12, UX-13, UX-14, UX-15, UX-16, UX-17, REQ-01/UX-03 (42 itens)
 
 ---
 

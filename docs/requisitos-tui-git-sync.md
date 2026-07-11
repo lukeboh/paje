@@ -92,6 +92,22 @@ Quando um repositório está **divergido** (`ahead > 0` e `behind > 0`), o siste
   - Lista ordenada de repositórios com métricas (objetos/volume/velocidade)
 - Quando houver múltiplos servidores, o resumo deve indicar o total consolidado e, quando aplicável, destacar o servidor de cada repositório.
 
+### RF-09 — Carga instantânea com cache
+
+- Quando existir cache válido (`~/.paje/git-tree-cache.json` com `configHash` igual ao da configuração atual de servidores), a árvore deve abrir imediatamente a partir do cache.
+- O status local de cada repositório deve ser recalculado em segundo plano com concorrência limitada (4 repositórios por vez) — nunca todos simultaneamente, para não saturar a máquina nem travar a TUI.
+- Cada status recalculado deve ser entregue **incrementalmente** à árvore (atualização linha a linha), e não em bloco ao final.
+- Statuses que chegarem antes de a árvore montar devem ser bufferizados e aplicados assim que ela estiver pronta — nenhum update pode ser perdido.
+- Ao final do refresh, o cache deve ser regravado com o `statusMap` atualizado.
+- O cache não tem TTL; é invalidado apenas por mudança na configuração de servidores.
+- O cache nunca pode conter tokens (URLs autenticadas são reidratadas a cada carga).
+
+### RF-10 — Posicionamento inicial do cursor
+
+- Quando `paje git-sync` for executado de dentro de um diretório de trabalho git, a árvore deve abrir com o cursor posicionado na linha do repositório correspondente (comparação por caminho local resolvido).
+- O scroll inicial deve deixar algumas linhas de contexto acima do repositório selecionado.
+- Quando não houver correspondência, o cursor inicia na primeira linha.
+
 ## Requisitos de usabilidade
 
 ### RU-01 — Estrutura da TUI
@@ -116,12 +132,13 @@ Quando um repositório está **divergido** (`ahead > 0` e `behind > 0`), o siste
 
 - O log deve exibir tudo que o sistema está fazendo, incluindo comandos executados e respostas.
 - Cada linha deve ter data/hora com precisão de segundos.
-- Mensagens de erro devem aparecer em vermelho.
+- Colorização por nível: debug em cinza (dim), info na cor padrão, warn em amarelo, erro em vermelho — com códigos ANSI aplicados manualmente (independentes de detecção de TTY).
+- Cada entrada deve ocupar exatamente uma linha física (truncamento; linhas longas não podem quebrar e estourar a altura do painel).
 - Scroll do log deve ser automático.
 - Ao pressionar `Ctrl+L`, o log deve ocupar a tela inteira e retornar ao layout padrão ao pressionar `Ctrl+L` novamente.
 - Ao pressionar `Ctrl+W`, a área de trabalho deve ocupar a tela inteira e retornar ao layout padrão ao pressionar `Ctrl+W` novamente.
-- O pipeline de log deve usar LoggerBroker com transport dedicado ao painel.
-- O painel deve iniciar em nível `warn` (erros em vermelho).
+- O pipeline de log deve usar LoggerBroker (motor pino) com transport dedicado ao painel.
+- O painel deve iniciar em nível `info`; com `--verbose`, em nível `debug`.
 
 ### RU-04 — Filtro de selecionados
 
@@ -133,6 +150,16 @@ Quando um repositório está **divergido** (`ahead > 0` e `behind > 0`), o siste
 
 - `Esc` retorna à tela anterior.
 - Se o usuário estiver digitando, confirmar desistência.
+- Em modais de workflow (editor de env.yaml e branch), `Esc` é tratado pelo próprio modal: durante uma edição inline, cancela apenas a edição; fora dela, fecha o modal.
+
+### RU-07 — Editor de parâmetros (`Ctrl+E`)
+
+- `Ctrl+E` abre o editor do `env.yaml` sobreposto à árvore.
+- `Enter` inicia edição inline do valor; `Esc` durante a edição cancela apenas a edição.
+- Alterações confirmadas ficam pendentes (badge) até `Ctrl+S`, que grava no arquivo preservando comentários e convertendo chaves para kebab-case.
+- Parâmetros com origem `cli`/`resolved` são somente leitura.
+- A descrição do parâmetro selecionado aparece em rodapé fixo; o conteúdo do modal nunca excede sua altura.
+- Enquanto aberto, `Ctrl+P`/`Ctrl+H` são bloqueados; `Ctrl+C` continua encerrando a aplicação.
 
 ### RU-06 — Cenários multi-servidor
 
