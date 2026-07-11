@@ -77,7 +77,12 @@ export const Layout: React.FC<LayoutProps> = ({
   const modalState = modalStateOverride ?? useModalStateController();
   const { exit } = useApp();
   const { stdout } = useStdout();
-  const terminalHeight = stdout?.rows ?? 24;
+  // One row below the terminal height: when a frame is as tall as the
+  // terminal, Ink abandons incremental rendering and clears the whole screen
+  // (ESC[2J) on every frame — the entire TUI flashes on each update,
+  // painfully so over SSH. Staying below the threshold keeps Ink on the
+  // erase-lines path: a single atomic write per frame, no blank flash.
+  const terminalHeight = Math.max(8, (stdout?.rows ?? 24) - 1);
   const terminalWidth = stdout?.columns ?? 80;
   const headerLeft = useMemo(() => formatHeaderLeft(title, breadcrumbs), [title, breadcrumbs]);
   const globalLogEntries = useLogEntries();

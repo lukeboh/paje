@@ -31,6 +31,7 @@ const testFiles = [
   "./tui_edit_params_modal_test.js",
   "./git_sync_cache_refresh_test.js",
   "./tui_tree_text_filter_test.js",
+  "./tui_no_flicker_test.js",
 ];
 
 // One crashing test must not silently skip the rest of the suite: import each

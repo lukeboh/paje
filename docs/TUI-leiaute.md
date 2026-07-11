@@ -65,6 +65,7 @@ Padronizar a experiência de navegação e mensagens da TUI em um layout de 4 pa
 - O log pode ser ocultado quando a área de trabalho estiver maximizada via **Ctrl+W**.
 - Modais são sobrepostos ao layout e centralizados. Modais informativos (parâmetros, ajuda) bloqueiam os atalhos da tela; modais de workflow (editor de env.yaml, branch) são donos de todo o teclado enquanto abertos — exceto `Ctrl+C`, que sempre encerra.
 - Na conta de altura interna dos modais, o `marginTop` do bloco de conteúdo deve ser contabilizado — sem isso o flexbox encolhe o cabeçalho e a primeira linha (título) é cortada.
+- **O frame do Layout deve ficar pelo menos 1 linha abaixo da altura do terminal**: quando a saída atinge `stdout.rows`, o Ink abandona o redesenho incremental e limpa a tela inteira (ESC[2J) a cada frame — a TUI pisca a cada atualização, de forma acentuada via SSH. O teste `tui_no_flicker_test` garante que nenhum clear de tela inteira é emitido durante a interação.
 - Componentes reutilizáveis devem ser usados para título, orientação, workspace e log.
 
 ## Componentes atuais

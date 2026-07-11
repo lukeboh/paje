@@ -57,10 +57,13 @@ export const createFakeTTY = (columns = 80, rows = 24): FakeTTY => {
     await new Promise((resolve) => setTimeout(resolve, settleMs));
   };
 
-  // The last full frame Ink rendered (frames are separated by clear-screen
-  // sequences). Assertions against it see current state, not stale history.
+  // The last full frame Ink rendered. In incremental mode frames are
+  // separated by erase-lines bursts (ESC[2K ESC[1A ... ESC[2K ESC[G); the
+  // legacy full-clear delimiter (ESC[2J) is kept for compatibility.
+  // Assertions against it see current state, not stale history.
+  const FRAME_DELIMITER = /(?:\u001b\[2K\u001b\[1A)+\u001b\[2K\u001b\[G|\u001b\[2J/g;
   const getLastFrame = (): string => {
-    const frames = output.split("\u001b[2J");
+    const frames = output.split(FRAME_DELIMITER);
     return frames[frames.length - 1] ?? "";
   };
 
