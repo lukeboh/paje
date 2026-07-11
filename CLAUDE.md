@@ -89,11 +89,13 @@ npm test        # suite completa — nenhum teste existente pode quebrar
 ```
 
 - Se `npm run build` falhar, **não faça commit**.
-- Se `npm test` introduzir novas falhas (além das falhas pré-existentes de
-  infraestrutura — git signing server / ssh-keygen ausente), **não faça commit**.
-- Falhas pré-existentes conhecidas (infraestrutura de container, não código):
-  - `git_branch_service_test` — servidor de assinatura git retorna 400.
-  - `ssh_key_store_command_test` — segunda etapa requer `ssh-keygen` ausente no container; a primeira etapa (token) passou a imprimir `OK`.
+- Se `npm test` introduzir novas falhas, **não faça commit**.
+- O runner (`tests/run-all.ts`) é tolerante a falhas: um teste que quebra não
+  impede os demais de rodar; ao final é impresso um resumo e o exit code
+  reflete o resultado. **Nunca confie em uma execução parcial** — verifique a
+  linha final ("Todos os arquivos de teste passaram." ou a lista de falhas).
+- Se o container não tiver `ssh-keygen`, instale com
+  `apt-get install -y openssh-client` (necessário para os testes de chave SSH).
 
 ---
 

@@ -63,7 +63,7 @@ const noAuthDevGit =
 assert.ok(noAuthDevGit, "Deve avisar quando não há autenticação no servidor DEV-GIT");
 const noValidServer =
   capturedLogs.includes("Nenhum servidor com autenticação válida") ||
-  capturedLogs.includes("No server with valid authentication found");
+  capturedLogs.includes("No server with valid authentication");
 assert.ok(noValidServer, "Deve informar quando nenhum servidor possui autenticação válida");
 assert.strictEqual(calls.length, 0, "Não deve chamar API sem autenticação");
 

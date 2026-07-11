@@ -108,7 +108,7 @@ export type GitSyncCore = {
 
 const normalizeBaseUrl = (url: string): string => url.trim().replace(/\/+$/, "");
 
-const computeConfigHash = (servers: GitServerEntry[]): string => {
+export const computeConfigHash = (servers: GitServerEntry[]): string => {
   return servers
     .map((s) =>
       [s.name, normalizeBaseUrl(s.baseUrl), s.filter ?? "", String(s.noPublicRepos ?? false), String(s.noArchivedRepos ?? false)].join("|")
@@ -629,8 +629,16 @@ export const createGitSyncCore = (): GitSyncCore => {
           applyInitialSelectionFromStatusMap(tree, statusMap);
 
           setImmediate(async () => {
-            const freshEntries = await Promise.all(
-              filteredProjects.map(async (project) => {
+            // Bounded worker pool: one git subprocess per repo, so spawning
+            // them all at once would saturate the machine and starve the TUI
+            // event loop (the interface stops responding to keystrokes).
+            const REFRESH_CONCURRENCY = 4;
+            const freshStatusMap: Record<number, RepoSyncStatus> = {};
+            let nextIndex = 0;
+            const worker = async (): Promise<void> => {
+              while (nextIndex < filteredProjects.length) {
+                const project = filteredProjects[nextIndex];
+                nextIndex += 1;
                 const targetPath = path.join(
                   project.pajeBaseDir ?? config.baseDir,
                   resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project)
@@ -640,18 +648,20 @@ export const createGitSyncCore = (): GitSyncCore => {
                   defaultBranch: project.default_branch,
                   knownRemote: true,
                 });
-                return [project.id, status] as const;
-              })
+                freshStatusMap[project.id] = status;
+                // Deliver each status as soon as it is known instead of after
+                // the full sweep, so the tree updates progressively.
+                onStatusRefreshed?.(project.id, status);
+              }
+            };
+            await Promise.all(
+              Array.from({ length: Math.min(REFRESH_CONCURRENCY, filteredProjects.length) }, () => worker())
             );
-            const freshStatusMap = Object.fromEntries(freshEntries) as Record<number, RepoSyncStatus>;
             try {
               writeGitTreeCache({ ...cached, statusMap: freshStatusMap });
               logger.info(t("cli.cache.statusRefreshed"));
             } catch {
               // non-critical
-            }
-            if (onStatusRefreshed) {
-              freshEntries.forEach(([id, status]) => onStatusRefreshed(id as number, status));
             }
           });
 

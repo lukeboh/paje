@@ -523,7 +523,9 @@ export const renderRepositoryTree = async (
           if (input === " ") {
             toggleSelected();
           }
-          if (key.ctrl && lower === "m") {
+          // Ctrl+F: terminals send the same byte for Ctrl+M and Enter (0x0d),
+          // so Ctrl+M can never be detected as a distinct shortcut.
+          if (key.ctrl && lower === "f") {
             toggleSelectionFilter();
           }
         },
@@ -572,6 +574,7 @@ export const renderRepositoryTree = async (
           parameters={parametersSnapshot}
           envFilePath={options?.envFilePath}
           modalState={modalState}
+          helpOnBackspace
           helpContext="tree"
           onHelpShortcut={(input, key) => {
             const lower = input.toLowerCase();
@@ -579,7 +582,7 @@ export const renderRepositoryTree = async (
               openBranchModal();
               return;
             }
-            if (key.ctrl && lower === "m") {
+            if (key.ctrl && lower === "f") {
               toggleSelectionFilter();
               return;
             }
@@ -706,6 +709,7 @@ export const renderLoadingScreen = (options: LoadingScreenOptions): LoadingScree
         orientation={options.orientation ?? t("tui.loading.orientation")}
         parameters={options.parameters ?? []}
         modalState={modalState}
+        helpOnBackspace
         helpContext="loading"
         onHelpShortcut={() => undefined}
       >

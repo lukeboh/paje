@@ -29,7 +29,7 @@ Padronizar a experiência de navegação e mensagens da TUI em um layout de 4 pa
 - **Ctrl+H**: abre/fecha a modal de ajuda (shortcuts).
 - **Ctrl+P**: abre/fecha a modal de parâmetros carregados na execução atual.
 - **Ctrl+C**: encerra a TUI imediatamente.
-- **Ctrl+M**: alterna filtro para exibir apenas itens marcados na árvore (quando aplicável).
+- **Ctrl+F**: alterna filtro para exibir apenas itens marcados na árvore (quando aplicável).
 - **Ctrl+S**: confirma a seleção e sincroniza todos os repositórios marcados na árvore (contexto: menu → seleciona git-sync; contexto: árvore → sincroniza tudo).
 - **Enter**: confirma seleção e sincroniza apenas o escopo destacado (linha/grupo) na árvore.
 - **Ctrl+G**: seleciona git-server-store no menu.

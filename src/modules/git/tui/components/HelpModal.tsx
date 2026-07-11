@@ -50,14 +50,18 @@ const resolveShortcutKey = (input: string, key: Key): string | null => {
       h: "Ctrl+H",
       p: "Ctrl+P",
       e: "Ctrl+E",
+      f: "Ctrl+F",
       l: "Ctrl+L",
       w: "Ctrl+W",
       b: "Ctrl+B",
-      m: "Ctrl+M",
     };
     if (ctrlMap[lower]) {
       return ctrlMap[lower];
     }
+  }
+  // Terminals send byte 0x08 for Ctrl+H, which Ink reports as key.backspace.
+  if (key.backspace) {
+    return "Ctrl+H";
   }
   if (key.return) {
     return "Enter";
@@ -165,7 +169,7 @@ const buildGroups = (options: { logMaximized: boolean; workspaceMaximized: boole
         { id: "tree-toggle", key: "Espaço", description: t("helpModal.shortcuts.tree.toggle"), contexts: ["tree"] },
         { id: "tree-confirm", key: "Ctrl+S", description: t("helpModal.shortcuts.tree.confirm"), contexts: ["tree"] },
         { id: "tree-confirm-single", key: "Enter", description: t("helpModal.shortcuts.tree.confirmSingle"), contexts: ["tree"] },
-        { id: "tree-filter", key: "Ctrl+M", description: t("helpModal.shortcuts.tree.filter"), contexts: ["tree"] },
+        { id: "tree-filter", key: "Ctrl+F", description: t("helpModal.shortcuts.tree.filter"), contexts: ["tree"] },
         { id: "tree-branch", key: "Ctrl+B", description: t("helpModal.shortcuts.tree.branch"), contexts: ["tree"] },
       ],
     },
@@ -205,7 +209,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({
 }) => {
   const backgroundColor = "#2C2C2C";
   const headerHeight = 2;
-  const contentHeight = Math.max(1, height - headerHeight - 2);
+  const contentHeight = Math.max(1, height - headerHeight - 2 - 1);
   const groups = useMemo(() => buildGroups({ logMaximized, workspaceMaximized }), [logMaximized, workspaceMaximized]);
   const lines = useMemo(() => buildLines(groups, context), [groups, context]);
 

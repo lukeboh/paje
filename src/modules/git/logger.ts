@@ -1,4 +1,5 @@
 import pino from "pino";
+import pinoPretty from "pino-pretty";
 import path from "node:path";
 import { ensurePajeDirs, resolvePajePaths } from "./persistence.js";
 
@@ -11,18 +12,35 @@ export const resolveLogFilePath = (): string => {
   return path.join(paths.logsDir, `git-sync-${date}.log`);
 };
 
-// Thin wrapper used by TUI components for internal debug logging.
-// Writes JSON-structured lines to the daily log file via pino.
+// A single shared pino instance per log file: each pino destination (SonicBoom)
+// holds an open fd and process exit listeners, so per-component instances
+// (Layout, menu, prompts) would leak fds and trigger MaxListeners warnings
+// that corrupt the Ink UI when printed to stderr.
+const sharedFileLoggers = new Map<string, pino.Logger>();
+
+const getSharedFileLogger = (filePath: string): pino.Logger => {
+  let logger = sharedFileLoggers.get(filePath);
+  if (!logger) {
+    logger = pino(
+      { level: "info", base: null },
+      pinoPretty({
+        colorize: false,
+        sync: true,
+        translateTime: "yyyy-mm-dd HH:MM:ss",
+        ignore: "pid,hostname",
+        destination: filePath,
+      })
+    );
+    sharedFileLoggers.set(filePath, logger);
+  }
+  return logger;
+};
+
 export class PajeLogger {
   private readonly pinoInst: pino.Logger;
 
   constructor() {
-    const filePath = resolveLogFilePath();
-    const dest = pino.destination({ dest: filePath, sync: true });
-    this.pinoInst = pino(
-      { level: "info", base: null, timestamp: pino.stdTimeFunctions.isoTime },
-      dest
-    );
+    this.pinoInst = getSharedFileLogger(resolveLogFilePath());
   }
 
   info(message: string): void {

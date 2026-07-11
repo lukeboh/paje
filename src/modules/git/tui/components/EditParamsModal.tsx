@@ -10,6 +10,7 @@ export type EditParamsModalProps = {
   height: number;
   parameters: CommandParameters[];
   envFilePath?: string;
+  onClose?: () => void;
 };
 
 type EditableItem = {
@@ -68,6 +69,7 @@ export const EditParamsModal: React.FC<EditParamsModalProps> = ({
   height,
   parameters,
   envFilePath,
+  onClose,
 }) => {
   const backgroundColor = "#1E1E1E";
   const items = useMemo(() => buildEditableItems(parameters), [parameters]);
@@ -139,6 +141,7 @@ export const EditParamsModal: React.FC<EditParamsModalProps> = ({
   }, [pending, envFilePath]);
 
   const isEditing = editingIndex !== null;
+  // header: title + hint + status (3) | footer: selected item description (1)
   const headerHeight = 3;
   const footerHeight = 1;
   const contentHeight = Math.max(1, height - headerHeight - footerHeight - 2);
@@ -171,6 +174,14 @@ export const EditParamsModal: React.FC<EditParamsModalProps> = ({
         return;
       }
 
+      if (key.escape) {
+        onClose?.();
+        return;
+      }
+      if (key.ctrl && input.toLowerCase() === "e") {
+        onClose?.();
+        return;
+      }
       if (key.upArrow) {
         setSelectedIndex((i) => Math.max(0, i - 1));
         return;
@@ -215,8 +226,8 @@ export const EditParamsModal: React.FC<EditParamsModalProps> = ({
     );
   }
 
-  const innerWidth = Math.max(1, width - 4);
   const visibleItems = items.slice(scrollOffset, scrollOffset + contentHeight);
+  const selectedItem = items[selectedIndex];
 
   return (
     <Box
@@ -228,17 +239,17 @@ export const EditParamsModal: React.FC<EditParamsModalProps> = ({
       paddingX={1}
     >
       <Box flexDirection="column">
-        <Text color="yellow" backgroundColor={backgroundColor}>
+        <Text wrap="truncate-end" color="yellow" backgroundColor={backgroundColor}>
           {t("editParamsModal.title")}
           {pending.size > 0 ? (
             <Text color="magenta">{`  [${t("editParamsModal.pendingCount", { count: String(pending.size) })}]`}</Text>
           ) : null}
         </Text>
-        <Text dimColor backgroundColor={backgroundColor}>
+        <Text wrap="truncate-end" dimColor backgroundColor={backgroundColor}>
           {isEditing ? t("editParamsModal.hintEditing") : t("editParamsModal.hint")}
         </Text>
         {saveStatus !== "idle" ? (
-          <Text color={saveStatus === "saved" ? "green" : "red"} backgroundColor={backgroundColor}>
+          <Text wrap="truncate-end" color={saveStatus === "saved" ? "green" : "red"} backgroundColor={backgroundColor}>
             {saveMessage}
           </Text>
         ) : (
@@ -255,57 +266,51 @@ export const EditParamsModal: React.FC<EditParamsModalProps> = ({
           const displayValue = hasPending ? pending.get(item.name)! : item.value;
           const badgeColor = sourceBadgeColor(item.source);
 
-          const prefix = isSelected ? "▶ " : "  ";
+          const prefix = isSelected ? "> " : "  ";
           const bgColor = isSelected ? "#2E3440" : backgroundColor;
 
+          if (isCurrentlyEditing) {
+            return (
+              <Text key={`${item.name}-${absIdx}`} wrap="truncate-end" backgroundColor={bgColor}>
+                <Text color="cyan">{`${prefix}${item.name}: `}</Text>
+                <Text backgroundColor="#003366" color="white">{` ${editingValue}`}</Text>
+                <Text color="cyan">{"_"}</Text>
+              </Text>
+            );
+          }
+
           return (
-            <Box key={`${item.name}-${absIdx}`} flexDirection="column" width={innerWidth}>
-              {isCurrentlyEditing ? (
-                <Box flexDirection="row">
-                  <Text backgroundColor={bgColor} color="cyan">{`${prefix}${item.name}: `}</Text>
-                  <Text backgroundColor="#003366" color="white">{` ${editingValue}▌`}</Text>
-                </Box>
+            <Text key={`${item.name}-${absIdx}`} wrap="truncate-end" backgroundColor={bgColor}>
+              <Text color={isSelected ? "white" : undefined} bold={isSelected}>
+                {prefix}
+                {item.name}
+                {" ["}
+              </Text>
+              <Text color={hasPending ? "magenta" : badgeColor}>
+                {hasPending ? t("editParamsModal.pendingBadge") : item.source}
+              </Text>
+              <Text color={isSelected ? "white" : undefined} bold={isSelected}>
+                {"]: "}
+              </Text>
+              {!item.editable ? (
+                <Text dimColor>
+                  {item.source === "cli"
+                    ? t("editParamsModal.cliLocked")
+                    : t("editParamsModal.resolvedLocked")}
+                </Text>
               ) : (
-                <Box flexDirection="row">
-                  <Text
-                    backgroundColor={bgColor}
-                    color={isSelected ? "white" : undefined}
-                    bold={isSelected}
-                  >
-                    {prefix}
-                    {item.name}
-                    {" ["}
-                  </Text>
-                  <Text backgroundColor={bgColor} color={hasPending ? "magenta" : badgeColor}>
-                    {hasPending ? t("editParamsModal.pendingBadge") : item.source}
-                  </Text>
-                  <Text
-                    backgroundColor={bgColor}
-                    color={isSelected ? "white" : undefined}
-                    bold={isSelected}
-                  >
-                    {"]: "}
-                  </Text>
-                  {!item.editable ? (
-                    <Text backgroundColor={bgColor} dimColor>
-                      {item.source === "cli"
-                        ? t("editParamsModal.cliLocked")
-                        : t("editParamsModal.resolvedLocked")}
-                    </Text>
-                  ) : (
-                    <Text backgroundColor={bgColor} color={hasPending ? "magenta" : isSelected ? "cyan" : "white"}>
-                      {displayValue || t("editParamsModal.emptyValue")}
-                    </Text>
-                  )}
-                </Box>
+                <Text color={hasPending ? "magenta" : isSelected ? "cyan" : "white"}>
+                  {displayValue || t("editParamsModal.emptyValue")}
+                </Text>
               )}
-              {isSelected && item.description ? (
-                <Text dimColor backgroundColor={bgColor}>{`   ${item.description}`}</Text>
-              ) : null}
-            </Box>
+            </Text>
           );
         })}
       </Box>
+
+      <Text wrap="truncate-end" dimColor backgroundColor={backgroundColor}>
+        {selectedItem?.description ? ` ${selectedItem.description}` : " "}
+      </Text>
     </Box>
   );
 };

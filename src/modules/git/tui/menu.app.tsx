@@ -220,6 +220,7 @@ export const renderMenu = async (
           parameters={parametersSnapshot}
           modalState={modalState}
           escapeEnabled={escapeEnabled}
+          helpOnBackspace
           helpContext="menu"
           onHelpShortcut={(input, key) => {
             const normalizedInput = input.toLowerCase();

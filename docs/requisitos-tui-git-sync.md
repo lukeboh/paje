@@ -108,7 +108,7 @@ Quando um repositório está **divergido** (`ahead > 0` e `behind > 0`), o siste
 ### RU-02 — Orientações
 
 - A linha de orientações deve indicar ações básicas: navegar, selecionar, sincronizar, cancelar.
-- Deve exibir o atalho `Ctrl+M` para alternar o filtro de itens marcados.
+- Deve exibir o atalho `Ctrl+F` para alternar o filtro de itens marcados.
 - Deve exibir os atalhos `Ctrl+W` para maximizar/restaurar a área de trabalho e `Ctrl+L` para maximizar/restaurar o log.
 - Deve exibir `Ctrl+B` para a modal de branch e `Ctrl+H` para a modal de ajuda.
 
@@ -125,9 +125,9 @@ Quando um repositório está **divergido** (`ahead > 0` e `behind > 0`), o siste
 
 ### RU-04 — Filtro de selecionados
 
-- Ao pressionar `Ctrl+M`, a árvore deve alternar entre exibir todos os itens e apenas os itens marcados.
+- Ao pressionar `Ctrl+F`, a árvore deve alternar entre exibir todos os itens e apenas os itens marcados.
 - Quando o filtro estiver ativo, os ancestrais dos itens marcados devem permanecer visíveis.
-- Ao pressionar `Ctrl+M` novamente, a árvore completa deve ser restaurada.
+- Ao pressionar `Ctrl+F` novamente, a árvore completa deve ser restaurada.
 
 ### RU-05 — Esc
 

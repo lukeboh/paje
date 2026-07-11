@@ -38,6 +38,7 @@ export type LayoutProps = {
   helpContext?: HelpContext;
   onHelpShortcut?: (input: string, key: Key) => void;
   envFilePath?: string;
+  helpOnBackspace?: boolean;
   children: React.ReactNode;
 };
 
@@ -65,6 +66,7 @@ export const Layout: React.FC<LayoutProps> = ({
   helpContext,
   onHelpShortcut,
   envFilePath,
+  helpOnBackspace = false,
   children,
 }) => {
   const panelState = usePanelStateController({
@@ -181,12 +183,28 @@ export const Layout: React.FC<LayoutProps> = ({
 
   useInput((input = "", key) => {
     const lower = typeof input === "string" ? input.toLowerCase() : "";
+    // Ctrl+C must always work, even with a modal open.
+    if (key.ctrl && input === "c") {
+      onCtrlC?.();
+      exit();
+      return;
+    }
+    // Workflow modals own the keyboard while open: edit-params handles its own
+    // Esc (cancel edit vs close) and branch handles its own Esc (onCancel).
+    // Switching to another modal from here would silently discard their state.
+    const workflowModalOpen =
+      modalState.modalOpen &&
+      (modalState.modalType === "edit-params" || modalState.modalType === "branch");
     if (key.escape) {
       debugLogger.info(
         `[TUI][ESC] layout escapeEnabled=${escapeEnabled} modalOpen=${modalState.modalOpen} logMax=${panelState.logMaximized} workspaceMax=${panelState.workspaceMaximized}`
       );
       if (!escapeEnabled) {
         debugLogger.info("[TUI][ESC] layout ignored (escapeEnabled=false)");
+        return;
+      }
+      if (workflowModalOpen) {
+        debugLogger.info("[TUI][ESC] layout deferring ESC to workflow modal");
         return;
       }
       if (modalState.modalOpen) {
@@ -203,7 +221,13 @@ export const Layout: React.FC<LayoutProps> = ({
       onEscape?.();
       return;
     }
-    if (key.ctrl && lower === "h") {
+    if (workflowModalOpen) {
+      return;
+    }
+    // Terminals send byte 0x08 for Ctrl+H, which Ink reports as key.backspace
+    // (the physical Backspace key sends 0x7f = key.delete). Accepting
+    // key.backspace here is opt-in per screen so text prompts keep erasing.
+    if ((key.ctrl && lower === "h") || (helpOnBackspace && key.backspace)) {
       modalState.openModal("help");
       return;
     }
@@ -212,11 +236,7 @@ export const Layout: React.FC<LayoutProps> = ({
       return;
     }
     if (key.ctrl && lower === "e") {
-      if (modalState.modalOpen && modalState.modalType === "edit-params") {
-        modalState.closeModal();
-      } else {
-        modalState.openModal("edit-params");
-      }
+      modalState.openModal("edit-params");
       return;
     }
     if (modalState.modalOpen) {
@@ -229,10 +249,6 @@ export const Layout: React.FC<LayoutProps> = ({
     if (key.ctrl && lower === "w") {
       panelState.toggleWorkspace();
       return;
-    }
-    if (key.ctrl && input === "c") {
-      onCtrlC?.();
-      exit();
     }
   });
 
@@ -296,6 +312,7 @@ export const Layout: React.FC<LayoutProps> = ({
                       height={modalHeight}
                       parameters={resolvedParameters}
                       envFilePath={envFilePath}
+                      onClose={() => modalState.closeModal()}
                     />
                   ) : (
                     <ParametersModal

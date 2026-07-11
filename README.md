@@ -197,6 +197,7 @@ Layout detalhado em [`docs/TUI-leiaute.md`](docs/TUI-leiaute.md).
 |---|---|
 | `Ctrl+H` | Abrir/fechar modal de ajuda (atalhos) |
 | `Ctrl+P` | Abrir/fechar modal de parâmetros carregados |
+| `Ctrl+E` | Abrir/fechar editor de parâmetros do env.yaml |
 | `Ctrl+W` | Alternar área de trabalho entre padrão e tela cheia |
 | `Ctrl+L` | Alternar painel de log entre padrão e tela cheia |
 | `Esc` | Fechar modal → restaurar painel maximizado → voltar tela → sair (no menu) |
@@ -219,7 +220,7 @@ Layout detalhado em [`docs/TUI-leiaute.md`](docs/TUI-leiaute.md).
 | `Space` | Selecionar/deselecionar repositório |
 | `Ctrl+S` | Sincronizar todos os marcados |
 | `Enter` | Sincronizar apenas o escopo destacado (linha/grupo) |
-| `Ctrl+M` | Alternar filtro: todos / apenas selecionados |
+| `Ctrl+F` | Alternar filtro: todos / apenas selecionados |
 | `Ctrl+B` | Abrir modal de seleção de branch |
 | `Esc` | Cancelar |
 

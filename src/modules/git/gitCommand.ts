@@ -1762,6 +1762,28 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
         }
         node.children?.forEach((child) => buildProjectNodeMap(child));
       };
+      // Background cache refresh can complete before the tree TUI mounts
+      // (treeProgress is only set in onReady); buffer those statuses and
+      // flush them once the TUI is ready instead of dropping them.
+      const pendingStatusUpdates = new Map<number, RepoSyncStatus>();
+      const deliverStatus = (projectId: number, status: RepoSyncStatus): void => {
+        const progress = treeProgressRef();
+        const nodeId = projectNodeMap.get(projectId);
+        if (progress && nodeId) {
+          progress.updateStatus(nodeId, status);
+          return;
+        }
+        pendingStatusUpdates.set(projectId, status);
+      };
+      const flushPendingStatuses = (): void => {
+        const progress = treeProgressRef();
+        if (!progress) return;
+        pendingStatusUpdates.forEach((status, projectId) => {
+          const nodeId = projectNodeMap.get(projectId);
+          if (nodeId) progress.updateStatus(nodeId, status);
+        });
+        pendingStatusUpdates.clear();
+      };
 
       const core = createGitSyncCore();
       const { header, tree, statusMap, projects: filteredProjects } = await core.loadTree({
@@ -1776,12 +1798,7 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
           logToTui(t("cli.http.accessServers", { frame, count: requestCount }));
           logToTui(t("cli.http.start", { server: serverName, label: "...", count: requestCount }));
         },
-        onStatusRefreshed: session
-          ? (projectId, status) => {
-              const nodeId = projectNodeMap.get(projectId);
-              if (nodeId) treeProgressRef()?.updateStatus(nodeId, status);
-            }
-          : undefined,
+        onStatusRefreshed: session ? deliverStatus : undefined,
       }).finally(() => loadingHandle?.stop());
 
       if (filteredProjects.length === 0 && tree.length === 0) {
@@ -2100,6 +2117,7 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
         initialSelectedNodeId,
         onReady: (handlers) => {
           treeProgress = handlers.progress;
+          flushPendingStatuses();
           handlers.render();
         },
         onConfirm: async (selection: TuiSelectionResult) => {

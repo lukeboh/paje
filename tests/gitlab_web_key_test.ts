@@ -99,3 +99,5 @@ assert.ok(
 );
 
 globalThis.fetch = originalFetch as typeof fetch;
+
+console.log("gitlab_web_key_test: OK");
