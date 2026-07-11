@@ -53,6 +53,7 @@ Os atalhos são recebidos como bytes de controle; alguns colidem com teclas comu
 | PgUp/PgDn | Rolar página | somente na árvore |
 | Home/End | Ir ao início/fim | somente na árvore |
 | Espaço | Marcar/desmarcar repositório | somente na árvore |
+| *digitar texto* | Filtrar a árvore em tempo real (Backspace apaga; Esc limpa) | somente na árvore |
 | Ctrl+S | Sincronizar seleção (todos os repositórios marcados) | somente na árvore |
 | Enter | Sincronizar apenas o escopo destacado (linha/grupo) | somente na árvore |
 | Ctrl+F | Filtrar selecionados | somente na árvore |

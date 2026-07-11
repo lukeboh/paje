@@ -10,6 +10,7 @@ O PAJÉ automatiza tarefas repetitivas de ambiente de desenvolvimento com servid
 - **Multi-servidor**: múltiplos servidores simultâneos (inclusive misturando GitLab e GitHub), cada um com suas próprias configurações (diretório, filtros, e-mail).
 - **Abertura instantânea da árvore**: cache local (`~/.paje/git-tree-cache.json`) permite exibir a árvore imediatamente; o status de cada repositório é atualizado em segundo plano.
 - **Cursor posicionado no contexto**: ao executar `paje git-sync` de dentro de um clone, a árvore abre com o cursor no repositório correspondente.
+- **Filtro por digitação**: digitar na árvore filtra os repositórios em tempo real (nome e caminho, sem diferenciar maiúsculas); Esc limpa o filtro.
 - **Editor de parâmetros na TUI**: `Ctrl+E` abre editor do `env.yaml` com edição inline, alterações pendentes e gravação preservando comentários.
 - **Gerenciamento de SSH e tokens**: geração ou reaproveitamento de chaves, atualização de `~/.ssh/config`, `known_hosts`, criação e rotação de PAT.
 - **Logs estruturados com pino**: console, arquivo diário e painel TUI colorizado por nível.
@@ -249,6 +250,7 @@ Layout detalhado em [`docs/TUI-leiaute.md`](docs/TUI-leiaute.md).
 | `↑ ↓` / `PgUp PgDn` | Navegar |
 | `Home` / `End` | Ir ao início/fim da lista |
 | `Space` | Selecionar/deselecionar repositório |
+| *digitar texto* | Filtrar a árvore em tempo real (Backspace apaga; Esc limpa) |
 | `Ctrl+S` | Sincronizar todos os marcados |
 | `Enter` | Sincronizar apenas o escopo destacado (linha/grupo) |
 | `Ctrl+F` | Alternar filtro: todos / apenas selecionados |

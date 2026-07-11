@@ -103,9 +103,10 @@ const ptBR = {
     tree: {
       empty: "(Nenhum repositório encontrado)",
       orientationDefault:
-        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | Ctrl+S para sincronizar tudo | Enter para sincronizar apenas o escopo destacado | Esc para cancelar | Ctrl+F para filtrar selecionados | Ctrl+B para branch | Ctrl+W para ampliar área de trabalho | Ctrl+L para ampliar log | Ctrl+H para ajuda",
+        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | Ctrl+S para sincronizar tudo | Enter para sincronizar apenas o escopo destacado | Esc para cancelar | Digite para filtrar por texto | Ctrl+F para filtrar selecionados | Ctrl+B para branch | Ctrl+W para ampliar área de trabalho | Ctrl+L para ampliar log | Ctrl+H para ajuda",
       orientationConfirm:
-        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | Ctrl+S para confirmar seleção (tudo) | Enter para confirmar seleção (escopo) | Esc para cancelar | Ctrl+F para filtrar selecionados | Ctrl+B para branch | Ctrl+W para ampliar área de trabalho | Ctrl+L para ampliar log | Ctrl+H para ajuda",
+        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | Ctrl+S para confirmar seleção (tudo) | Enter para confirmar seleção (escopo) | Esc para cancelar | Digite para filtrar por texto | Ctrl+F para filtrar selecionados | Ctrl+B para branch | Ctrl+W para ampliar área de trabalho | Ctrl+L para ampliar log | Ctrl+H para ajuda",
+      textFilterIndicator: 'Filtro: "{{query}}" — {{count}} item(ns) | Esc limpa | Backspace apaga',
       filterAll: "[DEBUG] Exibindo todos os repositórios.",
       filterSelected: "[DEBUG] Exibindo apenas repositórios marcados.",
       singleInvalid: "Selecione um repositório válido para sincronizar apenas um item.",

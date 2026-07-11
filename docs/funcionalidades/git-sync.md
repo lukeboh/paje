@@ -63,6 +63,7 @@ A TUI é iniciada ao executar `paje` sem parâmetros e selecionar **Sincronizar 
 - Manter seleção por checkbox sem perder o scroll.
 - Inicializar checkboxes com base em clonagem local (pré-seleção automática).
 - Permitir alternar a visualização para mostrar apenas repositórios marcados (atalho `Ctrl+F`).
+- Permitir filtrar a árvore digitando texto (nome ou caminho, case-insensitive), com indicador da consulta e contagem; Esc limpa o filtro.
 - Mostrar progresso por linha durante sincronização.
 - Exibir resumo consolidado ao final.
 - Abrir a árvore instantaneamente quando houver cache válido, com atualização de status em segundo plano.

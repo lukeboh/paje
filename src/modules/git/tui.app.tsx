@@ -7,7 +7,7 @@ import { useLayoutMetrics, useModalStateController } from "./tui/layoutContext.j
 import { appendLogEntry } from "./tui/logStore.js";
 import type { GitLabTreeNode, RepoSyncStatus, RepoSyncState } from "./types.js";
 import type { TuiSession } from "./tuiSession.js";
-import { filterTreeBySelection } from "./treeBuilder.js";
+import { filterTreeBySelection, filterTreeByText } from "./treeBuilder.js";
 import { t } from "../../i18n/index.js";
 import { checkoutBranch, createBranchAndPush, listLocalBranches, resolveRepoStatus } from "./core/gitBranchService.js";
 
@@ -267,15 +267,20 @@ const TreeListContainerComponent: React.FC<{
   selectedIndex: number;
   scrollOffset: number;
   onVisibleCountChange: (value: number) => void;
-}> = ({ items, selectedIndex, scrollOffset, onVisibleCountChange }) => {
+  reservedLines?: number;
+}> = ({ items, selectedIndex, scrollOffset, onVisibleCountChange, reservedLines = 0 }) => {
   const { workspaceHeight } = useLayoutMetrics();
-  const visibleCount = Math.max(1, workspaceHeight);
+  // reservedLines: rows taken by extra chrome above the list (e.g. the
+  // type-to-filter indicator) — without discounting them the list overflows
+  // the workspace frame.
+  const availableHeight = Math.max(1, workspaceHeight - reservedLines);
+  const visibleCount = availableHeight;
 
   useEffect(() => {
     onVisibleCountChange(visibleCount);
   }, [visibleCount, onVisibleCountChange]);
 
-  return <TreeList items={items} selectedIndex={selectedIndex} scrollOffset={scrollOffset} workspaceHeight={workspaceHeight} />;
+  return <TreeList items={items} selectedIndex={selectedIndex} scrollOffset={scrollOffset} workspaceHeight={availableHeight} />;
 };
 
 const TreeListContainer = React.memo(
@@ -284,7 +289,8 @@ const TreeListContainer = React.memo(
     prev.items === next.items &&
     prev.selectedIndex === next.selectedIndex &&
     prev.scrollOffset === next.scrollOffset &&
-    prev.onVisibleCountChange === next.onVisibleCountChange
+    prev.onVisibleCountChange === next.onVisibleCountChange &&
+    prev.reservedLines === next.reservedLines
 );
 
 export type TuiTreeProgress = {
@@ -304,6 +310,7 @@ export const renderRepositoryTree = async (
     parameters?: CommandParameters[];
     envFilePath?: string;
     initialSelectedNodeId?: string;
+    renderOptions?: RenderOptions;
     onReady?: (handlers: {
       render: () => void;
       progress: TuiTreeProgress;
@@ -341,6 +348,7 @@ export const renderRepositoryTree = async (
       const [selectedIndex, setSelectedIndex] = useState(initialPosRef.current.index);
       const [scrollOffset, setScrollOffset] = useState(initialPosRef.current.scroll);
       const [showOnlySelected, setShowOnlySelected] = useState(false);
+      const [textFilter, setTextFilter] = useState("");
       const [visibleCount, setVisibleCount] = useState(1);
       const [branchModalBranches, setBranchModalBranches] = useState<string[]>([]);
       const [branchModalCurrent, setBranchModalCurrent] = useState<string | undefined>(undefined);
@@ -353,9 +361,16 @@ export const renderRepositoryTree = async (
       const serverColorMap = useMemo(() => resolveServerColorMap(nodes), [nodes]);
 
       const items = useMemo(() => {
-        const visibleNodes = showOnlySelected ? filterTreeBySelection(nodes) : nodes;
+        const selectionFiltered = showOnlySelected ? filterTreeBySelection(nodes) : nodes;
+        const visibleNodes = textFilter ? filterTreeByText(selectionFiltered, textFilter) : selectionFiltered;
         return flattenTree(visibleNodes, progressMapRef.current, 0, serverColorMap);
-      }, [nodes, version, showOnlySelected, serverColorMap]);
+      }, [nodes, version, showOnlySelected, textFilter, serverColorMap]);
+
+      const updateTextFilter = useCallback((next: string) => {
+        setTextFilter(next);
+        setSelectedIndex(0);
+        setScrollOffset(0);
+      }, []);
 
       useEffect(() => {
         if (items.length === 0) {
@@ -495,38 +510,64 @@ export const renderRepositoryTree = async (
             const nextIndex = Math.max(0, selectedIndex - 1);
             setSelectedIndex(nextIndex);
             ensureVisible(nextIndex);
+            return;
           }
           if (key.downArrow) {
             const nextIndex = Math.min(items.length - 1, selectedIndex + 1);
             setSelectedIndex(nextIndex);
             ensureVisible(nextIndex);
+            return;
           }
           if (key.pageUp) {
             const nextIndex = Math.max(0, selectedIndex - visibleCount);
             setSelectedIndex(nextIndex);
             ensureVisible(nextIndex);
+            return;
           }
           if (key.pageDown) {
             const nextIndex = Math.min(items.length - 1, selectedIndex + visibleCount);
             setSelectedIndex(nextIndex);
             ensureVisible(nextIndex);
+            return;
           }
           if (navigationKey.home) {
             setSelectedIndex(0);
             setScrollOffset(0);
+            return;
           }
           if (navigationKey.end) {
             const lastIndex = Math.max(0, items.length - 1);
             setSelectedIndex(lastIndex);
             setScrollOffset(Math.max(0, lastIndex - visibleCount + 1));
+            return;
           }
           if (input === " ") {
             toggleSelected();
+            return;
           }
           // Ctrl+F: terminals send the same byte for Ctrl+M and Enter (0x0d),
           // so Ctrl+M can never be detected as a distinct shortcut.
           if (key.ctrl && lower === "f") {
             toggleSelectionFilter();
+            return;
+          }
+          // Type-to-filter: printable characters narrow the tree as you type.
+          // Esc clears the filter (the Layout skips Esc while it is active);
+          // backspace erases the last character.
+          if (key.escape) {
+            if (textFilter) {
+              updateTextFilter("");
+            }
+            return;
+          }
+          if (key.backspace || key.delete) {
+            if (textFilter) {
+              updateTextFilter(textFilter.slice(0, -1));
+            }
+            return;
+          }
+          if (input && !key.ctrl && !key.meta && !key.tab) {
+            updateTextFilter(textFilter + input);
           }
         },
         { isActive: !modalState.modalOpen }
@@ -574,7 +615,8 @@ export const renderRepositoryTree = async (
           parameters={parametersSnapshot}
           envFilePath={options?.envFilePath}
           modalState={modalState}
-          helpOnBackspace
+          escapeEnabled={modalState.modalOpen || textFilter.length === 0}
+          helpOnBackspace={textFilter.length === 0}
           helpContext="tree"
           onHelpShortcut={(input, key) => {
             const lower = input.toLowerCase();
@@ -670,17 +712,25 @@ export const renderRepositoryTree = async (
             commitResolve(false);
           }}
         >
-          <TreeListContainer
-            items={items}
-            selectedIndex={selectedIndex}
-            scrollOffset={scrollOffset}
-            onVisibleCountChange={setVisibleCount}
-          />
+          <Box flexDirection="column" width="100%">
+            {textFilter ? (
+              <Text color="yellow" wrap="truncate-end">
+                {t("tui.tree.textFilterIndicator", { query: textFilter, count: String(items.length) })}
+              </Text>
+            ) : null}
+            <TreeListContainer
+              items={items}
+              selectedIndex={selectedIndex}
+              scrollOffset={scrollOffset}
+              onVisibleCountChange={setVisibleCount}
+              reservedLines={textFilter ? 1 : 0}
+            />
+          </Box>
         </Layout>
       );
     };
 
-    const { unmount } = render(<App />);
+    const { unmount } = render(<App />, options?.renderOptions);
     unmountRef.current = unmount;
   });
 };

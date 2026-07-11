@@ -137,6 +137,40 @@ export const filterTreeBySelection = (nodes: GitLabTreeNode[]): GitLabTreeNode[]
     .filter((node): node is GitLabTreeNode => node !== null);
 };
 
+// Type-to-filter: keeps nodes whose label or full path contains the query
+// (case-insensitive). A matching group keeps its whole subtree; ancestors of
+// matching descendants stay visible so the hierarchy remains readable.
+export const filterTreeByText = (nodes: GitLabTreeNode[], query: string): GitLabTreeNode[] => {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) {
+    return nodes;
+  }
+  const matches = (node: GitLabTreeNode): boolean => {
+    if (node.label.toLowerCase().includes(normalized)) {
+      return true;
+    }
+    const projectPath = node.project?.path_with_namespace;
+    return Boolean(projectPath && projectPath.toLowerCase().includes(normalized));
+  };
+  const visit = (node: GitLabTreeNode): GitLabTreeNode | null => {
+    if (matches(node)) {
+      return node;
+    }
+    const filteredChildren = node.children
+      ? node.children
+          .map((child) => visit(child))
+          .filter((child): child is GitLabTreeNode => child !== null)
+      : [];
+    if (filteredChildren.length === 0) {
+      return null;
+    }
+    return { ...node, children: filteredChildren };
+  };
+  return nodes
+    .map((node) => visit(node))
+    .filter((node): node is GitLabTreeNode => node !== null);
+};
+
 export const collectProjectNodesFromNode = (node: GitLabTreeNode): GitLabTreeNode[] => {
   if (node.type === "project") {
     return [node];

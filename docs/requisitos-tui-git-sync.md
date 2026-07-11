@@ -152,6 +152,15 @@ Quando um repositório está **divergido** (`ahead > 0` e `behind > 0`), o siste
 - Se o usuário estiver digitando, confirmar desistência.
 - Em modais de workflow (editor de env.yaml e branch), `Esc` é tratado pelo próprio modal: durante uma edição inline, cancela apenas a edição; fora dela, fecha o modal.
 
+### RU-06 — Cenários multi-servidor
+
+- Caso nenhum servidor corresponda aos filtros `serverName`/`baseUrl`, exibir mensagem explícita e não abrir a árvore.
+- Quando apenas um servidor corresponder, o cabeçalho deve indicar `GitLab (1 servidor)`.
+- O contador de requisições deve refletir o total global de chamadas somadas entre servidores válidos.
+- Grupos com o mesmo `full_path` em servidores diferentes devem ser consolidados em um único nó.
+- Os rótulos dos grupos devem exibir apenas o último segmento do caminho (sem prefixo de servidor).
+- Em colisão de caminho local (mesmo `path_with_namespace` em servidores diferentes), o diretório local deve receber sufixo `-<Servidor>`.
+
 ### RU-07 — Editor de parâmetros (`Ctrl+E`)
 
 - `Ctrl+E` abre o editor do `env.yaml` sobreposto à árvore.
@@ -161,14 +170,15 @@ Quando um repositório está **divergido** (`ahead > 0` e `behind > 0`), o siste
 - A descrição do parâmetro selecionado aparece em rodapé fixo; o conteúdo do modal nunca excede sua altura.
 - Enquanto aberto, `Ctrl+P`/`Ctrl+H` são bloqueados; `Ctrl+C` continua encerrando a aplicação.
 
-### RU-06 — Cenários multi-servidor
+### RU-08 — Filtro por digitação
 
-- Caso nenhum servidor corresponda aos filtros `serverName`/`baseUrl`, exibir mensagem explícita e não abrir a árvore.
-- Quando apenas um servidor corresponder, o cabeçalho deve indicar `GitLab (1 servidor)`.
-- O contador de requisições deve refletir o total global de chamadas somadas entre servidores válidos.
-- Grupos com o mesmo `full_path` em servidores diferentes devem ser consolidados em um único nó.
-- Os rótulos dos grupos devem exibir apenas o último segmento do caminho (sem prefixo de servidor).
-- Em colisão de caminho local (mesmo `path_with_namespace` em servidores diferentes), o diretório local deve receber sufixo `-<Servidor>`.
+- Digitar caracteres imprimíveis na árvore filtra os itens em tempo real, casando com o rótulo do nó ou com o `path_with_namespace` (case-insensitive).
+- Grupos cujo nome casa com a consulta mantêm toda a subárvore; ancestrais de itens correspondentes permanecem visíveis.
+- Um indicador acima da lista exibe a consulta atual e a contagem de itens visíveis; a lista desconta essa linha da altura disponível (sem estourar o quadro).
+- `Backspace` apaga o último caractere da consulta (não pode abrir a ajuda enquanto o filtro está ativo).
+- `Esc` com filtro ativo limpa a consulta e restaura a árvore — **não** cancela a tela; um segundo `Esc` (sem filtro) cancela normalmente.
+- A navegação, a seleção por checkbox e a sincronização continuam funcionando sobre a lista filtrada; o cursor volta ao topo a cada alteração da consulta.
+- O filtro por digitação compõe com o filtro de selecionados (`Ctrl+F`).
 
 ## Requisitos não funcionais
 

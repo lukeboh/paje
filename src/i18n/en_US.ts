@@ -105,9 +105,10 @@ const enUS: PtBrTranslations = {
     tree: {
       empty: "(No repositories found)",
       orientationDefault:
-        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | Ctrl+S to sync all | Enter to sync highlighted scope | Esc to cancel | Ctrl+F to filter selected | Ctrl+B to branch | Ctrl+W to expand workspace | Ctrl+L to expand log | Ctrl+H for help",
+        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | Ctrl+S to sync all | Enter to sync highlighted scope | Esc to cancel | Type to filter by text | Ctrl+F to filter selected | Ctrl+B to branch | Ctrl+W to expand workspace | Ctrl+L to expand log | Ctrl+H for help",
       orientationConfirm:
-        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | Ctrl+S to confirm selection (all) | Enter to confirm selection (scope) | Esc to cancel | Ctrl+F to filter selected | Ctrl+B to branch | Ctrl+W to expand workspace | Ctrl+L to expand log | Ctrl+H for help",
+        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | Ctrl+S to confirm selection (all) | Enter to confirm selection (scope) | Esc to cancel | Type to filter by text | Ctrl+F to filter selected | Ctrl+B to branch | Ctrl+W to expand workspace | Ctrl+L to expand log | Ctrl+H for help",
+      textFilterIndicator: 'Filter: "{{query}}" — {{count}} item(s) | Esc clears | Backspace erases',
       filterAll: "[DEBUG] Showing all repositories.",
       filterSelected: "[DEBUG] Showing only selected repositories.",
       singleInvalid: "Select a valid repository to sync a single item.",
