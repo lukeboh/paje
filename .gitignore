@@ -49,3 +49,4 @@ coverage/
 .tsx/
 .ts-node/
 vscode-extension/dist/
+vscode-extension/*.vsix

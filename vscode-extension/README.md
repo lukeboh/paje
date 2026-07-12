@@ -31,12 +31,25 @@ mesma configuração local — não há configuração duplicada.
 ```bash
 # na raiz do repositório PAJÉ:
 npm install
-npm run build:vscode     # typecheck + bundle -> vscode-extension/dist/extension.js
+npm run build:vscode     # typecheck + bundle -> vscode-extension/dist/extension.cjs
 ```
 
-Para testar: abra a pasta `vscode-extension/` no VSCode e pressione `F5`
-(Run Extension), ou empacote com `npx @vscode/vsce package` dentro de
-`vscode-extension/`.
+## Instalação (.vsix)
+
+```bash
+# na raiz do repositório:
+npm run build:vscode
+cd vscode-extension
+npx @vscode/vsce package --no-dependencies    # gera paje-vscode-<versão>.vsix
+code --install-extension paje-vscode-*.vsix
+```
+
+O flag `--no-dependencies` é obrigatório: o bundle já embute o core e todas as
+dependências. Alternativa pela interface: Extensões → `...` →
+*Install from VSIX...*.
+
+Para testar em desenvolvimento: abra a pasta `vscode-extension/` no VSCode e
+pressione `F5` (Run Extension).
 
 O bundle (esbuild) embute o core do PAJÉ (`../src/modules/git/...`) em um único
 arquivo CJS — nenhuma dependência de runtime além do próprio VSCode.

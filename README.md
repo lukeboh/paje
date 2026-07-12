@@ -143,6 +143,28 @@ Registra um servidor GitLab ou GitHub. Para GitLab: gera ou reutiliza chave SSH,
 
 ---
 
+### Extensão VSCode
+
+A árvore de repositórios do PAJÉ dentro do VSCode (ícone na barra de atividades), consumindo o mesmo core e a mesma configuração da CLI/TUI — cache instantâneo compartilhado, checkboxes de seleção, sincronização com progresso, log no Output Channel "PAJÉ" e interface em pt-BR/inglês conforme o idioma do VSCode.
+
+**Instalação (a partir do repositório):**
+
+```bash
+npm install
+npm run build:vscode                          # typecheck + bundle
+cd vscode-extension
+npx @vscode/vsce package --no-dependencies    # gera paje-vscode-<versão>.vsix
+code --install-extension paje-vscode-*.vsix
+```
+
+Também é possível instalar pela interface (Extensões → `...` → *Install from VSIX...*) ou testar em modo desenvolvimento abrindo a pasta `vscode-extension/` no VSCode e pressionando `F5`.
+
+**Comandos:** sincronizar selecionados, sincronizar um item, recarregar árvore, abrir repositório em nova janela, abrir `env.yaml`.
+
+> O registro de servidores continua na CLI/TUI (`paje git-server-store`). Detalhes em [`docs/funcionalidades/vscode-extension.md`](docs/funcionalidades/vscode-extension.md).
+
+---
+
 ## Propriedades por servidor (`~/.paje/git-servers.json`)
 
 Cada servidor registrado armazena suas próprias propriedades. Durante o `git-sync`, essas propriedades têm **prioridade** sobre os parâmetros de sessão (CLI/env):
@@ -285,7 +307,8 @@ npm test        # suite completa (runner tolerante a falhas + resumo final)
 | [`docs/funcionalidades/git-sync.md`](docs/funcionalidades/git-sync.md) | Especificação da funcionalidade git-sync |
 | [`docs/funcionalidades/git-server-store.md`](docs/funcionalidades/git-server-store.md) | Especificação da funcionalidade git-server-store (GitLab e GitHub) |
 | [`docs/funcionalidades/help-shortcuts.md`](docs/funcionalidades/help-shortcuts.md) | Modal de ajuda e tabela completa de atalhos por contexto |
-| [`vscode-extension/README.md`](vscode-extension/README.md) | Extensão VSCode: funcionalidades, desenvolvimento e empacotamento |
+| [`docs/funcionalidades/vscode-extension.md`](docs/funcionalidades/vscode-extension.md) | Extensão VSCode: instalação, comandos e comportamento |
+| [`vscode-extension/README.md`](vscode-extension/README.md) | Extensão VSCode: desenvolvimento e empacotamento |
 | [`docs/auditoria-codigo.md`](docs/auditoria-codigo.md) | Bugs, inconsistências e débitos técnicos — abertos e resolvidos, com workarounds |
 | [`docs/auditoria-arquitetura.md`](docs/auditoria-arquitetura.md) | Histórico de problemas arquiteturais e status de resolução |
 | [`CLAUDE.md`](CLAUDE.md) | Regras obrigatórias para agentes (arquitetura, testes, i18n, commits) |
