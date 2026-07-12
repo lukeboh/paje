@@ -19,6 +19,7 @@ evolução.** Violá-la é o erro arquitetural mais caro de manter — ver
 │  Camada de Apresentação                         │
 │  CLI  →  gitCommand.ts  (Commander / formatação)│
 │  TUI  →  tui.app.tsx, tuiSession.tsx (Ink/React)│
+│  VSCode → vscode-extension/ (TreeView/comandos) │
 └───────────────────┬─────────────────────────────┘
                     │ chama apenas
 ┌───────────────────▼─────────────────────────────┐
@@ -315,6 +316,27 @@ inclusive com modal aberto.
 (`0x0d`) e o byte de backspace para `Ctrl+H` (`0x08`; a tecla Backspace física envia
 `0x7f`). Por isso o filtro da árvore usa `Ctrl+F`, e o `Layout` aceita `key.backspace`
 como abertura da ajuda apenas em telas sem campo de texto (prop `helpOnBackspace`).
+
+## Extensão VSCode (`vscode-extension/`)
+
+Terceira camada de apresentação sobre o mesmo core:
+
+- `extension.ts` — ativação: registra a TreeView, comandos (`paje.refreshTree`,
+  `paje.syncSelected`, `paje.syncNode`, `paje.openRepository`, `paje.openEnvFile`)
+  e um Output Channel "PAJÉ" ligado ao `LoggerBroker` via `createPanelTransport`.
+- `pajeTreeProvider.ts` — `TreeDataProvider` com checkboxes
+  (`toggleTreeNode`/`recomputeTreeSelection` do treeBuilder).
+- `treeAdapter.ts` — mapeamento puro `GitLabTreeNode` → descritor de TreeItem,
+  **sem importar o módulo `vscode`**, testável pela suíte principal
+  (`vscode_tree_adapter_test`).
+- Config e persistência idênticas à CLI/TUI: `resolveGitSyncConfig()` sem flags,
+  `~/.paje/git-servers.json`, cache instantâneo da árvore.
+- Bundle via esbuild (`npm run build:vscode`) → `dist/extension.cjs` (CJS único
+  com o core embutido; `external: ["vscode"]`). O pacote da extensão é
+  `"type": "module"` para os fontes; o runtime CJS fica explícito no `.cjs`.
+- A regra de camadas vale aqui também: a extensão **não** importa Ink/React nem
+  reimplementa lógica do core — o smoke test (`vscode_extension_smoke_test`)
+  ativa o bundle real com um mock do módulo `vscode`.
 
 ## Logging (pino)
 

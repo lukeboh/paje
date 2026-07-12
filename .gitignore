@@ -48,3 +48,4 @@ coverage/
 # --- Ferramentas de Runtime (tsx/ts-node) ---
 .tsx/
 .ts-node/
+vscode-extension/dist/

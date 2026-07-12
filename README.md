@@ -4,7 +4,7 @@ O PAJÉ automatiza tarefas repetitivas de ambiente de desenvolvimento com servid
 
 ## Características
 
-- **CLI + TUI**: execução por comando (`paje <comando>`) e interface textual guiada ao iniciar sem parâmetros.
+- **CLI + TUI + VSCode**: execução por comando (`paje <comando>`), interface textual guiada ao iniciar sem parâmetros, e extensão VSCode com a árvore de repositórios na sidebar — as três camadas de apresentação consomem o mesmo core.
 - **Sincronização paralela de repositórios**: seleção de grupos/projetos, clone/pull em paralelo, resumo de status.
 - **GitLab e GitHub**: suporte a gitlab.com, GitLab self-hosted, github.com e GitHub Enterprise Server — tipo detectado automaticamente pela URL.
 - **Multi-servidor**: múltiplos servidores simultâneos (inclusive misturando GitLab e GitHub), cada um com suas próprias configurações (diretório, filtros, e-mail).
@@ -45,6 +45,7 @@ paje                          # TUI interativa (menu de funcionalidades)
 paje git-sync [opções]        # CLI — sincronizar repositórios
 paje git-server-store [opções]# CLI — registrar servidor, SSH e token
 npm run dev -- <comando>      # execução de desenvolvimento
+npm run build:vscode          # empacotar a extensão VSCode (vscode-extension/)
 ```
 
 ---
@@ -284,6 +285,7 @@ npm test        # suite completa (runner tolerante a falhas + resumo final)
 | [`docs/funcionalidades/git-sync.md`](docs/funcionalidades/git-sync.md) | Especificação da funcionalidade git-sync |
 | [`docs/funcionalidades/git-server-store.md`](docs/funcionalidades/git-server-store.md) | Especificação da funcionalidade git-server-store (GitLab e GitHub) |
 | [`docs/funcionalidades/help-shortcuts.md`](docs/funcionalidades/help-shortcuts.md) | Modal de ajuda e tabela completa de atalhos por contexto |
+| [`vscode-extension/README.md`](vscode-extension/README.md) | Extensão VSCode: funcionalidades, desenvolvimento e empacotamento |
 | [`docs/auditoria-codigo.md`](docs/auditoria-codigo.md) | Bugs, inconsistências e débitos técnicos — abertos e resolvidos, com workarounds |
 | [`docs/auditoria-arquitetura.md`](docs/auditoria-arquitetura.md) | Histórico de problemas arquiteturais e status de resolução |
 | [`CLAUDE.md`](CLAUDE.md) | Regras obrigatórias para agentes (arquitetura, testes, i18n, commits) |
