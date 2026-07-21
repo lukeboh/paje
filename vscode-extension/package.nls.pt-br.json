@@ -1,0 +1,9 @@
+{
+  "extension.description": "Sincronização paralela de repositórios Git (GitLab e GitHub) — a árvore do PAJÉ dentro do VSCode",
+  "view.repositories": "Repositórios",
+  "command.refreshTree": "PAJÉ: Recarregar árvore de repositórios",
+  "command.syncSelected": "PAJÉ: Sincronizar repositórios selecionados",
+  "command.syncNode": "PAJÉ: Sincronizar este item",
+  "command.openRepository": "PAJÉ: Abrir repositório em nova janela",
+  "command.openEnvFile": "PAJÉ: Abrir env.yaml"
+}

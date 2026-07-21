@@ -4,7 +4,7 @@ O PAJÉ automatiza tarefas repetitivas de ambiente de desenvolvimento com servid
 
 ## Características
 
-- **CLI + TUI**: execução por comando (`paje <comando>`) e interface textual guiada ao iniciar sem parâmetros.
+- **CLI + TUI + VSCode**: execução por comando (`paje <comando>`), interface textual guiada ao iniciar sem parâmetros, e extensão VSCode com a árvore de repositórios na sidebar — as três camadas de apresentação consomem o mesmo core.
 - **Sincronização paralela de repositórios**: seleção de grupos/projetos, clone/pull em paralelo, resumo de status.
 - **GitLab e GitHub**: suporte a gitlab.com, GitLab self-hosted, github.com e GitHub Enterprise Server — tipo detectado automaticamente pela URL.
 - **Multi-servidor**: múltiplos servidores simultâneos (inclusive misturando GitLab e GitHub), cada um com suas próprias configurações (diretório, filtros, e-mail).
@@ -45,6 +45,7 @@ paje                          # TUI interativa (menu de funcionalidades)
 paje git-sync [opções]        # CLI — sincronizar repositórios
 paje git-server-store [opções]# CLI — registrar servidor, SSH e token
 npm run dev -- <comando>      # execução de desenvolvimento
+npm run build:vscode          # empacotar a extensão VSCode (vscode-extension/)
 ```
 
 ---
@@ -139,6 +140,28 @@ Registra um servidor GitLab ou GitHub. Para GitLab: gera ou reutiliza chave SSH,
 4. As operações git usam URL HTTPS com `x-access-token:<token>@host` embutido (não há fluxo SSH para GitHub).
 
 > Crie o PAT em `github.com/settings/tokens` com escopos `repo` e `read:org`. Para GitHub Enterprise Server, a API é resolvida como `<baseUrl>/api/v3`.
+
+---
+
+### Extensão VSCode
+
+A árvore de repositórios do PAJÉ dentro do VSCode (ícone na barra de atividades), consumindo o mesmo core e a mesma configuração da CLI/TUI — cache instantâneo compartilhado, checkboxes de seleção, sincronização com progresso, log no Output Channel "PAJÉ" e interface em pt-BR/inglês conforme o idioma do VSCode.
+
+**Instalação (a partir do repositório):**
+
+```bash
+npm install
+npm run build:vscode                          # typecheck + bundle
+cd vscode-extension
+npx @vscode/vsce package --no-dependencies    # gera paje-vscode-<versão>.vsix
+code --install-extension paje-vscode-*.vsix
+```
+
+Também é possível instalar pela interface (Extensões → `...` → *Install from VSIX...*) ou testar em modo desenvolvimento abrindo a pasta `vscode-extension/` no VSCode e pressionando `F5`.
+
+**Comandos:** sincronizar selecionados, sincronizar um item, recarregar árvore, abrir repositório em nova janela, abrir `env.yaml`.
+
+> O registro de servidores continua na CLI/TUI (`paje git-server-store`). Detalhes em [`docs/funcionalidades/vscode-extension.md`](docs/funcionalidades/vscode-extension.md).
 
 ---
 
@@ -284,6 +307,8 @@ npm test        # suite completa (runner tolerante a falhas + resumo final)
 | [`docs/funcionalidades/git-sync.md`](docs/funcionalidades/git-sync.md) | Especificação da funcionalidade git-sync |
 | [`docs/funcionalidades/git-server-store.md`](docs/funcionalidades/git-server-store.md) | Especificação da funcionalidade git-server-store (GitLab e GitHub) |
 | [`docs/funcionalidades/help-shortcuts.md`](docs/funcionalidades/help-shortcuts.md) | Modal de ajuda e tabela completa de atalhos por contexto |
+| [`docs/funcionalidades/vscode-extension.md`](docs/funcionalidades/vscode-extension.md) | Extensão VSCode: instalação, comandos e comportamento |
+| [`vscode-extension/README.md`](vscode-extension/README.md) | Extensão VSCode: desenvolvimento e empacotamento |
 | [`docs/auditoria-codigo.md`](docs/auditoria-codigo.md) | Bugs, inconsistências e débitos técnicos — abertos e resolvidos, com workarounds |
 | [`docs/auditoria-arquitetura.md`](docs/auditoria-arquitetura.md) | Histórico de problemas arquiteturais e status de resolução |
 | [`CLAUDE.md`](CLAUDE.md) | Regras obrigatórias para agentes (arquitetura, testes, i18n, commits) |

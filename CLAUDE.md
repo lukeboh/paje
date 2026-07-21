@@ -16,6 +16,7 @@ Violar essa separação é o erro arquitetural mais grave registrado no projeto
 │  Camada de Apresentação                         │
 │  CLI  →  gitCommand.ts  (Commander / formatação)│
 │  TUI  →  tui.app.tsx, tuiSession.tsx (Ink/React)│
+│  VSCode → vscode-extension/ (TreeView/comandos) │
 └───────────────────┬─────────────────────────────┘
                     │ chama apenas
 ┌───────────────────▼─────────────────────────────┐

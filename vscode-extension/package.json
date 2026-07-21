@@ -1,0 +1,99 @@
+{
+  "name": "paje-vscode",
+  "displayName": "PAJÉ",
+  "description": "%extension.description%",
+  "version": "0.1.0",
+  "type": "module",
+  "publisher": "lukeboh",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lukeboh/paje"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "main": "./dist/extension.cjs",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "paje",
+          "title": "PAJÉ",
+          "icon": "media/paje.svg"
+        }
+      ]
+    },
+    "views": {
+      "paje": [
+        {
+          "id": "pajeRepositories",
+          "name": "%view.repositories%",
+          "icon": "media/paje.svg"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "paje.refreshTree",
+        "title": "%command.refreshTree%",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "paje.syncSelected",
+        "title": "%command.syncSelected%",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "paje.syncNode",
+        "title": "%command.syncNode%",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "paje.openRepository",
+        "title": "%command.openRepository%",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "paje.openEnvFile",
+        "title": "%command.openEnvFile%",
+        "icon": "$(settings-gear)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "paje.syncSelected",
+          "when": "view == pajeRepositories",
+          "group": "navigation@1"
+        },
+        {
+          "command": "paje.refreshTree",
+          "when": "view == pajeRepositories",
+          "group": "navigation@2"
+        },
+        {
+          "command": "paje.openEnvFile",
+          "when": "view == pajeRepositories",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "paje.syncNode",
+          "when": "view == pajeRepositories",
+          "group": "inline@1"
+        },
+        {
+          "command": "paje.openRepository",
+          "when": "view == pajeRepositories && viewItem == pajeProject",
+          "group": "inline@2"
+        }
+      ]
+    }
+  }
+}

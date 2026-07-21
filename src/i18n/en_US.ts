@@ -32,6 +32,17 @@ const enUS: PtBrTranslations = {
     rightTitle: "PAJE",
     logTitle: "Log",
   },
+  vscodeExt: {
+    passwordPrompt: "Password for {{username}} on {{server}}",
+    noServers: "No server configured. Register with: paje git-server-store",
+    loadError: "PAJÉ: failed to load the tree — {{message}}",
+    treeNotLoaded: "PAJÉ: the tree has not been loaded yet.",
+    syncTitle: "PAJÉ: syncing repositories",
+    syncDone: "PAJÉ: sync finished ({{total}} repositories).",
+    syncDoneWithFailures: "PAJÉ: sync finished with {{failed}} failure(s) out of {{total}}.",
+    repoNotCloned: "PAJÉ: this repository has not been cloned yet.",
+    envFileMissing: "PAJÉ: env.yaml not found at {{path}}.",
+  },
   parametersModal: {
     title: "Loaded parameters",
     hint: "Ctrl+P/Esc to close | ↑/↓ PgUp/PgDn to scroll",

@@ -8,7 +8,8 @@
     "start": "node dist/cli.js",
     "dev": "tsx src/cli.ts",
     "test": "c8 --reporter=text --reporter=text-summary --reporter=lcov tsx tests/run-all.ts",
-    "test:coverage": "c8 --reporter=text --reporter=text-summary --reporter=lcov --reporter=html tsx tests/run-all.ts"
+    "test:coverage": "c8 --reporter=text --reporter=text-summary --reporter=lcov --reporter=html tsx tests/run-all.ts",
+    "build:vscode": "tsc --noEmit -p vscode-extension && node vscode-extension/esbuild.mjs"
   },
   "dependencies": {
     "cheerio": "^1.1.2",
@@ -25,7 +26,9 @@
     "@types/node": "^22.15.0",
     "@types/react": "^18.3.5",
     "@types/tough-cookie": "^4.0.5",
+    "@types/vscode": "^1.85.0",
     "c8": "^11.0.0",
+    "esbuild": "^0.28.1",
     "ts-node": "^10.9.2",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"

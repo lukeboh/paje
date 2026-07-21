@@ -30,6 +30,17 @@ const ptBR = {
     rightTitle: "PAJÉ",
     logTitle: "Log",
   },
+  vscodeExt: {
+    passwordPrompt: "Senha de {{username}} para {{server}}",
+    noServers: "Nenhum servidor configurado. Registre com: paje git-server-store",
+    loadError: "PAJÉ: falha ao carregar a árvore — {{message}}",
+    treeNotLoaded: "PAJÉ: a árvore ainda não foi carregada.",
+    syncTitle: "PAJÉ: sincronizando repositórios",
+    syncDone: "PAJÉ: sincronização concluída ({{total}} repositórios).",
+    syncDoneWithFailures: "PAJÉ: sincronização concluída com {{failed}} falha(s) de {{total}}.",
+    repoNotCloned: "PAJÉ: este repositório ainda não foi clonado.",
+    envFileMissing: "PAJÉ: env.yaml não encontrado em {{path}}.",
+  },
   parametersModal: {
     title: "Parâmetros carregados",
     hint: "Ctrl+P/Esc para fechar | ↑/↓ PgUp/PgDn para rolar",
