@@ -108,6 +108,15 @@ export type GitSyncCore = {
 
 const normalizeBaseUrl = (url: string): string => url.trim().replace(/\/+$/, "");
 
+export const isValidHttpUrl = (value: string): boolean => {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+
 export const computeConfigHash = (servers: GitServerEntry[]): string => {
   return servers
     .map((s) =>
@@ -547,6 +556,14 @@ export const createGitSyncCore = (): GitSyncCore => {
         writeGitServers(merge.servers);
         servers = mergeServerList(merge.servers);
       }
+
+      servers = servers.filter((server) => {
+        if (isValidHttpUrl(server.baseUrl)) {
+          return true;
+        }
+        logger.warn(t("cli.sync.invalidBaseUrl", { server: server.name || server.id || server.baseUrl }));
+        return false;
+      });
 
       if (servers.length === 0) {
         logger.warn(t("cli.prompt.gitlab.noServerConfigured"));

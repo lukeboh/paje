@@ -4,6 +4,7 @@ import {
   normalizeBaseUrl,
   promptBasicAuthPassword,
   promptGitServer,
+  promptValidBaseUrl,
   resolveEnvValue,
   resolveEnvString,
   resolveEnvBoolean,
@@ -53,13 +54,26 @@ const mergeResult = mergeServer(
 assert.ok(mergeResult.servers.length === 1, "Deve fazer merge por baseUrl normalizada");
 
 const sessionMock = {
-  promptForm: async () => ({ name: "GitLab", baseUrl: "https://gitlab.com", username: "user" }),
+  promptInput: async () => "https://gitlab.com",
+  promptForm: async () => ({ name: "GitLab", username: "user" }),
   promptConfirm: async () => true,
+  showMessage: async () => undefined,
 } as any;
 const serverResult = await promptGitServer(sessionMock, { name: "X" });
 assert.strictEqual(serverResult.name, "GitLab");
+assert.strictEqual(serverResult.baseUrl, "https://gitlab.com");
+assert.strictEqual(serverResult.id, "https://gitlab.com");
 
 const password = await promptBasicAuthPassword("usuario", undefined, "segredo");
 assert.strictEqual(password, "segredo");
+
+const invalidThenValidInputs = ["not-a-url", "https://git.example.com/"];
+const invalidUrlSessionMock = {
+  promptInput: async () => invalidThenValidInputs.shift(),
+  showMessage: async () => undefined,
+} as any;
+const resolvedBaseUrl = await promptValidBaseUrl(invalidUrlSessionMock, "https://gitlab.com");
+assert.strictEqual(resolvedBaseUrl, "https://git.example.com");
+assert.strictEqual(invalidThenValidInputs.length, 0, "Deve reperguntar até receber uma URL válida");
 
 console.log("git_command_helpers_test: OK");

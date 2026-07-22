@@ -75,7 +75,7 @@ import {
   type SshKeyInfo,
 } from "./sshManager.js";
 import { readGitServers, writeGitServers } from "./persistence.js";
-import { type GitServerEntry, type GitSyncSummary, createGitSyncCore, resolveRepoStatus, resolveParallels } from "./core/gitSyncService.js";
+import { type GitServerEntry, type GitSyncSummary, createGitSyncCore, resolveRepoStatus, resolveParallels, isValidHttpUrl } from "./core/gitSyncService.js";
 
 const buildServerPrefix = (server: GitServerEntry): string => {
   const normalizedName = server.name?.trim() || t("cli.sync.defaultServerLabel");
@@ -552,23 +552,44 @@ export const mergeServer = (servers: GitServerEntry[], server: GitServerEntry): 
   return { servers: [...servers, sanitized], updated: false };
 };
 
+export const promptValidBaseUrl = async (
+  session: TuiSession,
+  defaultBaseUrl: string,
+  options?: { title?: string; message?: string; description?: string }
+): Promise<string> => {
+  const title = options?.title ?? t("cli.prompt.server.title");
+  const message = options?.message ?? t("cli.prompt.server.fields.baseUrl");
+  const description = options?.description ?? t("cli.prompt.server.fields.baseUrlDesc");
+  let resolvedBaseUrl = "";
+  while (!resolvedBaseUrl) {
+    const baseUrlInput = await session.promptInput({ title, message, defaultValue: defaultBaseUrl, description });
+    const candidate = normalizeBaseUrl(baseUrlInput?.trim() || defaultBaseUrl);
+    if (isValidHttpUrl(candidate)) {
+      resolvedBaseUrl = candidate;
+    } else {
+      await session.showMessage({ title, message: t("cli.prompt.server.errors.invalidBaseUrl") });
+    }
+  }
+  return resolvedBaseUrl;
+};
+
 export const promptGitServer = async (
   session?: TuiSession,
   overrides?: Partial<GitServerEntry>
 ): Promise<GitServerEntry> => {
   if (session) {
-    const form = await session.promptForm<{ name: string; baseUrl: string; username: string }>({
+    const defaultBaseUrl = overrides?.baseUrl || "https://gitlab.com";
+    const resolvedBaseUrl = await promptValidBaseUrl(session, defaultBaseUrl);
+    const resolvedId = resolvedBaseUrl;
+
+    const form = await session.promptForm<{ name: string; username: string }>({
       title: t("cli.prompt.server.title"),
       fields: [
         {
           name: "name",
           label: t("cli.prompt.server.fields.name"),
           defaultValue: overrides?.name ?? "GitLab",
-        },
-        {
-          name: "baseUrl",
-          label: t("cli.prompt.server.fields.baseUrl"),
-          defaultValue: overrides?.baseUrl ?? "https://gitlab.com",
+          description: t("cli.prompt.server.fields.nameDesc", { id: resolvedId }),
         },
         {
           name: "username",
@@ -586,10 +607,12 @@ export const promptGitServer = async (
       defaultValue: false,
     }));
 
+    const resolvedName = form?.name?.trim() || overrides?.name || "GitLab";
+
     return {
-      id: form?.baseUrl ?? overrides?.baseUrl ?? "",
-      name: form?.name ?? overrides?.name ?? "GitLab",
-      baseUrl: form?.baseUrl ?? overrides?.baseUrl ?? "https://gitlab.com",
+      id: resolvedId,
+      name: resolvedName,
+      baseUrl: resolvedBaseUrl,
       useBasicAuth: useBasicAuth ?? false,
       username: form?.username ?? overrides?.username ?? "",
     };
@@ -607,6 +630,7 @@ export const promptGitServer = async (
       name: "baseUrl",
       message: t("cli.prompt.server.fields.baseUrl"),
       default: overrides?.baseUrl ?? "https://gitlab.com",
+      validate: (value: string) => isValidHttpUrl(normalizeBaseUrl(value)) || t("cli.prompt.server.errors.invalidBaseUrl"),
     },
     {
       type: "confirm",
@@ -623,10 +647,13 @@ export const promptGitServer = async (
     },
   ])) as { name: string; baseUrl: string; useBasicAuth: boolean; username?: string };
 
+  const resolvedName = answers.name?.trim() || overrides?.name || "GitLab";
+  const resolvedBaseUrl = normalizeBaseUrl(answers.baseUrl?.trim() || overrides?.baseUrl || "https://gitlab.com");
+
   return {
-    id: answers.baseUrl ?? overrides?.baseUrl ?? "",
-    name: answers.name ?? overrides?.name ?? "GitLab",
-    baseUrl: answers.baseUrl ?? overrides?.baseUrl ?? "https://gitlab.com",
+    id: resolvedBaseUrl,
+    name: resolvedName,
+    baseUrl: resolvedBaseUrl,
     useBasicAuth: answers.useBasicAuth,
     username: answers.username ?? overrides?.username,
   };
@@ -1003,11 +1030,7 @@ const storeSshKeyOnly = async (
       return;
     }
 
-    let basicAuthPassword = resolveEnvOrCliString(
-      hasCliArg("password") ? cli?.password : undefined,
-      "password",
-      "password"
-    );
+    let basicAuthPassword = resolveEnvOrCliString(cli?.password, "password", "password");
     if (!basicAuthPassword) {
       if (session) {
         const form = await session.promptForm<{ password: string }>({
@@ -1030,10 +1053,13 @@ const storeSshKeyOnly = async (
       }
     }
 
-    const basicAuthCredentials = loadGitCredentials({
-      envFilePaths: resolveEnvPaths(resolveEnvFileFromCli(cli?.envFile)),
-      allowProcessEnv: false,
-    });
+    const basicAuthCredentials =
+      resolvedUsername && basicAuthPassword
+        ? { username: resolvedUsername, password: basicAuthPassword, source: "prompt" }
+        : loadGitCredentials({
+            envFilePaths: resolveEnvPaths(resolveEnvFileFromCli(cli?.envFile)),
+            allowProcessEnv: false,
+          });
 
     const normalizedBaseUrlBA = normalizeBaseUrl(server.baseUrl);
     const existingServersBA = readGitServers<GitServerEntry[]>([]);
@@ -1169,7 +1195,7 @@ const storeSshKeyOnly = async (
     return;
   }
 
-  let resolvedPassword = resolveEnvString(undefined, envConfig, "password");
+  let resolvedPassword = resolveEnvOrCliString(cli?.password, "password", "password");
   if (!resolvedPassword) {
     if (session) {
       const form = await session.promptForm<{ password: string }>({
@@ -1192,10 +1218,13 @@ const storeSshKeyOnly = async (
     }
   }
 
-  const credentials = loadGitCredentials({
-    envFilePaths: resolveEnvPaths(resolveEnvFileFromCli(cli?.envFile)),
-    allowProcessEnv: false,
-  });
+  const credentials =
+    resolvedUsername && resolvedPassword
+      ? { username: resolvedUsername, password: resolvedPassword, source: "prompt" }
+      : loadGitCredentials({
+          envFilePaths: resolveEnvPaths(resolveEnvFileFromCli(cli?.envFile)),
+          allowProcessEnv: false,
+        });
 
   await ensureGitLabSshKey({
     baseUrl: server.baseUrl,
@@ -2294,6 +2323,224 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
     });
 };
 
+type GitServerFormValues = {
+  baseUrl: string;
+  serverName: string;
+  username: string;
+  password: string;
+  tokenName: string;
+};
+
+const promptGitServerForm = async (
+  session: TuiSession,
+  defaults: GitServerFormValues
+): Promise<GitServerFormValues | null> => {
+  let current = defaults;
+  while (true) {
+    const form = await session.promptForm<GitServerFormValues>({
+      title: t("cli.prompt.gitServer.title"),
+      fields: [
+        {
+          name: "baseUrl",
+          label: t("cli.prompt.gitServer.fields.baseUrl"),
+          defaultValue: current.baseUrl,
+          description: t("cli.prompt.gitServer.fields.baseUrlDesc"),
+        },
+        {
+          name: "serverName",
+          label: t("cli.prompt.gitServer.fields.serverName"),
+          defaultValue: current.serverName,
+        },
+        {
+          name: "username",
+          label: t("cli.prompt.gitServer.fields.username"),
+          defaultValue: current.username,
+          description: t("cli.prompt.gitServer.fields.usernameDesc"),
+        },
+        {
+          name: "password",
+          label: t("cli.prompt.gitServer.fields.password"),
+          defaultValue: current.password,
+          secret: true,
+          description: t("cli.prompt.gitServer.fields.passwordDesc"),
+        },
+        {
+          name: "tokenName",
+          label: t("cli.prompt.gitServer.fields.tokenName"),
+          defaultValue: current.tokenName,
+          description: t("cli.prompt.gitServer.fields.tokenNameDesc"),
+        },
+      ],
+    });
+    if (!form) {
+      return null;
+    }
+    current = { ...form, baseUrl: form.baseUrl || current.baseUrl };
+
+    const normalizedBaseUrl = normalizeBaseUrl(current.baseUrl);
+    if (!isValidHttpUrl(normalizedBaseUrl)) {
+      await session.showMessage({
+        title: t("cli.prompt.gitServer.title"),
+        message: t("cli.prompt.server.errors.invalidBaseUrl"),
+      });
+      continue;
+    }
+
+    const resolvedServerName = form.serverName?.trim() || current.serverName || "GitLab";
+    const resolvedType = detectServerType(normalizedBaseUrl);
+    if (resolvedType !== "github" && !form.tokenName?.trim()) {
+      await session.showMessage({
+        title: t("cli.prompt.gitServer.title"),
+        message: t("cli.log.tokenNameMissing"),
+      });
+      continue;
+    }
+
+    return {
+      baseUrl: normalizedBaseUrl,
+      serverName: resolvedServerName,
+      username: form.username?.trim() ?? "",
+      password: form.password ?? "",
+      tokenName: form.tokenName?.trim() ?? "",
+    };
+  }
+};
+
+const buildServerAuthLabel = (server: GitServerEntry): string =>
+  server.useBasicAuth ? t("cli.prompt.manageServers.authBasic") : t("cli.prompt.manageServers.authSsh");
+
+const buildServerTokenLabel = (server: GitServerEntry): string =>
+  server.token ? t("cli.prompt.manageServers.tokenPresent") : t("cli.prompt.manageServers.tokenAbsent");
+
+const buildServerSummaryLine = (server: GitServerEntry): string => {
+  const type = server.type === "github" ? "GitHub" : "GitLab";
+  return `${type} · ${buildServerAuthLabel(server)} · ${buildServerTokenLabel(server)}`;
+};
+
+const buildServerDetails = (server: GitServerEntry): string => {
+  const lines = [
+    `${t("cli.prompt.manageServers.detail.name")}: ${server.name || "-"}`,
+    `${t("cli.prompt.manageServers.detail.baseUrl")}: ${server.baseUrl}`,
+    `${t("cli.prompt.manageServers.detail.type")}: ${server.type === "github" ? "GitHub" : "GitLab"}`,
+    `${t("cli.prompt.manageServers.detail.auth")}: ${buildServerAuthLabel(server)}`,
+  ];
+  if (server.username) {
+    lines.push(`${t("cli.prompt.manageServers.detail.username")}: ${server.username}`);
+  }
+  if (server.userEmail) {
+    lines.push(`${t("cli.prompt.manageServers.detail.userEmail")}: ${server.userEmail}`);
+  }
+  if (server.baseDir) {
+    lines.push(`${t("cli.prompt.manageServers.detail.baseDir")}: ${server.baseDir}`);
+  }
+  lines.push(`${t("cli.prompt.manageServers.detail.token")}: ${buildServerTokenLabel(server)}`);
+  if (server.tokenName) {
+    lines.push(`${t("cli.prompt.manageServers.detail.tokenName")}: ${server.tokenName}`);
+  }
+  if (server.tokenExpiresAt) {
+    lines.push(`${t("cli.prompt.manageServers.detail.tokenExpiresAt")}: ${server.tokenExpiresAt}`);
+  }
+  if (server.filter) {
+    lines.push(`${t("cli.prompt.manageServers.detail.filter")}: ${server.filter}`);
+  }
+  return lines.join("\n");
+};
+
+const registerNewGitServer = async (session: TuiSession, options: SshKeyStoreCliOptions): Promise<void> => {
+  const hasCliArg = (flag: string): boolean => {
+    const dashed = `--${flag}`;
+    return process.argv.some((arg) => arg === dashed || arg.startsWith(`${dashed}=`));
+  };
+  const useBasicAuth = hasCliArg("use-basic-auth")
+    ? (options.useBasicAuth ?? false)
+    : (await session.promptConfirm({
+        title: t("cli.prompt.gitServer.title"),
+        message: t("cli.prompt.server.confirmBasicAuth"),
+        defaultValue: false,
+      })) ?? false;
+
+  const formResult = await promptGitServerForm(session, {
+    baseUrl: options.baseUrl?.trim() || "https://gitlab.com",
+    serverName: options.serverName?.trim() || "GitLab",
+    username: options.username?.trim() || "",
+    password: "",
+    tokenName: options.tokenName?.trim() || "paje",
+  });
+  if (!formResult) {
+    return;
+  }
+
+  const resolvedType = detectServerType(formResult.baseUrl);
+  const server: GitServerEntry = {
+    id: formResult.baseUrl,
+    name: formResult.serverName,
+    baseUrl: formResult.baseUrl,
+    type: resolvedType,
+    useBasicAuth,
+    username: formResult.username,
+    userEmail: options.userEmail,
+    baseDir: options.baseDir,
+    noPublicRepos: options.noPublicRepos,
+    noArchivedRepos: options.noArchivedRepos,
+    filter: options.filter,
+    syncRepos: options.syncRepos,
+    tokenName: formResult.tokenName,
+    tokenScopes: options.tokenScopes,
+    tokenExpiresAt: options.tokenExpiresAt,
+  };
+  const cliOverrides: SshKeyStoreCliOptions = {
+    ...options,
+    baseUrl: formResult.baseUrl,
+    serverName: formResult.serverName,
+    username: formResult.username,
+    password: formResult.password,
+    tokenName: formResult.tokenName,
+    useBasicAuth,
+  };
+
+  if (resolvedType === "github") {
+    await storeGitHubServer(server, session, cliOverrides);
+  } else {
+    await storeSshKeyOnly(server, session, cliOverrides);
+  }
+};
+
+const manageGitServersInteractively = async (session: TuiSession, options: SshKeyStoreCliOptions): Promise<void> => {
+  while (true) {
+    const servers = mergeServerList(readGitServers<GitServerEntry[]>([]));
+    const choices = [
+      {
+        label: t("cli.prompt.manageServers.registerNew"),
+        value: "__register__",
+        description: t("cli.prompt.manageServers.registerNewDesc"),
+      },
+      ...servers.map((server) => ({
+        label: `${server.name || server.baseUrl} — ${server.baseUrl}`,
+        value: server.id,
+        description: buildServerSummaryLine(server),
+      })),
+    ];
+
+    const selection = await session.promptList<string>({
+      title: t("cli.prompt.manageServers.title"),
+      message: servers.length > 0 ? t("cli.prompt.manageServers.selectPrompt") : t("cli.prompt.manageServers.emptyPrompt"),
+      choices,
+    });
+
+    if (selection === null) {
+      return;
+    }
+    if (selection === "__register__") {
+      await registerNewGitServer(session, options);
+      continue;
+    }
+    const server = servers.find((item) => item.id === selection);
+    if (server) {
+      await session.showMessage({ title: server.name || server.baseUrl, message: buildServerDetails(server) });
+    }
+  }
+};
+
 export const configureSshKeyStoreCommand = (program: Command, session?: TuiSession): void => {
   program
     .command("git-server-store")
@@ -2332,6 +2579,8 @@ export const configureSshKeyStoreCommand = (program: Command, session?: TuiSessi
       const sshKeyParameters = buildSshKeyStoreParameters(options, hasCliArg);
       if (session) {
         session.setParameters([sshKeyParameters]);
+        await manageGitServersInteractively(session, options);
+        return;
       }
 
       const baseUrl = String(sshKeyParameters.parameters.find((param) => param.name === "baseUrl")?.value ?? "");

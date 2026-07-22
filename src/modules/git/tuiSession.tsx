@@ -53,10 +53,16 @@ const createPromptResolver = <T,>(resolve: (value: T) => void): PromptResolver<T
       return;
     }
     resolvedRef.current = true;
-    resolve(value);
-    if (unmountRef.current) {
-      setTimeout(() => unmountRef.current?.(), 0);
-    }
+    // Unmount before resolving (both deferred to the next tick, to avoid tearing
+    // down the tree from inside Ink's own input handler). Ink caches a single
+    // instance per stdout, so if resolve() ran first, the caller's `await` could
+    // chain straight into the next prompt's render() — landing on the still-live
+    // instance — before this unmount() fires and pulls it out from under that
+    // new prompt (killing its input listeners and hanging the promise forever).
+    setTimeout(() => {
+      unmountRef.current?.();
+      resolve(value);
+    }, 0);
   };
 
   const setUnmount = (unmount: () => void): void => {
