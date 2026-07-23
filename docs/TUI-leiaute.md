@@ -30,8 +30,9 @@ Padronizar a experiência de navegação e mensagens da TUI em um layout de 4 pa
 - **Ctrl+P**: abre/fecha a modal de parâmetros carregados na execução atual.
 - **Ctrl+E**: abre/fecha o editor de parâmetros do `env.yaml`.
 - **Ctrl+C**: encerra a TUI imediatamente — **inclusive com modal aberto**.
-- **Ctrl+F**: alterna filtro para exibir apenas itens marcados na árvore (quando aplicável). (`Ctrl+M` não pode ser usado: o terminal envia o mesmo byte de Enter.)
-- **Digitação (árvore)**: caracteres imprimíveis filtram a árvore em tempo real por nome/caminho; um indicador com a consulta e a contagem aparece acima da lista; Backspace apaga o último caractere; Esc limpa o filtro (com filtro ativo, o Esc e o backspace-ajuda do Layout ficam suspensos).
+- **Ctrl+F** (árvore): entra no modo de pesquisa por nome. Fora desse modo, digitar não filtra nada. (`Ctrl+M` não pode ser usado como atalho: o terminal envia o mesmo byte de Enter.)
+- **Digitação em modo de pesquisa (árvore)**: caracteres imprimíveis filtram a árvore em tempo real por nome/caminho; um indicador com a consulta e a contagem aparece acima da lista assim que o modo é ativado; Backspace apaga o último caractere; Esc sai do modo de pesquisa e limpa o filtro (nesse estado, o Esc e o backspace-ajuda do Layout ficam suspensos).
+- **Ctrl+X** (árvore): alterna filtro para exibir apenas itens marcados.
 - **Ctrl+S**: confirma a seleção e sincroniza todos os repositórios marcados na árvore (contexto: menu → seleciona git-sync; contexto: árvore → sincroniza tudo).
 - **Enter**: confirma seleção e sincroniza apenas o escopo destacado (linha/grupo) na árvore.
 - **Ctrl+G**: seleciona git-server-store no menu.

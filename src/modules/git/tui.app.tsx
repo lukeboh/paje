@@ -349,6 +349,7 @@ export const renderRepositoryTree = async (
       const [scrollOffset, setScrollOffset] = useState(initialPosRef.current.scroll);
       const [showOnlySelected, setShowOnlySelected] = useState(false);
       const [textFilter, setTextFilter] = useState("");
+      const [searchActive, setSearchActive] = useState(false);
       const [visibleCount, setVisibleCount] = useState(1);
       const [branchModalBranches, setBranchModalBranches] = useState<string[]>([]);
       const [branchModalCurrent, setBranchModalCurrent] = useState<string | undefined>(undefined);
@@ -541,32 +542,38 @@ export const renderRepositoryTree = async (
             setScrollOffset(Math.max(0, lastIndex - visibleCount + 1));
             return;
           }
-          if (input === " ") {
+          if (input === " " && !searchActive) {
             toggleSelected();
             return;
           }
-          // Ctrl+F: terminals send the same byte for Ctrl+M and Enter (0x0d),
-          // so Ctrl+M can never be detected as a distinct shortcut.
-          if (key.ctrl && lower === "f") {
+          // (Ctrl+M is never usable as a shortcut: terminals send the same
+          // byte as Enter, 0x0d.)
+          if (key.ctrl && lower === "x") {
             toggleSelectionFilter();
             return;
           }
-          // Type-to-filter: printable characters narrow the tree as you type.
-          // Esc clears the filter (the Layout skips Esc while it is active);
-          // backspace erases the last character.
+          if (key.ctrl && lower === "f") {
+            setSearchActive(true);
+            return;
+          }
+          // Search mode (Ctrl+F): printable characters narrow the tree as you
+          // type. Esc exits search mode and clears the filter (the Layout
+          // skips Esc while search mode is active); backspace erases the
+          // last character.
           if (key.escape) {
-            if (textFilter) {
+            if (searchActive) {
+              setSearchActive(false);
               updateTextFilter("");
             }
             return;
           }
           if (key.backspace || key.delete) {
-            if (textFilter) {
+            if (searchActive && textFilter) {
               updateTextFilter(textFilter.slice(0, -1));
             }
             return;
           }
-          if (input && !key.ctrl && !key.meta && !key.tab) {
+          if (searchActive && input && !key.ctrl && !key.meta && !key.tab) {
             updateTextFilter(textFilter + input);
           }
         },
@@ -615,8 +622,8 @@ export const renderRepositoryTree = async (
           parameters={parametersSnapshot}
           envFilePath={options?.envFilePath}
           modalState={modalState}
-          escapeEnabled={modalState.modalOpen || textFilter.length === 0}
-          helpOnBackspace={textFilter.length === 0}
+          escapeEnabled={modalState.modalOpen || (!searchActive && textFilter.length === 0)}
+          helpOnBackspace={!searchActive && textFilter.length === 0}
           helpContext="tree"
           onHelpShortcut={(input, key) => {
             const lower = input.toLowerCase();
@@ -624,8 +631,12 @@ export const renderRepositoryTree = async (
               openBranchModal();
               return;
             }
-            if (key.ctrl && lower === "f") {
+            if (key.ctrl && lower === "x") {
               toggleSelectionFilter();
+              return;
+            }
+            if (key.ctrl && lower === "f") {
+              setSearchActive(true);
               return;
             }
             if (key.return) {
@@ -661,7 +672,7 @@ export const renderRepositoryTree = async (
               setSelectedIndex(lastIndex);
               setScrollOffset(Math.max(0, lastIndex - visibleCount + 1));
             }
-            if (input === " ") {
+            if (input === " " && !searchActive) {
               toggleSelected();
             }
             if (key.ctrl && lower === "s") {
@@ -713,7 +724,7 @@ export const renderRepositoryTree = async (
           }}
         >
           <Box flexDirection="column" width="100%">
-            {textFilter ? (
+            {searchActive ? (
               <Text color="yellow" wrap="truncate-end">
                 {t("tui.tree.textFilterIndicator", { query: textFilter, count: String(items.length) })}
               </Text>
@@ -723,7 +734,7 @@ export const renderRepositoryTree = async (
               selectedIndex={selectedIndex}
               scrollOffset={scrollOffset}
               onVisibleCountChange={setVisibleCount}
-              reservedLines={textFilter ? 1 : 0}
+              reservedLines={searchActive ? 1 : 0}
             />
           </Box>
         </Layout>

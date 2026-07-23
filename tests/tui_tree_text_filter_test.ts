@@ -5,11 +5,14 @@ import type { GitLabTreeNode } from "../src/modules/git/types.js";
 import { createFakeTTY, KEYS, stripAnsi, waitNextTick } from "./tui_test_utils.js";
 
 // Funcionalidade coberta: filtro da árvore por digitação.
-// - Digitar caracteres imprimíveis filtra a árvore em tempo real (label e
-//   path_with_namespace, case-insensitive), mantendo os ancestrais visíveis.
-// - Um indicador com a consulta e a contagem aparece acima da lista.
-// - Backspace apaga o último caractere; Esc limpa o filtro sem cancelar a
-//   tela; um segundo Esc (sem filtro) cancela normalmente.
+// - Ctrl+F entra no modo de pesquisa; a partir daí, digitar caracteres
+//   imprimíveis filtra a árvore em tempo real (label e path_with_namespace,
+//   case-insensitive), mantendo os ancestrais visíveis.
+// - Um indicador com a consulta e a contagem aparece acima da lista assim
+//   que o modo de pesquisa é ativado.
+// - Backspace apaga o último caractere; Esc sai do modo de pesquisa e limpa
+//   o filtro sem cancelar a tela; um Esc seguinte (fora do modo de pesquisa)
+//   cancela normalmente.
 
 const makeProject = (id: number, name: string, path: string): GitLabTreeNode => ({
   id: `project-${id}`,
@@ -90,7 +93,16 @@ const lastFrame = (): string => stripAnsi(tty.getLastFrame());
 assert.ok(lastFrame().includes("urna-digital"), "Árvore completa deve exibir todos os projetos");
 assert.ok(lastFrame().includes("pipeline-tools"), "Árvore completa deve exibir todos os projetos");
 
-// Digita "urna" → apenas o projeto correspondente permanece
+// Fora do modo de pesquisa, digitar não filtra nada
+await tty.press("u");
+assert.ok(lastFrame().includes("pipeline-tools"), "Digitar sem Ctrl+F não deve filtrar a árvore");
+
+// Ctrl+F entra no modo de pesquisa; digita "urna" → apenas o projeto correspondente permanece
+await tty.press(KEYS.ctrlF);
+assert.ok(
+  lastFrame().includes("Filtro:") || lastFrame().includes("Filter:"),
+  "Ctrl+F deve exibir o indicador de pesquisa mesmo antes de digitar"
+);
 await tty.press("u");
 await tty.press("r");
 await tty.press("n");

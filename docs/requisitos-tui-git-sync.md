@@ -124,7 +124,7 @@ Quando um repositório está **divergido** (`ahead > 0` e `behind > 0`), o siste
 ### RU-02 — Orientações
 
 - A linha de orientações deve indicar ações básicas: navegar, selecionar, sincronizar, cancelar.
-- Deve exibir o atalho `Ctrl+F` para alternar o filtro de itens marcados.
+- Deve exibir o atalho `Ctrl+F` para pesquisar por nome e `Ctrl+X` para alternar o filtro de itens marcados.
 - Deve exibir os atalhos `Ctrl+W` para maximizar/restaurar a área de trabalho e `Ctrl+L` para maximizar/restaurar o log.
 - Deve exibir `Ctrl+B` para a modal de branch e `Ctrl+H` para a modal de ajuda.
 
@@ -142,9 +142,9 @@ Quando um repositório está **divergido** (`ahead > 0` e `behind > 0`), o siste
 
 ### RU-04 — Filtro de selecionados
 
-- Ao pressionar `Ctrl+F`, a árvore deve alternar entre exibir todos os itens e apenas os itens marcados.
+- Ao pressionar `Ctrl+X`, a árvore deve alternar entre exibir todos os itens e apenas os itens marcados.
 - Quando o filtro estiver ativo, os ancestrais dos itens marcados devem permanecer visíveis.
-- Ao pressionar `Ctrl+F` novamente, a árvore completa deve ser restaurada.
+- Ao pressionar `Ctrl+X` novamente, a árvore completa deve ser restaurada.
 
 ### RU-05 — Esc
 
@@ -170,15 +170,16 @@ Quando um repositório está **divergido** (`ahead > 0` e `behind > 0`), o siste
 - A descrição do parâmetro selecionado aparece em rodapé fixo; o conteúdo do modal nunca excede sua altura.
 - Enquanto aberto, `Ctrl+P`/`Ctrl+H` são bloqueados; `Ctrl+C` continua encerrando a aplicação.
 
-### RU-08 — Filtro por digitação
+### RU-08 — Pesquisa por digitação (`Ctrl+F`)
 
-- Digitar caracteres imprimíveis na árvore filtra os itens em tempo real, casando com o rótulo do nó ou com o `path_with_namespace` (case-insensitive).
+- Fora do modo de pesquisa, digitar caracteres imprimíveis na árvore não tem efeito — é preciso pressionar `Ctrl+F` primeiro.
+- `Ctrl+F` ativa o modo de pesquisa; a partir daí, digitar caracteres imprimíveis filtra os itens em tempo real, casando com o rótulo do nó ou com o `path_with_namespace` (case-insensitive).
 - Grupos cujo nome casa com a consulta mantêm toda a subárvore; ancestrais de itens correspondentes permanecem visíveis.
-- Um indicador acima da lista exibe a consulta atual e a contagem de itens visíveis; a lista desconta essa linha da altura disponível (sem estourar o quadro).
-- `Backspace` apaga o último caractere da consulta (não pode abrir a ajuda enquanto o filtro está ativo).
-- `Esc` com filtro ativo limpa a consulta e restaura a árvore — **não** cancela a tela; um segundo `Esc` (sem filtro) cancela normalmente.
+- Um indicador acima da lista exibe a consulta atual e a contagem de itens visíveis assim que o modo de pesquisa é ativado (mesmo com a consulta ainda vazia); a lista desconta essa linha da altura disponível (sem estourar o quadro).
+- `Backspace` apaga o último caractere da consulta (não pode abrir a ajuda enquanto o modo de pesquisa está ativo).
+- `Esc` no modo de pesquisa sai do modo e limpa a consulta, restaurando a árvore — **não** cancela a tela; um `Esc` seguinte (fora do modo de pesquisa) cancela normalmente.
 - A navegação, a seleção por checkbox e a sincronização continuam funcionando sobre a lista filtrada; o cursor volta ao topo a cada alteração da consulta.
-- O filtro por digitação compõe com o filtro de selecionados (`Ctrl+F`).
+- A pesquisa por digitação compõe com o filtro de selecionados (`Ctrl+X`).
 
 ## Requisitos não funcionais
 

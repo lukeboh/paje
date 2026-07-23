@@ -20,6 +20,7 @@ export const KEYS = {
   ctrlP: "\u0010",
   ctrlS: "\u0013",
   ctrlW: "\u0017",
+  ctrlX: "\u0018",
   enter: "\r",
   escape: "\u001b",
   arrowDown: "\u001b[B",

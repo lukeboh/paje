@@ -17,7 +17,7 @@ Os atalhos são recebidos como bytes de controle; alguns colidem com teclas comu
 
 | Combinação | Byte enviado pelo terminal | Consequência |
 | --- | --- | --- |
-| `Ctrl+M` | `0x0d` — o mesmo de `Enter` | **Inutilizável** como atalho distinto; o filtro da árvore usa `Ctrl+F` |
+| `Ctrl+M` | `0x0d` — o mesmo de `Enter` | **Inutilizável** como atalho distinto |
 | `Ctrl+H` | `0x08` — reportado como backspace | Reconhecido como ajuda apenas em telas sem campo de texto (`helpOnBackspace`); a tecla Backspace física envia `0x7f` e não conflita |
 
 ## Atalhos globais (sempre listados)
@@ -53,10 +53,11 @@ Os atalhos são recebidos como bytes de controle; alguns colidem com teclas comu
 | PgUp/PgDn | Rolar página | somente na árvore |
 | Home/End | Ir ao início/fim | somente na árvore |
 | Espaço | Marcar/desmarcar repositório | somente na árvore |
-| *digitar texto* | Filtrar a árvore em tempo real (Backspace apaga; Esc limpa) | somente na árvore |
+| Ctrl+F | Entrar no modo de pesquisa por nome | somente na árvore |
+| *digitar texto (no modo de pesquisa)* | Filtrar a árvore em tempo real (Backspace apaga; Esc sai do modo e limpa) | somente na árvore, após `Ctrl+F` |
 | Ctrl+S | Sincronizar seleção (todos os repositórios marcados) | somente na árvore |
 | Enter | Sincronizar apenas o escopo destacado (linha/grupo) | somente na árvore |
-| Ctrl+F | Filtrar selecionados | somente na árvore |
+| Ctrl+X | Filtrar selecionados | somente na árvore |
 | Ctrl+B | Selecionar branch | somente na árvore |
 
 ## Editor de parâmetros (`Ctrl+E`)

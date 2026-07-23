@@ -54,6 +54,7 @@ const resolveShortcutKey = (input: string, key: Key): string | null => {
       l: "Ctrl+L",
       w: "Ctrl+W",
       b: "Ctrl+B",
+      x: "Ctrl+X",
     };
     if (ctrlMap[lower]) {
       return ctrlMap[lower];
@@ -169,7 +170,8 @@ const buildGroups = (options: { logMaximized: boolean; workspaceMaximized: boole
         { id: "tree-toggle", key: "Espaço", description: t("helpModal.shortcuts.tree.toggle"), contexts: ["tree"] },
         { id: "tree-confirm", key: "Ctrl+S", description: t("helpModal.shortcuts.tree.confirm"), contexts: ["tree"] },
         { id: "tree-confirm-single", key: "Enter", description: t("helpModal.shortcuts.tree.confirmSingle"), contexts: ["tree"] },
-        { id: "tree-filter", key: "Ctrl+F", description: t("helpModal.shortcuts.tree.filter"), contexts: ["tree"] },
+        { id: "tree-search", key: "Ctrl+F", description: t("helpModal.shortcuts.tree.search"), contexts: ["tree"] },
+        { id: "tree-filter", key: "Ctrl+X", description: t("helpModal.shortcuts.tree.filter"), contexts: ["tree"] },
         { id: "tree-branch", key: "Ctrl+B", description: t("helpModal.shortcuts.tree.branch"), contexts: ["tree"] },
       ],
     },

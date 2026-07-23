@@ -273,14 +273,15 @@ Layout detalhado em [`docs/TUI-leiaute.md`](docs/TUI-leiaute.md).
 | `↑ ↓` / `PgUp PgDn` | Navegar |
 | `Home` / `End` | Ir ao início/fim da lista |
 | `Space` | Selecionar/deselecionar repositório |
-| *digitar texto* | Filtrar a árvore em tempo real (Backspace apaga; Esc limpa) |
+| `Ctrl+F` | Entrar no modo de pesquisa por nome |
+| *digitar texto (no modo de pesquisa)* | Filtrar a árvore em tempo real (Backspace apaga; Esc sai do modo e limpa) |
 | `Ctrl+S` | Sincronizar todos os marcados |
 | `Enter` | Sincronizar apenas o escopo destacado (linha/grupo) |
-| `Ctrl+F` | Alternar filtro: todos / apenas selecionados |
+| `Ctrl+X` | Alternar filtro: todos / apenas selecionados |
 | `Ctrl+B` | Abrir modal de seleção de branch |
 | `Esc` | Cancelar |
 
-> Nota: o terminal envia o mesmo byte para `Ctrl+M` e `Enter`, e o byte de backspace para `Ctrl+H`. Por isso o filtro usa `Ctrl+F`, e a ajuda (`Ctrl+H`) é reconhecida pelo byte de backspace nas telas sem campo de texto.
+> Nota: o terminal envia o mesmo byte para `Ctrl+M` e `Enter`, e o byte de backspace para `Ctrl+H`. Por isso a pesquisa por nome exige `Ctrl+F` antes de digitar, e a ajuda (`Ctrl+H`) é reconhecida pelo byte de backspace nas telas sem campo de texto ativo.
 
 ---
 

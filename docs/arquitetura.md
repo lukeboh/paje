@@ -314,8 +314,10 @@ inclusive com modal aberto.
 
 **Atalhos e bytes de terminal:** o terminal envia o mesmo byte para `Ctrl+M` e `Enter`
 (`0x0d`) e o byte de backspace para `Ctrl+H` (`0x08`; a tecla Backspace física envia
-`0x7f`). Por isso o filtro da árvore usa `Ctrl+F`, e o `Layout` aceita `key.backspace`
-como abertura da ajuda apenas em telas sem campo de texto (prop `helpOnBackspace`).
+`0x7f`). Por isso a pesquisa por nome na árvore usa `Ctrl+F` (que precisa ser pressionado
+para entrar no modo de pesquisa antes de digitar) e o filtro de itens marcados usa
+`Ctrl+X`; o `Layout` aceita `key.backspace` como abertura da ajuda apenas em telas sem
+campo de texto ativo (prop `helpOnBackspace`).
 
 ## Extensão VSCode (`vscode-extension/`)
 
