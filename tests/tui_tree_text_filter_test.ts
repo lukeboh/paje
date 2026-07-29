@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { renderRepositoryTree } from "../src/modules/git/tui.app.js";
+import { createTuiSession } from "../src/modules/git/tuiSession.js";
 import { filterTreeByText } from "../src/modules/git/treeBuilder.js";
 import type { GitLabTreeNode } from "../src/modules/git/types.js";
 import { createFakeTTY, KEYS, stripAnsi, waitNextTick } from "./tui_test_utils.js";
@@ -73,14 +74,16 @@ assert.equal(filterTreeByText(nodes, "inexistente").length, 0, "Sem correspondê
 const tty = createFakeTTY();
 let resolvedResult: { confirmed: boolean } | null = null;
 
-const treePromise = renderRepositoryTree(buildNodes(), () => undefined, undefined, {
+const session = createTuiSession("test", {
   renderOptions: {
     stdout: tty.stdout,
     stdin: tty.stdin,
     exitOnCtrlC: false,
     patchConsole: false,
   },
-}).then((result) => {
+});
+
+const treePromise = renderRepositoryTree(buildNodes(), () => undefined, session, {}).then((result) => {
   resolvedResult = result;
   return result;
 });
@@ -138,5 +141,6 @@ assert.equal(resolvedResult, null, "Esc com filtro ativo não pode cancelar a te
 await tty.press(KEYS.escape);
 const result = await treePromise;
 assert.equal(result.confirmed, false, "Esc sem filtro deve cancelar a tela");
+session.destroy();
 
 console.log("tui_tree_text_filter_test: OK");

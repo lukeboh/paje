@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
 import { renderLoadingScreen } from "../src/modules/git/tui.app.js";
+import { createTuiSession } from "../src/modules/git/tuiSession.js";
 
 const normalizeOutput = (value: string): string => value.replace(/\u001b\[[0-9;]*m/g, "");
 
@@ -62,15 +63,21 @@ const waitForOutput = async (predicate: (value: string) => boolean, timeoutMs = 
   }
 };
 
-const handle = renderLoadingScreen({
-  title: "PAJÉ - Teste Loading",
-  message: "Carregando repositórios...",
-  orientation: "Aguarde enquanto consultamos os servidores",
+const session = createTuiSession("test", {
   renderOptions: {
     stdout: stdout as unknown as NodeJS.WriteStream,
     stdin: stdin as unknown as NodeJS.ReadStream,
   },
 });
+
+const handle = renderLoadingScreen(
+  {
+    title: "PAJÉ - Teste Loading",
+    message: "Carregando repositórios...",
+    orientation: "Aguarde enquanto consultamos os servidores",
+  },
+  session
+);
 
 await waitNextTick();
 await waitForOutput((value) => value.includes("Carregando repositórios"));
@@ -81,5 +88,6 @@ assert.ok(normalized.includes("Carregando repositórios"), "Deve renderizar mens
 assert.ok(normalized.includes("Aguarde enquanto consultamos os servidores"), "Deve renderizar orientação do loading");
 
 handle.stop();
+session.destroy();
 
 console.log("tui_loading_screen_test: OK");

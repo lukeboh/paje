@@ -1764,13 +1764,16 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
       const spinnerFrames = ["/", "-", "\\", "|"];
       let spinnerFrameIndex = 0;
       const loadingHandle = session
-        ? renderLoadingScreen({
-            title: t("app.gitSyncTitle"),
-            message: t("tui.loading.repositories"),
-            orientation: t("tui.loading.orientation"),
-            parameters: session.getParameters(),
-            spinnerFrames,
-          })
+        ? renderLoadingScreen(
+            {
+              title: t("app.gitSyncTitle"),
+              message: t("tui.loading.repositories"),
+              orientation: t("tui.loading.orientation"),
+              parameters: session.getParameters(),
+              spinnerFrames,
+            },
+            session
+          )
         : null;
 
       let treeProgress: TuiTreeProgress | null = null;

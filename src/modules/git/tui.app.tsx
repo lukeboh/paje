@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box, Text, render, useInput, type RenderOptions, type Key } from "ink";
+import { Box, Text, useInput, type Key } from "ink";
 import { PajeLogger } from "./logger.js";
 import type { CommandParameters } from "./core/parameters.js";
 import { Layout } from "./tui/layout.js";
@@ -43,7 +43,6 @@ export type LoadingScreenOptions = {
   parameters?: CommandParameters[];
   spinnerFrames?: string[];
   intervalMs?: number;
-  renderOptions?: RenderOptions;
 };
 
 export type LoadingScreenHandle = {
@@ -302,7 +301,7 @@ export type TuiTreeProgress = {
 export const renderRepositoryTree = async (
   nodes: GitLabTreeNode[],
   onToggle: (nodeId: string) => void,
-  _session?: TuiSession,
+  session: TuiSession,
   options?: {
     title?: string;
     footer?: string;
@@ -310,7 +309,6 @@ export const renderRepositoryTree = async (
     parameters?: CommandParameters[];
     envFilePath?: string;
     initialSelectedNodeId?: string;
-    renderOptions?: RenderOptions;
     onReady?: (handlers: {
       render: () => void;
       progress: TuiTreeProgress;
@@ -323,7 +321,7 @@ export const renderRepositoryTree = async (
   }
 ): Promise<TuiSelectionResult> => {
   return new Promise((resolve) => {
-    const unmountRef: { current?: () => void } = {};
+    const screenKeyRef: { current?: number } = {};
 
     const App: React.FC = () => {
       const parametersSnapshot = options?.parameters ?? [];
@@ -428,9 +426,9 @@ export const renderRepositoryTree = async (
             return;
           }
           resolvedRef.current = true;
-          if (unmountRef.current) {
-            debugLogger.info("[TUI][TREE] unmount called");
-            unmountRef.current();
+          if (screenKeyRef.current !== undefined) {
+            debugLogger.info("[TUI][TREE] release screen");
+            session.releaseScreen(screenKeyRef.current);
           }
           resolve({ confirmed, mode, selectedNodeId, nodes });
         },
@@ -741,15 +739,13 @@ export const renderRepositoryTree = async (
       );
     };
 
-    const { unmount } = render(<App />, options?.renderOptions);
-    unmountRef.current = unmount;
+    screenKeyRef.current = session.mountScreen(<App />);
   });
 };
 
-export const renderLoadingScreen = (options: LoadingScreenOptions): LoadingScreenHandle => {
+export const renderLoadingScreen = (options: LoadingScreenOptions, session: TuiSession): LoadingScreenHandle => {
   const spinnerFrames = options.spinnerFrames ?? ["/", "-", "\\", "|"];
   const intervalMs = options.intervalMs ?? 120;
-  const unmountRef: { current?: () => void } = {};
 
   const App: React.FC = () => {
     const modalState = useModalStateController();
@@ -787,14 +783,11 @@ export const renderLoadingScreen = (options: LoadingScreenOptions): LoadingScree
     );
   };
 
-  const { unmount } = render(<App />, options.renderOptions);
-  unmountRef.current = unmount;
+  const screenKey = session.mountScreen(<App />);
 
   return {
     stop: () => {
-      if (unmountRef.current) {
-        unmountRef.current();
-      }
+      session.releaseScreen(screenKey);
     },
   };
 };

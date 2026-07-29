@@ -38,6 +38,7 @@ const testFiles = [
   "./git_sync_cache_refresh_test.js",
   "./tui_tree_text_filter_test.js",
   "./tui_no_flicker_test.js",
+  "./tui_screen_transition_test.js",
   "./vscode_tree_adapter_test.js",
   "./vscode_extension_smoke_test.js",
 ];

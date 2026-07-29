@@ -3,6 +3,7 @@ import React from "react";
 import { Box, Text, render } from "ink";
 import { Layout } from "../src/modules/git/tui/layout.js";
 import { renderRepositoryTree } from "../src/modules/git/tui.app.js";
+import { createTuiSession } from "../src/modules/git/tuiSession.js";
 import type { GitLabTreeNode } from "../src/modules/git/types.js";
 import { createFakeTTY, KEYS, waitNextTick } from "./tui_test_utils.js";
 
@@ -76,7 +77,7 @@ const countClears = (output: string): number => output.split("[2J").length - 1;
   ];
 
   const tty = createFakeTTY(80, 24);
-  const treePromise = renderRepositoryTree(nodes, () => undefined, undefined, {
+  const session = createTuiSession("test", {
     renderOptions: {
       stdout: tty.stdout,
       stdin: tty.stdin,
@@ -84,6 +85,7 @@ const countClears = (output: string): number => output.split("[2J").length - 1;
       patchConsole: false,
     },
   });
+  const treePromise = renderRepositoryTree(nodes, () => undefined, session, {});
   await waitNextTick();
   await new Promise((resolve) => setTimeout(resolve, 150));
 
@@ -100,6 +102,7 @@ const countClears = (output: string): number => output.split("[2J").length - 1;
     0,
     "Nenhum clear de tela inteira (ESC[2J) pode ser emitido ao navegar, selecionar e filtrar a árvore"
   );
+  session.destroy();
 }
 
 console.log("tui_no_flicker_test: OK");
