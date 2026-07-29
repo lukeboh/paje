@@ -160,6 +160,10 @@ const ptBR = {
       yes: "Sim",
       no: "Não",
     },
+    form: {
+      helpTitle: "Sobre este campo",
+      noDescription: "Sem descrição adicional para este campo.",
+    },
     errorPrefix: "Erro: {{error}}",
   },
   parameters: {

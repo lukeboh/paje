@@ -59,6 +59,22 @@ Padronizar a experiência de navegação e mensagens da TUI em um layout de 4 pa
 - A descrição do parâmetro selecionado aparece em rodapé fixo (1 linha reservada — o conteúdo nunca excede a altura do modal).
 - Enquanto aberto, o editor é dono do teclado: `Ctrl+P`/`Ctrl+H` não trocam de modal.
 
+## Formulários (`promptForm`/`promptInput`/`promptPassword`)
+
+- O valor de um campo nunca é exibido cortado sem indicação: usa `wrap="truncate-start"`,
+  que oculta o início do texto atrás de reticências (`…`) e mantém o final sempre visível
+  — é onde o cursor está enquanto o usuário digita. Aplica-se a `promptInput`,
+  `promptPassword` (sobre o valor mascarado) e a cada campo de `promptForm`.
+- `promptForm` reserva um **painel de ajuda** dedicado, sempre mostrando o rótulo e a
+  descrição do campo com foco atual (título `t("session.form.helpTitle")`); campos sem
+  descrição mostram um texto de fallback explícito (`t("session.form.noDescription")`)
+  em vez de ficarem em branco. A barra de orientação deixa de carregar a descrição —
+  mantém apenas os atalhos (e erros de validação, quando houver).
+- Em terminais largos (`stdout.columns >= 70`), o painel de ajuda fica ao lado dos campos
+  (`flexDirection="row"`, ~62%/36% de largura). Abaixo desse limiar, ele empilha após a
+  lista de campos (`flexDirection="column"`, 100% de largura) para não espremer as caixas
+  de entrada — a descrição continua visível em ambos os casos.
+
 ## Observações de implementação
 
 - O layout deve manter o título e a linha de orientação visíveis ao maximizar o log via **Ctrl+L**.

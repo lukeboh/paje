@@ -162,6 +162,10 @@ const enUS: PtBrTranslations = {
       yes: "Yes",
       no: "No",
     },
+    form: {
+      helpTitle: "About this field",
+      noDescription: "No additional description for this field.",
+    },
     errorPrefix: "Error: {{error}}",
   },
   parameters: {

@@ -22,6 +22,7 @@ export const KEYS = {
   ctrlW: "\u0017",
   ctrlX: "\u0018",
   enter: "\r",
+  tab: "\u0009", // same byte as Ctrl+I
   escape: "\u001b",
   arrowDown: "\u001b[B",
   arrowUp: "\u001b[A",

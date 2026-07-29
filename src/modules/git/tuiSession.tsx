@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Box, Text, render, useInput } from "ink";
+import { Box, Text, render, useInput, useStdout } from "ink";
 import type { CommandParameters } from "./core/parameters.js";
 import { Layout } from "./tui/layout.js";
 import { useModalStateController } from "./tui/layoutContext.js";
@@ -126,7 +126,7 @@ export const createTuiSession = (_title: string): TuiSession => {
             <Box flexDirection="column" width="100%">
               <Text>{options.message}</Text>
               <Box marginTop={1} borderStyle="round" borderColor="cyan">
-                <Text> {value || ""}</Text>
+                <Text wrap="truncate-start"> {value || ""}</Text>
               </Box>
             </Box>
           </Layout>
@@ -183,7 +183,7 @@ export const createTuiSession = (_title: string): TuiSession => {
             <Box flexDirection="column" width="100%">
               <Text>{options.message}</Text>
               <Box marginTop={1} borderStyle="round" borderColor="cyan">
-                <Text> {masked}</Text>
+                <Text wrap="truncate-start"> {masked}</Text>
               </Box>
             </Box>
           </Layout>
@@ -279,10 +279,18 @@ export const createTuiSession = (_title: string): TuiSession => {
           appendLogEntry(t("session.log.form"));
         }, []);
         const focusedField = options.fields[focusedIndex];
-        const description = focusedField?.description;
-        const orientation = buildOrientation(t("session.orientation.form"), description, inlineError);
         const parametersSnapshot = getParameters();
         const modalState = useModalStateController();
+        const { stdout } = useStdout();
+        // The description used to ride along in the orientation bar, sharing
+        // a single line with keybinding hints — easy to miss on a form with
+        // several fields. It gets its own panel below; the orientation bar
+        // keeps just the hints (still shows validation errors, if any).
+        const orientation = buildOrientation(t("session.orientation.form"), undefined, inlineError);
+        // Below this width the side panel would squeeze the inputs too much
+        // to be usable — fall back to stacking the description under the
+        // field list instead of beside it.
+        const useSidePanel = (stdout?.columns ?? 80) >= 70;
 
         const updateField = (fieldName: string, updater: (current: string) => string): void => {
           setValues((current) => ({
@@ -329,6 +337,51 @@ export const createTuiSession = (_title: string): TuiSession => {
           { isActive: !modalState.modalOpen }
         );
 
+        const fieldsColumn = (
+          <Box flexDirection="column" width={useSidePanel ? "62%" : "100%"}>
+            {options.fields.map((field, index) => {
+              const name = String(field.name);
+              const value = values[name] ?? "";
+              const masked = field.secret ? "*".repeat(value.length) : value;
+              const isFocused = index === focusedIndex;
+              return (
+                <Box key={name} flexDirection="column" marginBottom={1}>
+                  <Text color={isFocused ? "cyan" : undefined}>{field.label}</Text>
+                  <Box borderStyle="round" borderColor={isFocused ? "cyan" : "gray"}>
+                    {/* truncate-start keeps the tail of the value visible —
+                        typing always appends at the end, so that's where the
+                        active cursor effectively is; a leading "…" shows
+                        there is more text hidden to the left. */}
+                    <Text wrap="truncate-start"> {masked}</Text>
+                  </Box>
+                </Box>
+              );
+            })}
+          </Box>
+        );
+
+        const helpPanel = (
+          <Box
+            flexDirection="column"
+            width={useSidePanel ? "36%" : "100%"}
+            marginLeft={useSidePanel ? 1 : 0}
+            marginTop={useSidePanel ? 0 : 1}
+            borderStyle="round"
+            borderColor="blue"
+            paddingX={1}
+          >
+            <Text bold color="blue">
+              {t("session.form.helpTitle")}
+            </Text>
+            <Box marginTop={1} flexDirection="column">
+              <Text bold>{focusedField?.label}</Text>
+              <Text dimColor={!focusedField?.description}>
+                {focusedField?.description || t("session.form.noDescription")}
+              </Text>
+            </Box>
+          </Box>
+        );
+
         return (
           <Layout
             title={options.title}
@@ -337,21 +390,9 @@ export const createTuiSession = (_title: string): TuiSession => {
             modalState={modalState}
             onEscape={() => resolver.finalize(null)}
           >
-            <Box flexDirection="column" width="100%">
-              {options.fields.map((field, index) => {
-                const name = String(field.name);
-                const value = values[name] ?? "";
-                const masked = field.secret ? "*".repeat(value.length) : value;
-                const isFocused = index === focusedIndex;
-                return (
-                  <Box key={name} flexDirection="column" marginBottom={1}>
-                    <Text color={isFocused ? "cyan" : undefined}>{field.label}</Text>
-                    <Box borderStyle="round" borderColor={isFocused ? "cyan" : "gray"}>
-                      <Text> {masked}</Text>
-                    </Box>
-                  </Box>
-                );
-              })}
+            <Box flexDirection={useSidePanel ? "row" : "column"} width="100%">
+              {fieldsColumn}
+              {helpPanel}
             </Box>
           </Layout>
         );
