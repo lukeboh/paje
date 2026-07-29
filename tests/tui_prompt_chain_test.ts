@@ -28,9 +28,8 @@ const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): 
   }
 };
 
+const session = createTuiSession("test");
 try {
-  const session = createTuiSession("test");
-
   const runner = (async () => {
     const first = await session.promptInput({ title: "T1", message: "Field One" });
     const second = await session.promptInput({ title: "T2", message: "Field Two" });
@@ -49,6 +48,7 @@ try {
   assert.strictEqual(result.first, "");
   assert.strictEqual(result.second, "");
 } finally {
+  session.destroy();
   Object.defineProperty(process, "stdout", { value: originalStdout, configurable: true });
   Object.defineProperty(process, "stdin", { value: originalStdin, configurable: true });
 }

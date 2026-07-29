@@ -18,6 +18,7 @@ const testFiles = [
   "./ssh_key_overwrite_test.js",
   "./logger_transports_test.js",
   "./log_store_level_test.js",
+  "./screen_host_test.js",
   "./tui_render_test.js",
   "./tui_prompt_chain_test.js",
   "./tui_prompt_form_layout_test.js",

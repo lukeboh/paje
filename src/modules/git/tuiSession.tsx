@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Box, Text, render, useInput, useStdout } from "ink";
+import { Box, Text, useInput, useStdout, type RenderOptions } from "ink";
 import type { CommandParameters } from "./core/parameters.js";
 import { Layout } from "./tui/layout.js";
 import { useLayoutMetrics, useModalStateController } from "./tui/layoutContext.js";
 import { appendLogEntry } from "./tui/logStore.js";
+import { createScreenHost, type ScreenHost } from "./tui/screenHost.js";
 import { t } from "../../i18n/index.js";
 
 export type ListChoice<T> = {
@@ -25,6 +26,13 @@ export type TuiSession = {
   showMessage: (options: { title: string; message: string }) => Promise<void>;
   setParameters: (parameters: CommandParameters[]) => void;
   getParameters: () => CommandParameters[];
+  // Mounts `node` as the session's current screen (see ./tui/screenHost.js) —
+  // used internally by every prompt above, and by tui.app.tsx's tree/loading
+  // screens so they share the same persistent Ink instance instead of each
+  // creating its own (which is what caused a full disconnected repaint, read
+  // as a flicker, on every screen transition).
+  mountScreen: (node: React.ReactNode) => number;
+  releaseScreen: (key: number) => void;
   destroy: () => void;
 };
 
@@ -41,35 +49,35 @@ export const buildOrientation = (base: string, description?: string, error?: str
 
 type PromptResolver<T> = {
   finalize: (value: T) => void;
-  setUnmount: (unmount: () => void) => void;
+  setScreenKey: (key: number) => void;
 };
 
-const createPromptResolver = <T,>(resolve: (value: T) => void): PromptResolver<T> => {
+// Releases this prompt's screen before resolving, so a resolved prompt never
+// keeps reacting to input after something else has taken over — releaseScreen
+// is a no-op if another screen already replaced this one (see screenHost.js).
+const createPromptResolver = <T,>(
+  resolve: (value: T) => void,
+  releaseScreen: (key: number) => void
+): PromptResolver<T> => {
   const resolvedRef = { current: false };
-  const unmountRef: { current?: () => void } = {};
+  const keyRef: { current?: number } = {};
 
   const finalize = (value: T): void => {
     if (resolvedRef.current) {
       return;
     }
     resolvedRef.current = true;
-    // Unmount before resolving (both deferred to the next tick, to avoid tearing
-    // down the tree from inside Ink's own input handler). Ink caches a single
-    // instance per stdout, so if resolve() ran first, the caller's `await` could
-    // chain straight into the next prompt's render() — landing on the still-live
-    // instance — before this unmount() fires and pulls it out from under that
-    // new prompt (killing its input listeners and hanging the promise forever).
-    setTimeout(() => {
-      unmountRef.current?.();
-      resolve(value);
-    }, 0);
+    if (keyRef.current !== undefined) {
+      releaseScreen(keyRef.current);
+    }
+    resolve(value);
   };
 
-  const setUnmount = (unmount: () => void): void => {
-    unmountRef.current = unmount;
+  const setScreenKey = (key: number): void => {
+    keyRef.current = key;
   };
 
-  return { finalize, setUnmount };
+  return { finalize, setScreenKey };
 };
 
 // Layout only exposes the workspace's real content height via React context,
@@ -85,9 +93,20 @@ const WorkspaceHeightProbe: React.FC<{ onHeight: (height: number) => void }> = (
   return null;
 };
 
-export const createTuiSession = (_title: string): TuiSession => {
+export const createTuiSession = (
+  _title: string,
+  options?: { renderOptions?: RenderOptions; screenHost?: ScreenHost }
+): TuiSession => {
   let inlineError = "";
   let parameters: CommandParameters[] = [];
+  // A host passed in (e.g. by cli.ts, shared across the menu and every
+  // command's session) is owned by its creator — only a self-created host is
+  // ours to tear down in destroy().
+  const ownsHost = !options?.screenHost;
+  const host = options?.screenHost ?? createScreenHost(options?.renderOptions);
+
+  const mountScreen = (node: React.ReactNode): number => host.mount(node);
+  const releaseScreen = (key: number): void => host.release(key);
 
   const setParameters = (nextParameters: CommandParameters[]): void => {
     parameters = [...nextParameters];
@@ -97,7 +116,7 @@ export const createTuiSession = (_title: string): TuiSession => {
 
   const promptInput: TuiSession["promptInput"] = async (options) => {
     return new Promise((resolve) => {
-      const resolver = createPromptResolver<string | null>(resolve);
+      const resolver = createPromptResolver<string | null>(resolve, releaseScreen);
 
       const App: React.FC = () => {
         const [value, setValue] = useState(options.defaultValue ?? "");
@@ -146,14 +165,13 @@ export const createTuiSession = (_title: string): TuiSession => {
         );
       };
 
-      const { unmount } = render(<App />);
-      resolver.setUnmount(unmount);
+      resolver.setScreenKey(mountScreen(<App />));
     });
   };
 
   const promptPassword: TuiSession["promptPassword"] = async (options) => {
     return new Promise((resolve) => {
-      const resolver = createPromptResolver<string | null>(resolve);
+      const resolver = createPromptResolver<string | null>(resolve, releaseScreen);
 
       const App: React.FC = () => {
         const [value, setValue] = useState("");
@@ -203,8 +221,7 @@ export const createTuiSession = (_title: string): TuiSession => {
         );
       };
 
-      const { unmount } = render(<App />);
-      resolver.setUnmount(unmount);
+      resolver.setScreenKey(mountScreen(<App />));
     });
   };
 
@@ -214,7 +231,7 @@ export const createTuiSession = (_title: string): TuiSession => {
     choices: ListChoice<T>[];
   }): Promise<T | null> => {
     return new Promise<T | null>((resolve) => {
-      const resolver = createPromptResolver<T | null>(resolve);
+      const resolver = createPromptResolver<T | null>(resolve, releaseScreen);
 
       const App: React.FC = () => {
         const [selectedIndex, setSelectedIndex] = useState(0);
@@ -268,8 +285,7 @@ export const createTuiSession = (_title: string): TuiSession => {
         );
       };
 
-      const { unmount } = render(<App />);
-      resolver.setUnmount(unmount);
+      resolver.setScreenKey(mountScreen(<App />));
     });
   };
 
@@ -278,7 +294,7 @@ export const createTuiSession = (_title: string): TuiSession => {
     fields: { name: keyof T; label: string; defaultValue?: string; secret?: boolean; description?: string }[];
   }): Promise<T | null> => {
     return new Promise<T | null>((resolve) => {
-      const resolver = createPromptResolver<T | null>(resolve);
+      const resolver = createPromptResolver<T | null>(resolve, releaseScreen);
 
       const App: React.FC = () => {
         const [focusedIndex, setFocusedIndex] = useState(0);
@@ -443,8 +459,7 @@ export const createTuiSession = (_title: string): TuiSession => {
         );
       };
 
-      const { unmount } = render(<App />);
-      resolver.setUnmount(unmount);
+      resolver.setScreenKey(mountScreen(<App />));
     });
   };
 
@@ -462,7 +477,7 @@ export const createTuiSession = (_title: string): TuiSession => {
 
   const showMessage: TuiSession["showMessage"] = async (options) => {
     return new Promise((resolve) => {
-      const resolver = createPromptResolver<void>(resolve);
+      const resolver = createPromptResolver<void>(resolve, releaseScreen);
 
       const App: React.FC = () => {
         useEffect(() => {
@@ -495,8 +510,7 @@ export const createTuiSession = (_title: string): TuiSession => {
         );
       };
 
-      const { unmount } = render(<App />);
-      resolver.setUnmount(unmount);
+      resolver.setScreenKey(mountScreen(<App />));
     });
   };
 
@@ -507,6 +521,9 @@ export const createTuiSession = (_title: string): TuiSession => {
   const destroy = (): void => {
     inlineError = "";
     parameters = [];
+    if (ownsHost) {
+      host.destroy();
+    }
   };
 
   return {
@@ -519,6 +536,8 @@ export const createTuiSession = (_title: string): TuiSession => {
     showMessage,
     setParameters,
     getParameters,
+    mountScreen,
+    releaseScreen,
     destroy,
   };
 };

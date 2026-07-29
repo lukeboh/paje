@@ -96,6 +96,7 @@ const longUrl = "https://git.tse.jus.br/very/long/path/that/does/not/fit/in/one/
     await tty.press(KEYS.escape);
     const result = await formPromise;
     assert.equal(result, null, "Esc deve cancelar o formulário");
+    session.destroy();
   });
 }
 
@@ -127,6 +128,7 @@ const longUrl = "https://git.tse.jus.br/very/long/path/that/does/not/fit/in/one/
 
     await tty.press(KEYS.escape);
     await formPromise;
+    session.destroy();
   });
 }
 
@@ -186,6 +188,7 @@ const longUrl = "https://git.tse.jus.br/very/long/path/that/does/not/fit/in/one/
 
     await tty.press(KEYS.escape);
     await formPromise;
+    session.destroy();
   });
 }
 
