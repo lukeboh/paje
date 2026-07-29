@@ -163,6 +163,8 @@ const ptBR = {
     form: {
       helpTitle: "Sobre este campo",
       noDescription: "Sem descrição adicional para este campo.",
+      hiddenAbove: "▲ {{count}} campo(s) acima",
+      hiddenBelow: "▼ {{count}} campo(s) abaixo",
     },
     errorPrefix: "Erro: {{error}}",
   },

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Box, Text, render, useInput, useStdout } from "ink";
 import type { CommandParameters } from "./core/parameters.js";
 import { Layout } from "./tui/layout.js";
-import { useModalStateController } from "./tui/layoutContext.js";
+import { useLayoutMetrics, useModalStateController } from "./tui/layoutContext.js";
 import { appendLogEntry } from "./tui/logStore.js";
 import { t } from "../../i18n/index.js";
 
@@ -70,6 +70,19 @@ const createPromptResolver = <T,>(resolve: (value: T) => void): PromptResolver<T
   };
 
   return { finalize, setUnmount };
+};
+
+// Layout only exposes the workspace's real content height via React context,
+// provided to descendants of <Layout> — not to the component that builds
+// <Layout>'s children (that component is Layout's ANCESTOR, so the hook
+// would find no provider there). This bridge renders inside the subtree to
+// read the value and hand it back up through a plain callback.
+const WorkspaceHeightProbe: React.FC<{ onHeight: (height: number) => void }> = ({ onHeight }) => {
+  const { workspaceHeight } = useLayoutMetrics();
+  useEffect(() => {
+    onHeight(workspaceHeight);
+  }, [workspaceHeight, onHeight]);
+  return null;
 };
 
 export const createTuiSession = (_title: string): TuiSession => {
@@ -292,6 +305,31 @@ export const createTuiSession = (_title: string): TuiSession => {
         // field list instead of beside it.
         const useSidePanel = (stdout?.columns ?? 80) >= 70;
 
+        // The workspace has a fixed height (Layout/Workspace assign it, not
+        // Yoga's natural sizing) — on a short terminal, a field list taller
+        // than that gets silently flex-shrunk by Ink, collapsing each
+        // bordered box's content and bottom border onto the same row. Rather
+        // than let that happen, cap how many fields render at once and
+        // scroll the window to keep the focused field in view, the same way
+        // EditParamsModal/BranchModal handle overflowing lists.
+        const [workspaceHeight, setWorkspaceHeight] = useState(24);
+        // label line (1) + bordered box (top/content/bottom = 3) + the
+        // marginBottom gap (1) below each field.
+        const FIELD_ROW_HEIGHT = 5;
+        const maxVisibleFields = Math.max(1, Math.floor(workspaceHeight / FIELD_ROW_HEIGHT));
+        const needsScroll = options.fields.length > maxVisibleFields;
+        const scrollOffset = needsScroll
+          ? Math.max(
+              0,
+              Math.min(focusedIndex - Math.floor(maxVisibleFields / 2), options.fields.length - maxVisibleFields)
+            )
+          : 0;
+        const visibleFields = needsScroll
+          ? options.fields.slice(scrollOffset, scrollOffset + maxVisibleFields).map((field, i) => ({ field, index: scrollOffset + i }))
+          : options.fields.map((field, index) => ({ field, index }));
+        const hiddenAbove = scrollOffset;
+        const hiddenBelow = options.fields.length - (scrollOffset + visibleFields.length);
+
         const updateField = (fieldName: string, updater: (current: string) => string): void => {
           setValues((current) => ({
             ...current,
@@ -339,7 +377,11 @@ export const createTuiSession = (_title: string): TuiSession => {
 
         const fieldsColumn = (
           <Box flexDirection="column" width={useSidePanel ? "62%" : "100%"}>
-            {options.fields.map((field, index) => {
+            <WorkspaceHeightProbe onHeight={setWorkspaceHeight} />
+            {hiddenAbove > 0 ? (
+              <Text dimColor>{t("session.form.hiddenAbove", { count: String(hiddenAbove) })}</Text>
+            ) : null}
+            {visibleFields.map(({ field, index }) => {
               const name = String(field.name);
               const value = values[name] ?? "";
               const masked = field.secret ? "*".repeat(value.length) : value;
@@ -357,6 +399,9 @@ export const createTuiSession = (_title: string): TuiSession => {
                 </Box>
               );
             })}
+            {hiddenBelow > 0 ? (
+              <Text dimColor>{t("session.form.hiddenBelow", { count: String(hiddenBelow) })}</Text>
+            ) : null}
           </Box>
         );
 

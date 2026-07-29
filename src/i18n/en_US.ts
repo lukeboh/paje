@@ -165,6 +165,8 @@ const enUS: PtBrTranslations = {
     form: {
       helpTitle: "About this field",
       noDescription: "No additional description for this field.",
+      hiddenAbove: "▲ {{count}} field(s) above",
+      hiddenBelow: "▼ {{count}} field(s) below",
     },
     errorPrefix: "Error: {{error}}",
   },

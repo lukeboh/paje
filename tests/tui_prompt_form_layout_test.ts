@@ -13,6 +13,12 @@ import { createFakeTTY, KEYS, stripAnsi } from "./tui_test_utils.js";
 // 3. On a narrow terminal, the panel doesn't squeeze the inputs — it stacks
 //    below the field list instead of beside it, but the description is
 //    still shown somewhere.
+// 4. On a SHORT terminal (few rows), a field list taller than the workspace
+//    used to get flex-shrunk by Ink: each bordered box lost its content row,
+//    merging the value onto the same line as the bottom border. The field
+//    list now scrolls instead — showing fewer fields at a time with a
+//    "N field(s) above/below" hint — so every visible box keeps its full
+//    3-line shape (label, top border, value, bottom border) intact.
 
 const withPatchedStdio = async <T,>(
   tty: ReturnType<typeof createFakeTTY>,
@@ -117,6 +123,65 @@ const longUrl = "https://git.tse.jus.br/very/long/path/that/does/not/fit/in/one/
     assert.ok(
       frame.includes("URL do servidor."),
       "Mesmo em terminal estreito (painel lateral desativado), a descrição do campo deve continuar visível"
+    );
+
+    await tty.press(KEYS.escape);
+    await formPromise;
+  });
+}
+
+// --- Parte 3: terminal baixo (poucas linhas) — rolagem em vez de caixas corrompidas ---
+
+{
+  const tty = createFakeTTY(90, 20);
+  await withPatchedStdio(tty, async () => {
+    const session = createTuiSession("test");
+
+    const formPromise = session.promptForm<{
+      baseUrl: string;
+      serverName: string;
+      username: string;
+      password: string;
+      tokenName: string;
+    }>({
+      title: "Git Server",
+      fields: [
+        { name: "baseUrl", label: "Server base URL", defaultValue: "https://github.com" },
+        { name: "serverName", label: "Server name", defaultValue: "GITHUB" },
+        { name: "username", label: "Username", defaultValue: "lukeboh" },
+        { name: "password", label: "Password", defaultValue: "", secret: true },
+        { name: "tokenName", label: "Personal access token name", defaultValue: "TOKEN-VALUE-XYZ" },
+      ],
+    });
+
+    await tty.waitForOutput((out) => stripAnsi(out).includes("Server base URL"));
+    await tty.press(KEYS.tab);
+    await tty.press(KEYS.tab);
+    await tty.press(KEYS.tab);
+    await tty.press(KEYS.tab);
+
+    const frame = stripAnsi(tty.getLastFrame());
+    const lines = frame.split("\n");
+
+    assert.ok(
+      frame.includes("▲") && (frame.includes("acima") || frame.includes("above")),
+      "Deve indicar que há campos ocultos acima ao rolar a lista"
+    );
+
+    const valueLine = lines.find((line) => line.includes("TOKEN-VALUE-XYZ"));
+    assert.ok(valueLine, "O valor do campo focado (visível) deve aparecer em alguma linha do quadro");
+    assert.ok(
+      !valueLine!.includes("╰"),
+      "A linha do valor não pode se fundir com a borda inferior da caixa (caixa não pode ser espremida)"
+    );
+    const valueLineIndex = lines.indexOf(valueLine!);
+    assert.ok(
+      lines[valueLineIndex - 1]?.includes("╭") || lines[valueLineIndex - 1]?.includes("╮"),
+      "A caixa do campo focado deve ter uma borda superior própria, numa linha separada do valor"
+    );
+    assert.ok(
+      lines[valueLineIndex + 1]?.includes("╰") || lines[valueLineIndex + 1]?.includes("╯"),
+      "A caixa do campo focado deve ter uma borda inferior própria, numa linha separada do valor"
     );
 
     await tty.press(KEYS.escape);

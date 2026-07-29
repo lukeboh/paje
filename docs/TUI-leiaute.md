@@ -74,6 +74,15 @@ Padronizar a experiência de navegação e mensagens da TUI em um layout de 4 pa
   (`flexDirection="row"`, ~62%/36% de largura). Abaixo desse limiar, ele empilha após a
   lista de campos (`flexDirection="column"`, 100% de largura) para não espremer as caixas
   de entrada — a descrição continua visível em ambos os casos.
+- A área de trabalho tem altura fixa (definida pelo `Layout`/`Workspace`, não pelo
+  dimensionamento natural do Yoga); uma lista de campos mais alta que essa área seria
+  espremida pelo Ink, fundindo o valor com a borda inferior da caixa. Por isso `promptForm`
+  lê a altura real via `useLayoutMetrics()` (a mesma métrica usada pela árvore de
+  repositórios e pelos modais com rolagem) e, quando os campos não cabem inteiros, exibe
+  apenas uma janela deles — sempre mantendo o campo com foco visível — com um indicador
+  `▲ N campo(s) acima` / `▼ N campo(s) abaixo` quando há mais campos fora da janela. Cada
+  caixa visível sempre mantém suas 3 linhas completas (rótulo, borda superior, valor,
+  borda inferior); nenhuma caixa é espremida.
 
 ## Observações de implementação
 
