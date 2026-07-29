@@ -11,10 +11,22 @@ const LEVEL_ORDER: Record<LogLevel, number> = {
   error: 40,
 };
 
+// A burst of rapid entries (e.g. raw git progress lines during a clone,
+// arriving every few ms) used to trigger one full-frame Ink re-render per
+// line — each one erases and rewrites the whole screen, and at that
+// frequency only the log panel's content actually changes between erases,
+// which reads as that region flickering. Throttling to one notify per
+// window (leading edge immediate, trailing edge coalescing anything that
+// arrived during the window) keeps updates responsive without redrawing
+// faster than a human can read them.
+const NOTIFY_THROTTLE_MS = 80;
+
 class LogStore {
   private entries: LogEntry[] = [];
   private listeners = new Set<LogListener>();
   private minLevel: LogLevel = "warn";
+  private throttleTimer: ReturnType<typeof setTimeout> | null = null;
+  private notifyPending = false;
 
   append(message: string, level: LogLevel = "info"): void {
     this.appendEntry(createLogEntry(message, level));
@@ -25,17 +37,17 @@ class LogStore {
       return;
     }
     this.entries = [...this.entries, entry];
-    this.notify();
+    this.scheduleNotify();
   }
 
   replace(entries: LogEntry[]): void {
     this.entries = [...entries];
-    this.notify();
+    this.scheduleNotify();
   }
 
   clear(): void {
     this.entries = [];
-    this.notify();
+    this.scheduleNotify();
   }
 
   setMinLevel(level: LogLevel): void {
@@ -58,6 +70,33 @@ class LogStore {
   private notify(): void {
     const snapshot = this.entries;
     this.listeners.forEach((listener) => listener(snapshot));
+  }
+
+  private scheduleNotify(): void {
+    if (this.throttleTimer) {
+      this.notifyPending = true;
+      return;
+    }
+    this.notify();
+    this.armThrottleWindow();
+  }
+
+  // Keeps re-arming its own window for as long as activity keeps arriving —
+  // a plain "leading notify + one trailing catch-up" would go back to
+  // "ready" the instant the trailing notify fires, so a steady stream of
+  // entries spaced close to the window length (e.g. git progress lines
+  // every ~40ms against an 80ms window) would slip through at nearly full
+  // rate instead of being capped to one notify per window.
+  private armThrottleWindow(): void {
+    this.throttleTimer = setTimeout(() => {
+      if (this.notifyPending) {
+        this.notifyPending = false;
+        this.notify();
+        this.armThrottleWindow();
+        return;
+      }
+      this.throttleTimer = null;
+    }, NOTIFY_THROTTLE_MS);
   }
 }
 

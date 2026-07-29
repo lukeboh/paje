@@ -49,6 +49,7 @@ Padronizar a experiência de navegação e mensagens da TUI em um layout de 4 pa
 - O log deve manter auto-scroll, exibindo sempre as últimas linhas.
 - Ao sincronizar repositórios, o log deve registrar o início e o fim de cada repositório sincronizado.
 - Nível padrão do painel: `info`; com `--verbose`, `debug`.
+- **As notificações do log são agrupadas em janelas de ~80ms** ([`logStore.ts`](../src/modules/git/tui/logStore.ts:1)): uma rajada de entradas muito rápidas (ex.: saída crua de progresso do git durante um clone) forçava um redesenho de tela inteira por linha — como só o conteúdo do log muda entre um redesenho e outro nessa frequência, aquela região era percebida piscando. Nenhuma entrada é perdida (o snapshot sempre reflete tudo que já foi anexado); apenas a frequência de re-render é limitada. Uma entrada isolada após um período ocioso ainda notifica imediatamente. Coberto por `log_store_throttle_test`.
 
 ## Editor de parâmetros (`EditParamsModal`)
 
