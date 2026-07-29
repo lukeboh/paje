@@ -1,4 +1,14 @@
-# Parâmetros do PAJÉ (git-sync e git-server-store)
+// Conteúdo do modelo de configuração (`env-template.yaml`, raiz do
+// repositório) embutido como constante. Necessário porque o núcleo do
+// PAJÉ roda em contextos onde o caminho do arquivo na raiz do repositório
+// não é resolvível de forma confiável (bundle da extensão VSCode via
+// esbuild, execução via `tsx` fora do diretório do projeto) — embutir o
+// texto garante que a criação do env.yaml na primeira execução funcione
+// em qualquer camada de apresentação (CLI, TUI, extensão VSCode).
+//
+// Mantido em sincronia com `env-template.yaml` por teste automatizado
+// (tests/env_yaml_write_test.ts) que compara os dois byte a byte.
+export const ENV_TEMPLATE_CONTENT = `# Parâmetros do PAJÉ (git-sync e git-server-store)
 # CLI sempre tem prioridade. Quando ausente, usa este arquivo.
 # Se continuar ausente e obrigatório, o PAJÉ perguntará interativamente.
 #
@@ -67,3 +77,4 @@ token-name: ""
 token-scopes: ["read_repository", "read_api", "read_virtual_registry", "self_rotate"]
 # Data de expiração do token (YYYY-MM-DD) (opcional)
 token-expires-at: ""
+`;

@@ -275,6 +275,13 @@ As redeclarações locais de `formatTransferDetail`, `parseMiB`, `formatObjects`
 
 ---
 
+### ~~DC-05~~ — `resolveEnvFileFromCli` duplicado em `gitCommand.ts` com caminho padrão fixado em constante de módulo
+**Severidade: MÉDIO** | **Status: RESOLVIDO**
+
+`gitCommand.ts` mantinha sua própria cópia local (não exportada) de `resolveEnvFileFromCli`, usada nos 4 pontos de resolução do arquivo de ambiente para `git-sync` e `git-server-store`, em vez de importar a versão já existente em `core/envResolver.ts`. Pior: o caminho padrão (`~/.paje/env.yaml`) era calculado uma única vez em `const defaultEnvPath = path.join(os.homedir(), ".paje", "env.yaml")` no carregamento do módulo — se `os.homedir()`/`HOME` mudasse depois (processos de teste de longa duração que reutilizam o mesmo módulo Node, ou uma falha anterior que deixasse `HOME` não restaurado), essa constante ficava presa ao valor antigo, podendo escrever `env.yaml`/`git-servers.json` fora do `~/.paje` esperado. Encontrado ao implementar a criação automática do `env.yaml` na primeira execução (ver `docs/arquitetura.md`), quando o mesmo padrão de constante-travada já havia sido corrigido em `sshManager.ts`. Removida a cópia local; `gitCommand.ts` agora importa `resolveEnvFileFromCli` de `core/envResolver.ts`, que recomputa `os.homedir()` a cada chamada.
+
+---
+
 ## 6. PROBLEMAS DE UX / FLUXO
 
 ### ~~UX-01~~ — Orientação exibe "C para filtrar"; atalho real é `Ctrl+M`
@@ -402,7 +409,7 @@ Entradas mais largas que o terminal quebravam em múltiplas linhas físicas, emp
 
 ### Itens resolvidos desde a auditoria inicial
 
-BUG-02, BUG-03, BUG-04, BUG-05, BUG-06, BUG-08, BUG-09, BUG-10, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, INC-08, INC-09, DC-01, DC-02, DC-03, DC-04, I18N-02, I18N-03, I18N-04, REQ-04, REQ-05, REQ-06, UX-01, UX-02, UX-05, UX-06, UX-07, UX-08, UX-09, UX-10, UX-11, UX-12, UX-13, UX-14, UX-15, UX-16, UX-17, REQ-01/UX-03 (42 itens)
+BUG-02, BUG-03, BUG-04, BUG-05, BUG-06, BUG-08, BUG-09, BUG-10, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, INC-08, INC-09, DC-01, DC-02, DC-03, DC-04, DC-05, I18N-02, I18N-03, I18N-04, REQ-04, REQ-05, REQ-06, UX-01, UX-02, UX-05, UX-06, UX-07, UX-08, UX-09, UX-10, UX-11, UX-12, UX-13, UX-14, UX-15, UX-16, UX-17, REQ-01/UX-03 (43 itens)
 
 ---
 

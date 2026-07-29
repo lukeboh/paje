@@ -11,6 +11,7 @@ import { resolveGitSyncConfig } from "./core/gitSyncConfig.js";
 import { buildParameter, type CommandParameters, type ParameterSource } from "./core/parameters.js";
 import {
   resolveEnvBooleanWithSource,
+  resolveEnvFileFromCli,
   resolveEnvNumberWithSource,
   resolveEnvStringArrayWithSource,
   resolveEnvStringWithSource,
@@ -772,15 +773,6 @@ const resolveEnvPaths = (envFile?: string): string[] | undefined => {
     return undefined;
   }
   return [envFile];
-};
-
-const defaultEnvPath = path.join(os.homedir(), ".paje", "env.yaml");
-
-const resolveEnvFileFromCli = (envFile?: string): string | undefined => {
-  if (envFile && envFile.trim()) {
-    return envFile;
-  }
-  return defaultEnvPath;
 };
 
 export const resolveEnvValue = <T extends EnvConfigValue>(

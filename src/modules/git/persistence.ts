@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import type { GitTreeCacheEntry } from "./types.js";
+import { ENV_TEMPLATE_CONTENT } from "./envTemplate.js";
 
 export type PajePaths = {
   baseDir: string;
@@ -96,17 +97,36 @@ const serializeYamlValue = (value: string): string => {
 export const resolveDefaultEnvYamlPath = (): string =>
   path.join(os.homedir(), ".paje", "env.yaml");
 
+// Creates ~/.paje/env.yaml (or the given path) from the commented template
+// when it doesn't exist yet. Called on every startup for the default path
+// (see loadEnvConfig in sshManager.ts) so the very first run leaves the user
+// with a fully documented file instead of nothing. Returns true if the file
+// was created, false if it already existed.
+export const ensureEnvYamlExists = (filePath?: string): boolean => {
+  const resolvedPath = filePath ?? resolveDefaultEnvYamlPath();
+  if (fs.existsSync(resolvedPath)) {
+    return false;
+  }
+  fs.mkdirSync(path.dirname(resolvedPath), { recursive: true });
+  fs.writeFileSync(resolvedPath, ENV_TEMPLATE_CONTENT);
+  return true;
+};
+
 export const writeEnvYamlUpdates = (
   updates: Record<string, string>,
   filePath?: string
 ): void => {
   const resolvedPath = filePath ?? resolveDefaultEnvYamlPath();
 
+  // Seed from the commented template rather than an empty file: if the
+  // target doesn't exist yet (e.g. deleted after startup, or a fresh custom
+  // --env-file), the first save through the TUI editor (Ctrl+E) must not
+  // produce a file stripped of every comment.
   let lines: string[] = [];
   try {
     lines = fs.readFileSync(resolvedPath, "utf-8").split(/\r?\n/);
   } catch {
-    // file does not exist yet; we'll create it
+    lines = ENV_TEMPLATE_CONTENT.split(/\r?\n/);
   }
 
   const remaining = new Set(Object.keys(updates));

@@ -5,6 +5,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import * as cheerio from "cheerio";
 import { CookieJar } from "tough-cookie";
+import { ensureEnvYamlExists, resolveDefaultEnvYamlPath } from "./persistence.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -340,8 +341,12 @@ export const registerKeyInGitLab = async (
   await api.createSshKey(title, publicKey);
 };
 
-const DEFAULT_ENV_PATHS = [
-  path.join(os.homedir(), ".paje", "env.yaml"),
+// Computed per call (not a frozen module-load constant): os.homedir() must
+// reflect the current HOME at the time of the call, not whatever it was when
+// this module first loaded — otherwise HOME changes within the same process
+// (tests, or any long-lived host like the VSCode extension) would be ignored.
+const resolveDefaultEnvPaths = (): string[] => [
+  resolveDefaultEnvYamlPath(),
   "env-test.yaml",
   "env.test",
   ".env.test",
@@ -536,7 +541,7 @@ export const loadGitCredentials = (options: {
     }
   }
 
-  const envPaths = options.envFilePaths ?? DEFAULT_ENV_PATHS;
+  const envPaths = options.envFilePaths ?? resolveDefaultEnvPaths();
   for (const envPath of envPaths) {
     const contents = readFileIfExists(envPath);
     if (!contents) {
@@ -556,16 +561,20 @@ export const loadGitCredentials = (options: {
 };
 
 export const loadEnvConfig = (options: { envFile?: string } = {}): EnvConfig => {
-  const envFile = options.envFile;
-  if (envFile) {
-    const contents = readFileIfExists(envFile);
-    if (!contents) {
-      return {};
-    }
-    return parseYamlContent(contents);
+  const defaultPath = resolveDefaultEnvYamlPath();
+  const targetPath = options.envFile ?? defaultPath;
+
+  if (targetPath === defaultPath) {
+    // First run: materialize ~/.paje/env.yaml from the commented template
+    // instead of leaving the user with nothing. Scoped to the default path —
+    // every presentation layer (CLI, TUI, VSCode extension) resolves to this
+    // exact path unless --env-file overrides it, so this single call site
+    // covers all of them. An explicit --env-file pointing elsewhere is left
+    // untouched (missing custom paths still resolve to {}, as tests expect).
+    ensureEnvYamlExists(targetPath);
   }
-  const defaultPath = DEFAULT_ENV_PATHS[0];
-  const contents = readFileIfExists(defaultPath);
+
+  const contents = readFileIfExists(targetPath);
   if (!contents) {
     return {};
   }

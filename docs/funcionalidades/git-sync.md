@@ -43,6 +43,10 @@ A TUI é iniciada ao executar `paje` sem parâmetros e selecionar **Sincronizar 
 
 > Em TUI, alguns parâmetros podem ser solicitados via prompts quando ausentes.
 > O editor `Ctrl+E` permite alterar os parâmetros do `env.yaml` sem sair da TUI.
+> Se `~/.paje/env.yaml` ainda não existir, ele é criado automaticamente na
+> primeira execução a partir de [`env-template.yaml`](../../env-template.yaml),
+> com todos os parâmetros comentados. Comentários nunca são suprimidos em
+> atualizações posteriores. Detalhes em [`docs/arquitetura.md`](../arquitetura.md).
 
 ## Fluxo principal
 

@@ -197,30 +197,35 @@ Veja tabela completa em [`docs/arquitetura.md`](docs/arquitetura.md) — seçõe
 
 O PAJÉ lê parâmetros de `~/.paje/env.yaml` por padrão, ou do caminho informado em `--env-file`.
 
+**Criação automática na primeira execução**: se `~/.paje/env.yaml` não existir, o PAJÉ o cria automaticamente a partir de [`env-template.yaml`](env-template.yaml) (raiz do repositório) — com todos os parâmetros disponíveis, valores padrão e comentários explicativos. Isso acontece na primeira vez que qualquer comando é executado (`paje`, `paje git-sync` ou `paje git-server-store`), não apenas no menu. Execuções seguintes nunca sobrescrevem o arquivo.
+
+**Comentários nunca são suprimidos ao atualizar**: tanto a criação inicial quanto qualquer atualização subsequente — pelo editor da TUI (`Ctrl+E`) ou por outros fluxos que gravam no arquivo — preservam os comentários e a ordem das linhas existentes. Uma chave alterada é atualizada *in-place*; uma chave nova é anexada ao final. Se o arquivo alvo não existir no momento da gravação (por exemplo, foi apagado manualmente), a gravação parte do template completo em vez de um arquivo em branco.
+
+> Esta criação automática só ocorre para o caminho padrão (`~/.paje/env.yaml`). Um `--env-file <caminho>` explícito apontando para um arquivo inexistente não é criado automaticamente — comportamento inalterado, útil para testes e configurações avançadas.
+
 ```yaml
-# ~/.paje/env.yaml — exemplo completo
-baseDir: ~/repos
-serverName: GitLab
-baseUrl: https://gitlab.com
-useBasicAuth: false
-username: meu.usuario
-userEmail: nome@empresa.com
-keyLabel: paje
-passphrase: ""
-publicKeyPath: ""
-noPublicRepos: false
-noArchivedRepos: false
-filter: ""
-syncRepos: "grupo/projeto#main;grupo/outro"
-parallels: "auto"
-dryRun: false
-tokenName: paje-token
-tokenScopes: [read_repository, read_api, read_virtual_registry, self_rotate]
-tokenExpiresAt: "2027-01-01"
+# ~/.paje/env.yaml — trecho do template gerado automaticamente
+# (veja env-template.yaml na raiz para o arquivo completo, com comentários)
+locale: ""
+username: ""
+user-email: ""
+password: ""
+server-name: ""
+base-url: ""
+base-dir: "repos"
+use-basic-auth: false
 verbose: false
+key-label: "paje"
+filter: ""
+sync-repos: "grupo/projeto#main;grupo/outro"
+parallels: "auto"
+dry-run: false
+token-name: "paje-token"
+token-scopes: ["read_repository", "read_api", "read_virtual_registry", "self_rotate"]
+token-expires-at: "2027-01-01"
 ```
 
-> Senhas e tokens não devem ser versionados. Use arquivos locais com permissões restritas (`chmod 600`).
+> Senhas não devem ser versionadas. Tokens de acesso pessoal (GitLab/GitHub) não ficam neste arquivo — são armazenados em `~/.paje/git-servers.json` após o registro do servidor. Use permissões restritas (`chmod 600`) para ambos os arquivos.
 
 ---
 

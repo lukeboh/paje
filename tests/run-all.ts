@@ -29,6 +29,7 @@ const testFiles = [
   "./git_sync_summary_test.js",
   "./git_ant_glob_filter_test.js",
   "./env_yaml_write_test.js",
+  "./env_yaml_first_run_test.js",
   "./logger_panel_color_test.js",
   "./tui_edit_params_modal_test.js",
   "./git_sync_cache_refresh_test.js",

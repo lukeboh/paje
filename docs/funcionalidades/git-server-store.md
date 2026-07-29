@@ -89,6 +89,7 @@ O tipo é resolvido nesta ordem:
 - Senhas/tokens não devem ser versionados.
 - Use `env.yaml` local com permissões restritas.
 - O token é o único segredo persistido, sempre em `~/.paje/git-servers.json`; o cache da árvore nunca contém tokens.
+- `~/.paje/env.yaml` é criado automaticamente na primeira execução de qualquer comando, a partir de [`env-template.yaml`](../../env-template.yaml). Comentários nunca são suprimidos em atualizações.
 
 ## Erros conhecidos
 

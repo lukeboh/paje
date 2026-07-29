@@ -113,6 +113,7 @@ src/
       parallelSync.ts          # Infraestrutura — execução paralela de git
       gitRepoScanner.ts        # Infraestrutura — leitura de estado local
       persistence.ts           # Infraestrutura — persistência em ~/.paje (servidores, cache, env.yaml)
+      envTemplate.ts           # Infraestrutura — modelo comentado do env.yaml, espelha env-template.yaml
       sshManager.ts            # Infraestrutura — SSH e autenticação
       treeBuilder.ts           # Infraestrutura — construção de árvore de grupos/projetos
       patternFilter.ts         # Infraestrutura — filtros Ant/Glob
@@ -151,6 +152,56 @@ npm test        # nenhum teste existente pode quebrar
 - Parâmetros de sessão podem vir de `~/.paje/env.yaml` ou de `--env-file <caminho>`.
 - O editor da TUI (`Ctrl+E`) grava alterações no `env.yaml` via `writeEnvYamlUpdates()` (`persistence.ts`), preservando comentários e convertendo chaves para kebab-case.
 - Nenhum dado sensível é persistido no repositório.
+
+### Criação automática do `env.yaml` na primeira execução
+
+`loadEnvConfig()` (`sshManager.ts`) é o único ponto de leitura do arquivo de
+ambiente e é chamado por toda camada de apresentação (CLI, TUI, extensão
+VSCode) — tanto para resolver `GitSyncConfig` (`git-sync`) quanto para exibir
+os parâmetros carregados de `git-server-store`. Ao ser chamado com o caminho
+padrão (`~/.paje/env.yaml` — sem `--env-file` explícito), ele garante a
+existência do arquivo antes de ler:
+
+```typescript
+export const loadEnvConfig = (options: { envFile?: string } = {}): EnvConfig => {
+  const defaultPath = resolveDefaultEnvYamlPath();   // computado a cada chamada
+  const targetPath = options.envFile ?? defaultPath;
+
+  if (targetPath === defaultPath) {
+    ensureEnvYamlExists(targetPath);   // cria a partir do template, se ausente
+  }
+  // ... lê e faz parse de targetPath
+};
+```
+
+- `ensureEnvYamlExists()` (`persistence.ts`) só escreve se o arquivo **não existir**
+  — idempotente; nunca sobrescreve edições do usuário em chamadas subsequentes.
+- O conteúdo escrito é `ENV_TEMPLATE_CONTENT` (`envTemplate.ts`), uma constante
+  TypeScript com o texto **idêntico** a [`env-template.yaml`](../env-template.yaml)
+  (raiz do repositório) — comentários incluídos. O template é embutido como
+  string (não lido do disco em runtime) porque o núcleo roda em contextos onde
+  o caminho da raiz do repositório não é resolvível de forma confiável (bundle
+  da extensão VSCode via esbuild, `tsx` executado fora do diretório do
+  projeto). Um teste (`env_yaml_write_test.ts`) garante que os dois arquivos
+  nunca divirjam.
+- **Escopo restrito ao caminho padrão**: um `--env-file <caminho>` explícito
+  apontando para um arquivo inexistente **não** aciona a criação automática —
+  preserva o comportamento anterior (retorna config vazia), usado por testes e
+  configurações avançadas que dependem de um arquivo ausente/mínimo.
+- `resolveDefaultEnvYamlPath()` (e o array de fallback de `loadGitCredentials`)
+  são computados **a cada chamada** via `os.homedir()`, não em uma constante
+  fixada no carregamento do módulo — necessário para que a detecção de
+  primeira execução funcione corretamente independente de quando o módulo foi
+  importado pela primeira vez no processo. `gitCommand.ts` importa
+  `resolveEnvFileFromCli` de `core/envResolver.ts` pelo mesmo motivo — uma
+  cópia local com o caminho padrão fixado em constante de módulo já existiu
+  ali e foi removida (violava a regra de não duplicar funções do core, além de
+  poder resolver para um `HOME` desatualizado).
+- `writeEnvYamlUpdates()` (usado pelo editor `Ctrl+E`) segue a mesma regra na
+  direção inversa: se o arquivo alvo de uma atualização não existir no momento
+  da gravação, a gravação parte do template completo em vez de um arquivo em
+  branco — nenhuma atualização, mesmo a primeira, pode produzir um arquivo sem
+  comentários.
 
 ---
 

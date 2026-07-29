@@ -16,9 +16,13 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-# Logs específicos do PAJÉ que combinamos de salvar em ~/.paje, 
-# mas caso algum escape para a pasta do projeto:
-.paje/logs/
+
+# --- Dados de runtime do PAJÉ ---
+# Tudo isto deve viver em ~/.paje (fora do repositório); ignorado aqui caso
+# algum comando seja rodado com HOME apontando para a pasta do projeto
+# (por engano) e acabe escrevendo env.yaml, git-servers.json, cache ou logs
+# dentro dela.
+.paje/
 
 # --- Configurações Locais e Segredos ---
 .env
