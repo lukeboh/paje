@@ -14,6 +14,7 @@ const testFiles = [
   "./logger_broker_test.js",
   "./ssh_key_store_command_test.js",
   "./git_server_store_manage_test.js",
+  "./git_server_store_edit_test.js",
   "./ssh_key_overwrite_test.js",
   "./logger_transports_test.js",
   "./log_store_level_test.js",

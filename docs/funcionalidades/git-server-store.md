@@ -17,7 +17,30 @@ paje git-server-store [opções]
 
 ### TUI
 
-Pode ser iniciado pelo menu TUI ao executar `paje` sem parâmetros.
+Pode ser iniciado pelo menu TUI ao executar `paje` sem parâmetros. Abre a tela
+**Gerenciar Servidores Git**: uma lista com a opção "Registrar novo servidor"
+seguida de todos os servidores já salvos (nome, URL e um resumo — tipo,
+modo de autenticação, se há token salvo).
+
+- **Registrar novo**: abre o formulário combinado (URL, nome, usuário, senha,
+  nome do token) em uma única tela, com os campos em branco/genéricos.
+- **Selecionar um servidor existente**: mostra os detalhes salvos (inclusive
+  propriedades que não aparecem no formulário — `userEmail`, `baseDir`,
+  `filter`, validade do token) e, em seguida, abre o **mesmo formulário**,
+  agora **pré-preenchido** com os valores atuais desse servidor. O usuário
+  pode visualizar, alterar qualquer campo e confirmar para persistir.
+  - A gravação atualiza a entrada existente — nunca cria uma duplicata,
+    mesmo que a URL base seja alterada durante a edição (a entrada antiga é
+    removida quando a URL muda).
+  - Propriedades que o formulário não expõe (`userEmail`, `baseDir`,
+    `filter`, `syncRepos`, `noPublicRepos`, `noArchivedRepos`,
+    `tokenScopes`, `tokenExpiresAt`) são preservadas do servidor existente —
+    editar um servidor nunca apaga essas propriedades já salvas.
+  - O restante do fluxo (validação/rotação de token, geração de chave SSH
+    quando aplicável) é o mesmo da seção *Fluxo principal* abaixo — editar
+    é, tecnicamente, um novo registro para a mesma URL, cujo resultado é
+    mesclado sobre a entrada já salva.
+  - Depois de salvar, a lista é reexibida com os dados atualizados.
 
 ## Detecção do tipo de servidor
 

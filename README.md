@@ -91,9 +91,11 @@ Carrega a árvore de grupos/projetos de todos os servidores configurados (GitLab
 
 ---
 
-### `git-server-store` — registrar servidor, SSH e token
+### `git-server-store` — registrar e editar servidores
 
 Registra um servidor GitLab ou GitHub. Para GitLab: gera ou reutiliza chave SSH, configura `~/.ssh/config` e cria/rotaciona PAT. Para GitHub: valida um Personal Access Token e o persiste.
+
+Na TUI, a tela **Gerenciar Servidores Git** lista os servidores já salvos além da opção de registrar um novo. Selecionar um servidor existente abre o **mesmo formulário de cadastro, já preenchido** com os dados atuais — permitindo visualizar, alterar e salvar sem duplicar a entrada nem apagar propriedades que o formulário não exibe (`userEmail`, `baseDir`, `filter` etc.).
 
 **Parâmetros principais:**
 

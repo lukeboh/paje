@@ -2438,7 +2438,17 @@ const buildServerDetails = (server: GitServerEntry): string => {
   return lines.join("\n");
 };
 
-const registerNewGitServer = async (session: TuiSession, options: SshKeyStoreCliOptions): Promise<void> => {
+// Shared by both entry points: registering a brand new server (existingServer
+// undefined — every field starts blank/generic) and editing one already saved
+// (existingServer set — the form opens pre-filled, and properties the form
+// doesn't cover — userEmail, baseDir, filter, syncRepos, etc. — are carried
+// over from it instead of being wiped out by the current invocation's,
+// usually empty, CLI options).
+const promptAndPersistGitServer = async (
+  session: TuiSession,
+  options: SshKeyStoreCliOptions,
+  existingServer?: GitServerEntry
+): Promise<void> => {
   const hasCliArg = (flag: string): boolean => {
     const dashed = `--${flag}`;
     return process.argv.some((arg) => arg === dashed || arg.startsWith(`${dashed}=`));
@@ -2448,18 +2458,30 @@ const registerNewGitServer = async (session: TuiSession, options: SshKeyStoreCli
     : (await session.promptConfirm({
         title: t("cli.prompt.gitServer.title"),
         message: t("cli.prompt.server.confirmBasicAuth"),
-        defaultValue: false,
-      })) ?? false;
+        defaultValue: existingServer?.useBasicAuth ?? false,
+      })) ?? (existingServer?.useBasicAuth ?? false);
 
   const formResult = await promptGitServerForm(session, {
-    baseUrl: options.baseUrl?.trim() || "https://gitlab.com",
-    serverName: options.serverName?.trim() || "GitLab",
-    username: options.username?.trim() || "",
+    baseUrl: existingServer?.baseUrl || options.baseUrl?.trim() || "https://gitlab.com",
+    serverName: existingServer?.name || options.serverName?.trim() || "GitLab",
+    username: existingServer?.username || options.username?.trim() || "",
     password: "",
-    tokenName: options.tokenName?.trim() || "paje",
+    tokenName: existingServer?.tokenName || options.tokenName?.trim() || "paje",
   });
   if (!formResult) {
     return;
+  }
+
+  // The baseUrl is the server's identity key (mergeServer matches on it). If
+  // it was changed during editing, drop the old entry first so the save
+  // below doesn't leave a stale duplicate behind under the old URL.
+  if (existingServer) {
+    const oldNormalized = normalizeBaseUrl(existingServer.baseUrl);
+    const newNormalized = normalizeBaseUrl(formResult.baseUrl);
+    if (oldNormalized !== newNormalized) {
+      const currentServers = readGitServers<GitServerEntry[]>([]);
+      writeGitServers(currentServers.filter((item) => normalizeBaseUrl(item.baseUrl) !== oldNormalized));
+    }
   }
 
   const resolvedType = detectServerType(formResult.baseUrl);
@@ -2470,15 +2492,15 @@ const registerNewGitServer = async (session: TuiSession, options: SshKeyStoreCli
     type: resolvedType,
     useBasicAuth,
     username: formResult.username,
-    userEmail: options.userEmail,
-    baseDir: options.baseDir,
-    noPublicRepos: options.noPublicRepos,
-    noArchivedRepos: options.noArchivedRepos,
-    filter: options.filter,
-    syncRepos: options.syncRepos,
+    userEmail: options.userEmail ?? existingServer?.userEmail,
+    baseDir: options.baseDir ?? existingServer?.baseDir,
+    noPublicRepos: options.noPublicRepos ?? existingServer?.noPublicRepos,
+    noArchivedRepos: options.noArchivedRepos ?? existingServer?.noArchivedRepos,
+    filter: options.filter ?? existingServer?.filter,
+    syncRepos: options.syncRepos ?? existingServer?.syncRepos,
     tokenName: formResult.tokenName,
-    tokenScopes: options.tokenScopes,
-    tokenExpiresAt: options.tokenExpiresAt,
+    tokenScopes: options.tokenScopes ?? existingServer?.tokenScopes,
+    tokenExpiresAt: options.tokenExpiresAt ?? existingServer?.tokenExpiresAt,
   };
   const cliOverrides: SshKeyStoreCliOptions = {
     ...options,
@@ -2495,6 +2517,18 @@ const registerNewGitServer = async (session: TuiSession, options: SshKeyStoreCli
   } else {
     await storeSshKeyOnly(server, session, cliOverrides);
   }
+};
+
+const registerNewGitServer = (session: TuiSession, options: SshKeyStoreCliOptions): Promise<void> =>
+  promptAndPersistGitServer(session, options);
+
+const editGitServer = async (
+  session: TuiSession,
+  options: SshKeyStoreCliOptions,
+  server: GitServerEntry
+): Promise<void> => {
+  await session.showMessage({ title: server.name || server.baseUrl, message: buildServerDetails(server) });
+  await promptAndPersistGitServer(session, options, server);
 };
 
 const manageGitServersInteractively = async (session: TuiSession, options: SshKeyStoreCliOptions): Promise<void> => {
@@ -2528,7 +2562,7 @@ const manageGitServersInteractively = async (session: TuiSession, options: SshKe
     }
     const server = servers.find((item) => item.id === selection);
     if (server) {
-      await session.showMessage({ title: server.name || server.baseUrl, message: buildServerDetails(server) });
+      await editGitServer(session, options, server);
     }
   }
 };
