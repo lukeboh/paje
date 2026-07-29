@@ -17,7 +17,11 @@ export const ENV_TEMPLATE_CONTENT = `# Parâmetros do PAJÉ (git-sync e git-serv
 # (Ctrl+E) ou por comandos preservam os comentários e a ordem existentes.
 #
 # Tokens de acesso pessoal (GitLab/GitHub) NÃO ficam neste arquivo — são
-# armazenados em ~/.paje/git-servers.json após o registro do servidor.
+# armazenados em ~/.paje/git-servers.json após o registro do servidor. A
+# senha do GitLab/GitHub também NÃO pode ser configurada aqui — ela só é
+# pedida interativamente, uma única vez, para gerar um token ou chave SSH
+# novos, e nunca é persistida em lugar nenhum (use --password para informá-la
+# de forma não interativa, sem gravá-la em arquivo).
 
 # --- Parâmetros comuns ---
 # Idioma da interface (opcional; pt_BR ou en_US; default: pt_BR)
@@ -26,8 +30,6 @@ locale: ""
 username: ""
 # Email do Git para configurar nos repositórios clonados (opcional; usado no git-sync)
 user-email: ""
-# Senha do GitLab para autenticação básica (obrigatório para git-server-store; opcional para git-sync)
-password: ""
 # Nome amigável do servidor (opcional; default: GitLab)
 server-name: ""
 # URL base do servidor GitLab ou GitHub (opcional; default: https://gitlab.com)

@@ -223,6 +223,7 @@ const enUS: PtBrTranslations = {
       tokenRotateSuccess: "Token rotated successfully for {{baseUrl}}.",
       tokenRotateFail: "Failed to rotate token: {{message}}",
       tokenNameMissing: "Token name not provided.",
+      credentialsMissing: "Username/password not provided — registration cancelled (the password is never read from a file, only from the prompt or --password).",
       skipRemoteToken: "Skipping remote token creation/validation (PAJE_SKIP_SSH_STORE=1).",
       skipRemoteStore: "Skipping remote SSH key registration (PAJE_SKIP_SSH_STORE=1).",
       notInformed: "not informed",

@@ -221,6 +221,7 @@ const ptBR = {
       tokenRotateSuccess: "Token rotacionado com sucesso para {{baseUrl}}.",
       tokenRotateFail: "Falha ao rotacionar token: {{message}}",
       tokenNameMissing: "Nome do token não informado.",
+      credentialsMissing: "Usuário/senha não informados — cadastro cancelado (a senha nunca é lida de arquivo, só do prompt ou de --password).",
       skipRemoteToken: "Pulo de criação/validação de token remoto (PAJE_SKIP_SSH_STORE=1).",
       skipRemoteStore: "Pulo de registro remoto de chave SSH (PAJE_SKIP_SSH_STORE=1).",
       notInformed: "não informado",

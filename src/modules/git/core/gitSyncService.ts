@@ -48,10 +48,8 @@ export type GitServerEntry = {
   name: string;
   baseUrl: string;
   type?: "gitlab" | "github";
-  useBasicAuth?: boolean;
   username?: string;
   userEmail?: string;
-  password?: string;
   token?: string;
   baseDir?: string;
   noPublicRepos?: boolean;
@@ -126,10 +124,7 @@ export const computeConfigHash = (servers: GitServerEntry[]): string => {
     .join(";");
 };
 
-const buildServerPrefix = (server: GitServerEntry): string => {
-  const suffix = server.useBasicAuth ? " (basic)" : "";
-  return `${server.name}${suffix}`;
-};
+const buildServerPrefix = (server: GitServerEntry): string => server.name;
 
 const mergeServerList = (servers: GitServerEntry[]): GitServerEntry[] => {
   return servers.map((server) => ({
@@ -549,7 +544,6 @@ export const createGitSyncCore = (): GitSyncCore => {
           id: config.baseUrl,
           name: config.serverName,
           baseUrl: config.baseUrl,
-          useBasicAuth: config.useBasicAuth ?? false,
           username: config.username,
         };
         const merge = mergeServer(servers, server);
@@ -751,24 +745,9 @@ export const createGitSyncCore = (): GitSyncCore => {
 
           const serverHost = new URL(server.baseUrl).hostname;
           const hasSshAssociation = hasValidSshAssociation(serverHost);
-          let basicAuth: { username: string; password: string } | undefined;
-
-          if (server.useBasicAuth && !hasSshAssociation) {
-            const username = server.username?.trim();
-            const resolvedUsername = username && username.length > 0 ? username : "";
-            if (!resolvedUsername) {
-              logger.warn(t("cli.sync.usernameMissingBasicAuth", { server: server.name }));
-              return null;
-            }
-            const password = onBasicAuthRequired
-              ? await onBasicAuthRequired(server.name, resolvedUsername) ?? config.password
-              : config.password;
-            basicAuth = { username: resolvedUsername, password };
-          }
 
           const api = new GitLabApi({
             baseUrl: server.baseUrl,
-            basicAuth,
             token: server.token,
             verbose: config.verbose ?? false,
             logger: (message) => logger.debug(message),

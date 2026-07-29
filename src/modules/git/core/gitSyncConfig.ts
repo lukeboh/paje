@@ -88,6 +88,12 @@ export const resolveGitSyncConfig = (
     const resolvedCli = hasCliArg(flag) ? cliValue : undefined;
     return resolveEnvStringArrayWithSource(resolvedCli, envConfig, key);
   };
+  // Password is never read from env.yaml — only ever a one-off CLI flag or an
+  // interactive prompt, so it can never end up persisted in a file.
+  const resolveCliOnlyString = (cliValue: string | undefined, flag: string): EnvResolution => {
+    const resolvedCli = hasCliArg(flag) ? cliValue?.trim() : undefined;
+    return resolvedCli ? { value: resolvedCli, source: "cli" } : { value: undefined, source: "default" };
+  };
 
   const cliNoSummary = resolveCliBoolean("no-summary");
   const cliPrepareLocalDirs = resolveCliBoolean("prepare-local-dirs");
@@ -106,7 +112,7 @@ export const resolveGitSyncConfig = (
   const useBasicAuthResolution = resolveEnvOrCliBoolean(cliOptions.useBasicAuth, "useBasicAuth", "use-basic-auth", undefined, false);
   const usernameResolution = resolveEnvOrCliString(cliOptions.username, "username", "username");
   const userEmailResolution = resolveEnvOrCliString(cliOptions.userEmail, "userEmail", "user-email");
-  const passwordResolution = resolveEnvOrCliString(cliOptions.password, "password", "password");
+  const passwordResolution = resolveCliOnlyString(cliOptions.password, "password");
   const keyLabelResolution = resolveEnvOrCliString(cliOptions.keyLabel, "keyLabel", "key-label");
   const passphraseResolution = resolveEnvOrCliString(cliOptions.passphrase, "passphrase", "passphrase");
   const publicKeyPathResolution = resolveEnvOrCliString(cliOptions.publicKeyPath, "publicKeyPath", "public-key-path");

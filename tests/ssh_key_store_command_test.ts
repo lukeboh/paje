@@ -26,8 +26,10 @@ const privateKeyPath = path.join(sshDir, "paje");
 fs.writeFileSync(publicKeyPath, "ssh-ed25519 AAA", "utf-8");
 fs.writeFileSync(privateKeyPath, "PRIVATE", "utf-8");
 
+// password never lives in env.yaml — it's only ever a CLI flag or an
+// interactive prompt, so this file intentionally has no password key.
 const envFilePath = path.join(tempHome, "env-test.yaml");
-fs.writeFileSync(envFilePath, "username: usuario\npassword: segredo\ntokenName: paje-token\n", "utf-8");
+fs.writeFileSync(envFilePath, "username: usuario\ntokenName: paje-token\n", "utf-8");
 
 const pajeDir = path.join(tempHome, ".paje");
 fs.mkdirSync(pajeDir, { recursive: true });
@@ -159,11 +161,10 @@ globalThis.fetch = mockFetch as typeof fetch;
 
 const { configureSshKeyStoreCommand } = await import("../src/modules/git/gitCommand.js");
 
-const promptAnswers: Array<{ username?: string; password?: string }> = [
-  { username: "usuario" },
-  { password: "segredo" },
-];
-inquirer.prompt = (async () => promptAnswers.shift() ?? {}) as unknown as typeof inquirer.prompt;
+// username and password are both supplied via CLI flags below, so no
+// interactive prompt should be needed for either — this mock only guards
+// against an unexpected prompt call hanging the test.
+inquirer.prompt = (async () => ({})) as unknown as typeof inquirer.prompt;
 
 const program = new Command();
 configureSshKeyStoreCommand(program);
@@ -185,6 +186,8 @@ const parseArgs = [
   "--use-basic-auth",
   "--username",
   "usuario",
+  "--password",
+  "segredo",
   "--key-label",
   "paje",
   "--public-key-path",
