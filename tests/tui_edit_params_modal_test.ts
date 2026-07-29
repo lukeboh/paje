@@ -17,6 +17,11 @@ import { createFakeTTY, KEYS, stripAnsi, waitNextTick } from "./tui_test_utils.j
 //    edições pendentes silenciosamente).
 // 4. Ctrl+S grava as alterações no env.yaml preservando comentários.
 // 5. Ctrl+C encerra mesmo com modal aberto (bug pré-existente).
+// 6. Após salvar, o valor exibido é o recém-gravado — tanto imediatamente
+//    após o Ctrl+S quanto ao fechar e reabrir o editor na mesma sessão da
+//    TUI (o snapshot de `parameters` é estático; sem sobrepor o valor salvo,
+//    o editor voltava a mostrar o valor anterior mesmo com o arquivo já
+//    atualizado em disco).
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "paje-edit-params-"));
 const envFile = path.join(tmpDir, "env.yaml");
@@ -112,17 +117,30 @@ assert.ok(
   frameSaved.includes("Parâmetros salvos") || frameSaved.includes("Parameters saved"),
   "Ctrl+S deve salvar e exibir confirmação"
 );
+assert.ok(
+  frameSaved.includes("reposxyz"),
+  "Logo após salvar, o editor deve exibir o valor recém-gravado, não o anterior ao salvamento"
+);
+assert.ok(
+  !frameSaved.includes("pendente") && !frameSaved.includes("pending"),
+  "Após salvar, o item não deve mais aparecer marcado como pendente"
+);
 
 const savedContent = fs.readFileSync(envFile, "utf-8");
 assert.ok(savedContent.includes("# comentario preservado"), "Comentários do env.yaml devem ser preservados");
 assert.ok(savedContent.includes('base-dir: "reposxyz"'), "Valor editado deve ser gravado na chave kebab-case existente");
 assert.ok(savedContent.includes("verbose: false"), "Chaves não editadas devem permanecer intactas");
 
-// 1b. Esc fecha o modal (fora do modo edição) e Ctrl+E reabre
+// 1b. Esc fecha o modal (fora do modo edição) e Ctrl+E reabre — o valor
+// salvo deve continuar visível, não reverter ao que havia antes da edição
 await tty.press(KEYS.escape);
 assert.ok(!editorOpen(lastFrame()), "Esc fora do modo edição deve fechar o editor");
 await tty.press(KEYS.ctrlE);
 assert.ok(editorOpen(lastFrame()), "Ctrl+E deve reabrir o editor");
+assert.ok(
+  lastFrame().includes("reposxyz"),
+  "Ao reabrir o editor, o valor salvo deve continuar sendo exibido (não pode reverter para 'repos')"
+);
 
 // 5. Ctrl+C funciona com modal aberto
 await tty.press(KEYS.ctrlC);

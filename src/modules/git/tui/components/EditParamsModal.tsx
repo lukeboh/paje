@@ -11,6 +11,12 @@ export type EditParamsModalProps = {
   parameters: CommandParameters[];
   envFilePath?: string;
   onClose?: () => void;
+  // Reports the keys just written to disk so the caller (Layout) can merge
+  // them into the `parameters` it passes back down. This modal unmounts
+  // every time it closes (Layout only renders it while the modal is open),
+  // so it cannot remember a save across an Esc/reopen by itself — the
+  // caller must be the one holding onto that.
+  onSaved?: (updates: Record<string, string>) => void;
 };
 
 type EditableItem = {
@@ -70,6 +76,7 @@ export const EditParamsModal: React.FC<EditParamsModalProps> = ({
   parameters,
   envFilePath,
   onClose,
+  onSaved,
 }) => {
   const backgroundColor = "#1E1E1E";
   const items = useMemo(() => buildEditableItems(parameters), [parameters]);
@@ -127,6 +134,7 @@ export const EditParamsModal: React.FC<EditParamsModalProps> = ({
         updates[k] = v;
       }
       writeEnvYamlUpdates(updates, envFilePath);
+      onSaved?.(updates);
       setPending(new Map());
       setSaveStatus("saved");
       setSaveMessage(
@@ -138,7 +146,7 @@ export const EditParamsModal: React.FC<EditParamsModalProps> = ({
         t("editParamsModal.saveError", { message: err instanceof Error ? err.message : String(err) })
       );
     }
-  }, [pending, envFilePath]);
+  }, [pending, envFilePath, onSaved]);
 
   const isEditing = editingIndex !== null;
   // header: title + hint + status (3) | footer: selected item description (1)
@@ -263,6 +271,10 @@ export const EditParamsModal: React.FC<EditParamsModalProps> = ({
           const isSelected = absIdx === selectedIndex;
           const isCurrentlyEditing = absIdx === editingIndex;
           const hasPending = pending.has(item.name);
+          // Once saved, the up-to-date value/source come straight from
+          // `item` — Layout merges saved overrides into the `parameters`
+          // prop it passes down (see onSaved above), so there is no separate
+          // "just saved" state to track here.
           const displayValue = hasPending ? pending.get(item.name)! : item.value;
           const badgeColor = sourceBadgeColor(item.source);
 

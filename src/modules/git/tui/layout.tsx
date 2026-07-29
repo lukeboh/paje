@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useLogEntries } from "./logStore.js";
 import { Box, Text, useApp, useInput, useStdout, type Key } from "ink";
 import type { CommandParameters } from "../core/parameters.js";
@@ -92,7 +92,30 @@ export const Layout: React.FC<LayoutProps> = ({
   const modalHeight = Math.max(10, Math.min(terminalHeight - 4, 30));
   const modalLeft = Math.max(0, Math.floor((terminalWidth - modalWidth) / 2));
   const modalTop = Math.max(0, Math.floor((terminalHeight - modalHeight) / 2));
-  const resolvedParameters = parameters ?? [];
+  // Values written to ~/.paje/env.yaml via the editor (Ctrl+E) this session.
+  // `parameters` is a one-time snapshot the caller took before the tree/menu
+  // screen mounted and is never re-fetched from disk; EditParamsModal itself
+  // unmounts every time the modal closes (see the conditional render below),
+  // so any state it kept locally about a just-saved value was lost the
+  // moment the user closed and reopened the editor. Holding the overrides
+  // here — in Layout, which stays mounted for the whole screen — is what
+  // makes a saved value keep showing instead of reverting to the stale
+  // snapshot.
+  const [envOverrides, setEnvOverrides] = useState<Map<string, string>>(new Map());
+  const resolvedParameters = useMemo(() => {
+    const base = parameters ?? [];
+    if (envOverrides.size === 0) {
+      return base;
+    }
+    return base.map((group) => ({
+      ...group,
+      parameters: group.parameters.map((param) =>
+        envOverrides.has(param.name)
+          ? { ...param, value: envOverrides.get(param.name)!, source: "env" as const }
+          : param
+      ),
+    }));
+  }, [parameters, envOverrides]);
   const modalBackgroundColor = "#2C2C2C";
   const modalBackgroundLines = useMemo(
     () => Array.from({ length: modalHeight }, () => " ".repeat(Math.max(1, modalWidth))),
@@ -318,6 +341,13 @@ export const Layout: React.FC<LayoutProps> = ({
                       parameters={resolvedParameters}
                       envFilePath={envFilePath}
                       onClose={() => modalState.closeModal()}
+                      onSaved={(updates) =>
+                        setEnvOverrides((prev) => {
+                          const next = new Map(prev);
+                          Object.entries(updates).forEach(([key, value]) => next.set(key, value));
+                          return next;
+                        })
+                      }
                     />
                   ) : (
                     <ParametersModal
