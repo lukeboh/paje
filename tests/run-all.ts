@@ -25,6 +25,7 @@ const testFiles = [
   "./tui_loading_screen_test.js",
   "./tui_stack_overflow_test.js",
   "./tui_menu_dashboard_test.js",
+  "./tui_render_menu_host_test.js",
   "./gitlab_web_key_test.js",
   "./git_sync_auth_guard_test.js",
   "./gitlab_personal_token_test.js",

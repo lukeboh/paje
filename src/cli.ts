@@ -2,6 +2,7 @@ import { Command } from "commander";
 import { buildInitialParameters, configureGitSyncCommand, configureSshKeyStoreCommand } from "./modules/git/gitCommand";
 import { renderMenu, type MenuItem } from "./modules/git/tui/menu.app";
 import { appendLogEntry, setLogLevel } from "./modules/git/tui/logStore.js";
+import { createScreenHost, type ScreenHost } from "./modules/git/tui/screenHost.js";
 import { createSessionForCommand } from "./cliSession";
 import { setLocale, t } from "./i18n/index.js";
 import { PajeLogger } from "./modules/git/logger";
@@ -42,9 +43,14 @@ const HELP_FLAGS = new Set(["--help", "-h", "--version", "-V"]);
 const hasCommandArg = (args: string[]): boolean =>
   args.some((arg) => HELP_FLAGS.has(arg) || !arg.startsWith("-"));
 
-const runMenu = async (locale?: string, suppressInitialEscapeMs?: number, appendLog?: (message: string) => void) => {
+const runMenu = async (
+  locale: string | undefined,
+  suppressInitialEscapeMs: number | undefined,
+  appendLog: ((message: string) => void) | undefined,
+  host: ScreenHost
+) => {
   const parameters = buildInitialParameters(locale);
-  const selection = await renderMenu(buildMenuItems(), parameters, { suppressInitialEscapeMs, appendLog });
+  const selection = await renderMenu(buildMenuItems(), parameters, { suppressInitialEscapeMs, appendLog }, host);
   return { selection };
 };
 
@@ -84,42 +90,50 @@ const main = async (): Promise<void> => {
           appendLogEntry(message, "debug");
         }
       : undefined;
-    while (true) {
-      debugLogger.info(
-        `[TUI][CLI] runMenu start suppressInitialEscapeMs=${suppressInitialEscapeMs} justReturnedFromCommand=${justReturnedFromCommand}`
-      );
-      try {
-        const { selection } = await runMenu(resolveLocaleArg(args), suppressInitialEscapeMs, appendMenuLog);
+    // Shared across the whole interactive loop — the menu and every command's
+    // screens mount through this single persistent Ink instance, so moving
+    // between them never disconnects one frame from the next.
+    const host = createScreenHost();
+    try {
+      while (true) {
         debugLogger.info(
-          `[TUI][CLI] runMenu result selection=${selection?.command ?? "null"} suppressInitialEscapeMs=${suppressInitialEscapeMs}`
+          `[TUI][CLI] runMenu start suppressInitialEscapeMs=${suppressInitialEscapeMs} justReturnedFromCommand=${justReturnedFromCommand}`
         );
-        if (!selection) {
-          if (justReturnedFromCommand) {
-            debugLogger.info("[TUI][CLI] selection null after command -> reloop");
-            justReturnedFromCommand = false;
-            suppressInitialEscapeMs = 0;
-            continue;
+        try {
+          const { selection } = await runMenu(resolveLocaleArg(args), suppressInitialEscapeMs, appendMenuLog, host);
+          debugLogger.info(
+            `[TUI][CLI] runMenu result selection=${selection?.command ?? "null"} suppressInitialEscapeMs=${suppressInitialEscapeMs}`
+          );
+          if (!selection) {
+            if (justReturnedFromCommand) {
+              debugLogger.info("[TUI][CLI] selection null after command -> reloop");
+              justReturnedFromCommand = false;
+              suppressInitialEscapeMs = 0;
+              continue;
+            }
+            debugLogger.info("[TUI][CLI] selection null -> exit");
+            return;
           }
-          debugLogger.info("[TUI][CLI] selection null -> exit");
-          return;
+          const program = new Command();
+          program
+            .name("paje")
+            .description(t("app.description"))
+            .version("0.1.0")
+            .option("--locale <locale>", t("cli.command.gitSync.options.locale"));
+          const session = createSessionForCommand(selection.command, host);
+          configureGitSyncCommand(program, session);
+          configureSshKeyStoreCommand(program, session);
+          await program.parseAsync(["node", "cli.ts", selection.command]);
+          justReturnedFromCommand = true;
+          suppressInitialEscapeMs = 300;
+          debugLogger.info("[TUI][CLI] command finished -> return to menu");
+        } catch (error) {
+          debugLogger.info(`[TUI][CLI] runMenu error=${String(error)}`);
+          throw error;
         }
-        const program = new Command();
-        program
-          .name("paje")
-          .description(t("app.description"))
-          .version("0.1.0")
-          .option("--locale <locale>", t("cli.command.gitSync.options.locale"));
-        const session = createSessionForCommand(selection.command);
-        configureGitSyncCommand(program, session);
-        configureSshKeyStoreCommand(program, session);
-        await program.parseAsync(["node", "cli.ts", selection.command]);
-        justReturnedFromCommand = true;
-        suppressInitialEscapeMs = 300;
-        debugLogger.info("[TUI][CLI] command finished -> return to menu");
-      } catch (error) {
-        debugLogger.info(`[TUI][CLI] runMenu error=${String(error)}`);
-        throw error;
       }
+    } finally {
+      host.destroy();
     }
   }
 

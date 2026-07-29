@@ -4,6 +4,7 @@ import type { CommandParameters } from "../core/parameters.js";
 import { Layout } from "./layout.js";
 import { useModalStateController } from "./layoutContext.js";
 import { appendLogEntry } from "./logStore.js";
+import type { ScreenHost } from "./screenHost.js";
 import { t } from "../../../i18n/index.js";
 import { PajeLogger } from "../logger.js";
 
@@ -58,12 +59,18 @@ export const MENU_ORIENTATION_MESSAGE = t("menu.orientation");
 export const renderMenu = async (
   items: MenuItem[],
   parameters: CommandParameters[] = [],
-  options?: { suppressInitialEscapeMs?: number; appendLog?: (message: string) => void }
+  options?: { suppressInitialEscapeMs?: number; appendLog?: (message: string) => void },
+  // Shared across the whole interactive CLI loop (see cli.ts) so the menu and
+  // every command's screens mount through the same persistent Ink instance —
+  // without it, falls back to its own standalone render()/unmount(), same as
+  // before.
+  host?: ScreenHost
 ): Promise<MenuItem | null> => {
   return new Promise((resolve) => {
     const resolveRef = { current: resolve };
     const resolvedRef = { current: false };
-    const unmountRef: { current?: () => void } = {};
+    const screenKeyRef: { current?: number } = {};
+    const standaloneUnmountRef: { current?: () => void } = {};
     const loggerRef: { current?: PajeLogger } = {};
     const instanceRef = { current: "menu-unknown" };
 
@@ -76,8 +83,12 @@ export const renderMenu = async (
       loggerRef.current?.info(
         `[TUI][MENU] finalize instance=${instanceRef.current} result=${command} resolved=${resolvedRef.current}`
       );
-      if (unmountRef.current) {
-        unmountRef.current();
+      if (host) {
+        if (screenKeyRef.current !== undefined) {
+          host.release(screenKeyRef.current);
+        }
+      } else {
+        standaloneUnmountRef.current?.();
       }
       resolveRef.current(result);
     };
@@ -288,7 +299,11 @@ export const renderMenu = async (
       );
     };
 
-    const { unmount } = render(<App />);
-    unmountRef.current = unmount;
+    if (host) {
+      screenKeyRef.current = host.mount(<App />);
+    } else {
+      const { unmount } = render(<App />);
+      standaloneUnmountRef.current = unmount;
+    }
   });
 };
