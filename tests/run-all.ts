@@ -35,6 +35,7 @@ const testFiles = [
   "./git_sync_missing_credentials_bootstrap_test.js",
   "./git_sync_token_rotate_healing_test.js",
   "./git_sync_token_invalid_bootstrap_test.js",
+  "./git_sync_github_token_expired_test.js",
   "./gitlab_personal_token_test.js",
   "./git_sync_tree_render_test.js",
   "./git_sync_summary_test.js",

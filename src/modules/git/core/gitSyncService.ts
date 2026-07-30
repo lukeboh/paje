@@ -769,7 +769,16 @@ export const createGitSyncCore = (): GitSyncCore => {
                 noArchivedRepos: server.noArchivedRepos,
               } as GitSyncConfig);
               return { server, groups, projects: serverFiltered };
-            } catch {
+            } catch (error) {
+              const status = (error as Error & { status?: number })?.status;
+              if (status === 401 || status === 403) {
+                // GitHub has no rotate-without-user-interaction endpoint and
+                // no password-bootstrap fallback (PATs/OAuth tokens aren't
+                // created that way there), so unlike GitLab this can't heal
+                // itself — the clearest thing to do is name the cause and
+                // point at the fix instead of silently skipping the server.
+                logger.warn(t("cli.sync.githubTokenExpired", { server: server.name }));
+              }
               return null;
             }
           }
