@@ -87,18 +87,29 @@ globalThis.fetch = mockFetch as typeof fetch;
 const { configureSshKeyStoreCommand } = await import("../src/modules/git/gitCommand.js");
 
 const promptListCalls: unknown[] = [];
+const serverListCalls: unknown[] = [];
 const promptFormCalls: unknown[] = [];
-let promptListCallCount = 0;
+let serverListVisits = 0;
 
 const sessionMock = {
   promptInput: async () => "",
   promptPassword: async () => "",
   promptList: async (opts: { choices: Array<{ value: unknown }> }) => {
     promptListCalls.push(opts);
-    promptListCallCount += 1;
+    const isAuthMethodChoice = opts.choices.some(
+      (choice) => choice.value === "ssh" || choice.value === "password" || choice.value === "paste"
+    );
+    if (isAuthMethodChoice) {
+      // "I don't have SSH, but I have a username and password" — bootstraps a
+      // token via the same basic-auth flow this test already exercises,
+      // avoiding the need for a real port-22 probe.
+      return "password";
+    }
+    serverListCalls.push(opts);
+    serverListVisits += 1;
     // First visit to the server list: pick "register new" (always the first choice).
     // Second visit (after registration completes and the flow loops back): exit.
-    if (promptListCallCount === 1) {
+    if (serverListVisits === 1) {
       return opts.choices[0]?.value ?? null;
     }
     return null;
@@ -113,7 +124,7 @@ const sessionMock = {
       tokenName: "paje-token",
     };
   },
-  promptConfirm: async () => true, // use basic auth (HTTPS token, avoids needing a real port-22 probe)
+  promptConfirm: async () => true,
   showInlineError: () => undefined,
   showMessage: async () => undefined,
   setParameters: () => undefined,
@@ -132,12 +143,17 @@ await program.parseAsync(parseArgs);
 process.argv = originalArgv;
 process.env.PAJE_SKIP_SSH_STORE = "1";
 
-assert.strictEqual(promptListCallCount, 2, "Deve mostrar a lista antes e depois do cadastro (fluxo de gerenciamento)");
+assert.strictEqual(serverListVisits, 2, "Deve mostrar a lista antes e depois do cadastro (fluxo de gerenciamento)");
+assert.strictEqual(
+  promptListCalls.length,
+  3,
+  "Lista de servidores (antes) + escolha do método de autenticação + lista de servidores (depois)"
+);
 assert.strictEqual(promptFormCalls.length, 1, "Deve coletar todos os campos em uma única tela de formulário");
 
-const firstListChoices = (promptListCalls[0] as { choices: Array<{ value: unknown; label: string }> }).choices;
+const firstListChoices = (serverListCalls[0] as { choices: Array<{ value: unknown; label: string }> }).choices;
 assert.strictEqual(firstListChoices.length, 1, "Lista inicial (sem servidores) deve ter apenas a opção de cadastro");
-const secondListChoices = (promptListCalls[1] as { choices: Array<{ value: unknown; label: string }> }).choices;
+const secondListChoices = (serverListCalls[1] as { choices: Array<{ value: unknown; label: string }> }).choices;
 assert.ok(
   secondListChoices.some((choice) => choice.label.includes("https://git.example.com")),
   "Após o cadastro, a lista deve refletir o novo servidor salvo"
@@ -154,6 +170,7 @@ const serverData = JSON.parse(fs.readFileSync(serversPath, "utf-8")) as Array<{
   token?: string;
   tokenName?: string;
   useBasicAuth?: boolean;
+  password?: string;
 }>;
 assert.strictEqual(serverData.length, 1, "git-servers.json deve conter o novo servidor cadastrado");
 const saved = serverData[0];
@@ -161,7 +178,8 @@ assert.strictEqual(saved.baseUrl, "https://git.example.com");
 assert.strictEqual(saved.name, "Example GitLab");
 assert.strictEqual(saved.token, "glpat-xyz", "O token recém-criado deve ser persistido");
 assert.strictEqual(saved.tokenName, "paje-token");
-assert.strictEqual(saved.useBasicAuth, true);
+assert.strictEqual(saved.useBasicAuth, undefined, "useBasicAuth nunca deve ser persistido em git-servers.json");
+assert.strictEqual(saved.password, undefined, "A senha nunca deve ser persistida em git-servers.json");
 
 globalThis.fetch = originalFetch as typeof fetch;
 process.env.HOME = originalHome;

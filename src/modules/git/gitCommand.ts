@@ -499,6 +499,7 @@ type SshKeyStoreCliOptions = {
   password?: string;
   token?: string;
   useBasicAuth?: boolean;
+  pasteToken?: boolean;
   keyLabel?: string;
   passphrase?: string;
   publicKeyPath?: string;
@@ -969,6 +970,66 @@ const storeSshKeyOnly = async (
     return resolveEnvNumber(resolvedCli, envConfig, key) ?? cliValue;
   };
 
+  // Pasting an existing token needs no username, no password, and no SSH
+  // setup at all — just the token value itself, validated and persisted.
+  if (cli?.pasteToken) {
+    if (process.env.PAJE_SKIP_SSH_STORE === "1") {
+      logger?.(t("cli.log.skipRemoteToken"));
+      return;
+    }
+    let pastedToken = cli?.token?.trim();
+    if (!pastedToken) {
+      if (session) {
+        const form = await session.promptForm<{ token: string }>({
+          title: t("cli.prompt.gitlab.title"),
+          fields: [
+            {
+              name: "token",
+              label: t("cli.prompt.gitlab.pasteTokenLabel"),
+              secret: true,
+              description: t("cli.prompt.gitlab.pasteTokenDesc"),
+            },
+          ],
+        });
+        pastedToken = form?.token?.trim();
+      } else {
+        const promptToken = (await inquirer.prompt([
+          { name: "token", message: t("cli.prompt.gitlab.pasteTokenLabel"), type: "password" },
+        ])) as { token?: string };
+        pastedToken = promptToken.token?.trim();
+      }
+    }
+    if (!pastedToken) {
+      logger?.(t("cli.prompt.gitlab.tokenMissing"));
+      return;
+    }
+
+    const normalizedBaseUrlPaste = normalizeBaseUrl(server.baseUrl);
+    try {
+      const tokenStatus = await validatePersonalAccessToken({
+        baseUrl: normalizedBaseUrlPaste,
+        token: pastedToken,
+        fetchImpl: globalThis.fetch,
+        logger,
+      });
+      if (!tokenStatus.valid) {
+        logger?.(t("cli.log.tokenInvalid"));
+        return;
+      }
+      logger?.(t("cli.log.tokenValid", { baseUrl: normalizedBaseUrlPaste }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t("cli.errors.unknown");
+      logger?.(t("cli.log.tokenValidateFail", { message }));
+      return;
+    }
+
+    const existingServersPaste = readGitServers<GitServerEntry[]>([]);
+    const serverWithPastedToken: GitServerEntry = { ...server, token: pastedToken };
+    const mergedPaste = mergeServer(existingServersPaste, serverWithPastedToken);
+    writeGitServers(mergedPaste.servers);
+    return;
+  }
+
   let resolvedUsername = resolveEnvOrCliString(cli?.username?.trim(), "username", "username");
   if (!resolvedUsername) {
     if (session) {
@@ -1200,6 +1261,7 @@ const storeSshKeyOnly = async (
     maxAttempts: resolveEnvOrCliNumber(cli?.maxAttempts, "maxAttempts", "max-attempts"),
     retryDelayMs: resolveEnvOrCliNumber(cli?.retryDelayMs, "retryDelayMs", "retry-delay-ms"),
   });
+  logger?.(t("cli.prompt.sshKey.dualCredentialInfo"));
 
   if (process.env.PAJE_SKIP_SSH_STORE === "1") {
     logger?.(t("cli.log.skipRemoteToken"));
@@ -2289,15 +2351,17 @@ type GitServerFormValues = {
   username: string;
   password: string;
   tokenName: string;
+  token: string;
 };
 
 const promptGitServerForm = async (
   session: TuiSession,
-  defaults: GitServerFormValues
+  defaults: GitServerFormValues,
+  authChoice: "ssh" | "password" | "paste"
 ): Promise<GitServerFormValues | null> => {
   let current = defaults;
   while (true) {
-    const form = await session.promptForm<GitServerFormValues>({
+    const form = await session.promptForm<Record<string, string>>({
       title: t("cli.prompt.gitServer.title"),
       fields: [
         {
@@ -2317,25 +2381,40 @@ const promptGitServerForm = async (
           defaultValue: current.username,
           description: t("cli.prompt.gitServer.fields.usernameDesc"),
         },
-        {
-          name: "password",
-          label: t("cli.prompt.gitServer.fields.password"),
-          defaultValue: current.password,
-          secret: true,
-          description: t("cli.prompt.gitServer.fields.passwordDesc"),
-        },
-        {
-          name: "tokenName",
-          label: t("cli.prompt.gitServer.fields.tokenName"),
-          defaultValue: current.tokenName,
-          description: t("cli.prompt.gitServer.fields.tokenNameDesc"),
-        },
+        // "paste an existing token" needs the token's value, not a password
+        // to bootstrap a new one, and there's no new token being created so
+        // there's no name to give it either.
+        ...(authChoice === "paste"
+          ? [
+              {
+                name: "token",
+                label: t("cli.prompt.gitlab.pasteTokenLabel"),
+                defaultValue: current.token,
+                secret: true,
+                description: t("cli.prompt.gitlab.pasteTokenDesc"),
+              },
+            ]
+          : [
+              {
+                name: "password",
+                label: t("cli.prompt.gitServer.fields.password"),
+                defaultValue: current.password,
+                secret: true,
+                description: t("cli.prompt.gitServer.fields.passwordDesc"),
+              },
+              {
+                name: "tokenName",
+                label: t("cli.prompt.gitServer.fields.tokenName"),
+                defaultValue: current.tokenName,
+                description: t("cli.prompt.gitServer.fields.tokenNameDesc"),
+              },
+            ]),
       ],
     });
     if (!form) {
       return null;
     }
-    current = { ...form, baseUrl: form.baseUrl || current.baseUrl };
+    current = { ...current, ...form, baseUrl: form.baseUrl || current.baseUrl };
 
     const normalizedBaseUrl = normalizeBaseUrl(current.baseUrl);
     if (!isValidHttpUrl(normalizedBaseUrl)) {
@@ -2348,7 +2427,15 @@ const promptGitServerForm = async (
 
     const resolvedServerName = form.serverName?.trim() || current.serverName || "GitLab";
     const resolvedType = detectServerType(normalizedBaseUrl);
-    if (resolvedType !== "github" && !form.tokenName?.trim()) {
+    if (authChoice === "paste") {
+      if (!form.token?.trim()) {
+        await session.showMessage({
+          title: t("cli.prompt.gitServer.title"),
+          message: t("cli.prompt.gitlab.tokenMissing"),
+        });
+        continue;
+      }
+    } else if (resolvedType !== "github" && !form.tokenName?.trim()) {
       await session.showMessage({
         title: t("cli.prompt.gitServer.title"),
         message: t("cli.log.tokenNameMissing"),
@@ -2360,8 +2447,9 @@ const promptGitServerForm = async (
       baseUrl: normalizedBaseUrl,
       serverName: resolvedServerName,
       username: form.username?.trim() ?? "",
-      password: form.password ?? "",
-      tokenName: form.tokenName?.trim() ?? "",
+      password: authChoice === "paste" ? "" : form.password ?? "",
+      tokenName: authChoice === "paste" ? "" : form.tokenName?.trim() ?? "",
+      token: authChoice === "paste" ? form.token?.trim() ?? "" : "",
     };
   }
 };
@@ -2426,21 +2514,60 @@ const promptAndPersistGitServer = async (
   const existingHasSshAssociation = existingServer
     ? hasValidSshAssociation(new URL(existingServer.baseUrl).hostname)
     : false;
-  const useBasicAuth = hasCliArg("use-basic-auth")
-    ? (options.useBasicAuth ?? false)
-    : (await session.promptConfirm({
+  // GitHub has no username/password bootstrap at all (storeGitHubServer
+  // always auto-detects or asks to paste a token) — only ask the 3-way
+  // question when the server might be GitLab. If the type can't be
+  // determined yet (brand-new registration, no baseUrl hint), ask anyway;
+  // the final resolvedType (once the form's baseUrl is known) still decides
+  // which store* function actually runs, same as before this change.
+  const knownType = existingServer?.type ?? (options.baseUrl?.trim() ? detectServerType(options.baseUrl) : undefined);
+  let authChoice: "ssh" | "password" | "paste" = "ssh";
+  if (knownType !== "github") {
+    if (hasCliArg("use-basic-auth")) {
+      authChoice = (options.useBasicAuth ?? false) ? "password" : "ssh";
+    } else if (hasCliArg("token")) {
+      authChoice = options.token?.trim() ? "paste" : "ssh";
+    } else {
+      const defaultAuthChoice = existingServer ? (existingHasSshAssociation ? "ssh" : "password") : "ssh";
+      const promptedChoice = await session.promptList<"ssh" | "password" | "paste">({
         title: t("cli.prompt.gitServer.title"),
-        message: t("cli.prompt.server.confirmBasicAuth"),
-        defaultValue: existingServer ? !existingHasSshAssociation : false,
-      })) ?? (existingServer ? !existingHasSshAssociation : false);
+        message: t("cli.prompt.gitServer.authMethodQuestion"),
+        choices: [
+          {
+            label: t("cli.prompt.gitServer.authMethodSsh"),
+            value: "ssh",
+            description: t("cli.prompt.gitServer.authMethodSshDesc"),
+          },
+          {
+            label: t("cli.prompt.gitServer.authMethodPassword"),
+            value: "password",
+            description: t("cli.prompt.gitServer.authMethodPasswordDesc"),
+          },
+          {
+            label: t("cli.prompt.gitServer.authMethodPaste"),
+            value: "paste",
+            description: t("cli.prompt.gitServer.authMethodPasteDesc"),
+          },
+        ],
+      });
+      authChoice = promptedChoice ?? defaultAuthChoice;
+    }
+  }
+  const useBasicAuth = authChoice === "password";
+  const pasteToken = authChoice === "paste";
 
-  const formResult = await promptGitServerForm(session, {
-    baseUrl: existingServer?.baseUrl || options.baseUrl?.trim() || "https://gitlab.com",
-    serverName: existingServer?.name || options.serverName?.trim() || "GitLab",
-    username: existingServer?.username || options.username?.trim() || "",
-    password: "",
-    tokenName: existingServer?.tokenName || options.tokenName?.trim() || "paje",
-  });
+  const formResult = await promptGitServerForm(
+    session,
+    {
+      baseUrl: existingServer?.baseUrl || options.baseUrl?.trim() || "https://gitlab.com",
+      serverName: existingServer?.name || options.serverName?.trim() || "GitLab",
+      username: existingServer?.username || options.username?.trim() || "",
+      password: "",
+      tokenName: existingServer?.tokenName || options.tokenName?.trim() || "paje",
+      token: options.token?.trim() ?? "",
+    },
+    authChoice
+  );
   if (!formResult) {
     return;
   }
@@ -2481,7 +2608,9 @@ const promptAndPersistGitServer = async (
     username: formResult.username,
     password: formResult.password,
     tokenName: formResult.tokenName,
+    token: pasteToken ? formResult.token : options.token,
     useBasicAuth,
+    pasteToken,
   };
 
   if (resolvedType === "github") {

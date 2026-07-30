@@ -318,6 +318,15 @@ const ptBR = {
           tokenName: "Nome do token pessoal",
           tokenNameDesc: "Nome do token criado no GitLab (ex.: paje). Ignorado para GitHub.",
         },
+        authMethodQuestion: "Como você quer autenticar neste servidor?",
+        authMethodSsh: "Tenho acesso SSH ao servidor (recomendado)",
+        authMethodSshDesc:
+          "Configura uma chave SSH para clones/pushes e também gera um token para consultar a API (listar grupos/projetos) — as duas credenciais são usadas juntas, cada uma para uma finalidade.",
+        authMethodPassword: "Não tenho SSH, mas tenho usuário e senha",
+        authMethodPasswordDesc:
+          "A senha é usada agora, uma única vez, para gerar um token de acesso pessoal — ela nunca é salva em lugar nenhum. Depois disso, só o token é usado.",
+        authMethodPaste: "Já tenho um token pessoal",
+        authMethodPasteDesc: "Cole um token de acesso pessoal já criado no GitLab/GitHub. Nenhuma senha é necessária.",
       },
       manageServers: {
         title: "Servidores Git",
@@ -366,6 +375,8 @@ const ptBR = {
         passphraseDesc: "Protege a chave privada com uma senha. Pode ficar em branco.",
         keyExists: "Já existe uma chave com o nome \"{{label}}\". Escolha outro nome.",
         noKeyInSsh: "Nenhuma chave SSH configurada em ~/.ssh. Configure uma chave para continuar.",
+        dualCredentialInfo:
+          "Chave SSH configurada para clones/pushes. Um token de acesso pessoal também foi configurado — ele é usado só para consultar a API do servidor (listar grupos/projetos); a chave SSH não serve para isso.",
       },
       trust: {
         title: "Confiança SSH",
@@ -386,6 +397,9 @@ const ptBR = {
         userMissingBasicAuth:
           "Usuário não informado para autenticação básica em {{server}}. Cadastre o servidor novamente informando o usuário.",
         noValidServer: "Nenhum servidor com autenticação válida encontrado.",
+        pasteTokenLabel: "Personal Access Token (PAT)",
+        pasteTokenDesc: "Cole um token já criado em Preferências > Access Tokens no GitLab. Nenhuma senha é necessária.",
+        tokenMissing: "Token não informado.",
       },
       verbose: {
         title: "SSH - Detalhes",

@@ -320,6 +320,15 @@ const enUS: PtBrTranslations = {
           tokenName: "Personal access token name",
           tokenNameDesc: "Name for the token created in GitLab (e.g. paje). Ignored for GitHub.",
         },
+        authMethodQuestion: "How do you want to authenticate to this server?",
+        authMethodSsh: "I have SSH access to the server (recommended)",
+        authMethodSshDesc:
+          "Sets up an SSH key for clones/pushes and also generates a token to query the API (list groups/projects) — both credentials are used together, each for its own purpose.",
+        authMethodPassword: "I don't have SSH, but I have a username and password",
+        authMethodPasswordDesc:
+          "The password is used now, once, to generate a personal access token — it is never saved anywhere. After that, only the token is used.",
+        authMethodPaste: "I already have a personal access token",
+        authMethodPasteDesc: "Paste a personal access token already created on GitLab/GitHub. No password is needed.",
       },
       manageServers: {
         title: "Git Servers",
@@ -368,6 +377,8 @@ const enUS: PtBrTranslations = {
         passphraseDesc: "Protects the private key with a password. It can be empty.",
         keyExists: "A key named \"{{label}}\" already exists. Choose another name.",
         noKeyInSsh: "No SSH key configured in ~/.ssh. Configure a key to continue.",
+        dualCredentialInfo:
+          "SSH key set up for clones/pushes. A personal access token was also configured — it's used only to query the server's API (list groups/projects); the SSH key doesn't cover that.",
       },
       trust: {
         title: "SSH Trust",
@@ -387,6 +398,9 @@ const enUS: PtBrTranslations = {
         noAuthConfigured: "No authentication configured for {{server}}. Configure a token or basic authentication to continue.",
         userMissingBasicAuth: "Basic auth username missing for {{server}}. Register the server again with a username.",
         noValidServer: "No server with valid authentication found.",
+        pasteTokenLabel: "Personal Access Token (PAT)",
+        pasteTokenDesc: "Paste a token already created under Preferences > Access Tokens in GitLab. No password is needed.",
+        tokenMissing: "Token not provided.",
       },
       verbose: {
         title: "SSH - Details",
