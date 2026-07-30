@@ -1745,6 +1745,20 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
       const storedServers = readGitServers<GitServerEntry[]>([]);
       let servers = mergeServerList(storedServers);
 
+      // Both quick-registration paths below used to persist a bare server
+      // (no token, no SSH association) and move straight on to syncing —
+      // the exact gap that let a server sit forever re-prompting for a
+      // password on every run instead of ever completing its setup. Both
+      // now run the same bootstrap the full "Manage Git Servers" flow uses
+      // right after saving, so a server always leaves here with real
+      // credentials (or the user explicitly cancelled/declined).
+      const bootstrapCliOptions: SshKeyStoreCliOptions = {
+        username: mergedOptions.username,
+        password: mergedOptions.password,
+        useBasicAuth: mergedOptions.useBasicAuth,
+        tokenName: "paje",
+      };
+
       if (mergedOptions.serverName && mergedOptions.baseUrl) {
         const server: GitServerEntry = {
           id: mergedOptions.baseUrl,
@@ -1755,6 +1769,16 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
         const merge = mergeServer(servers, server);
         writeGitServers(merge.servers);
         servers = mergeServerList(merge.servers);
+        const normalizedBaseUrl = normalizeBaseUrl(mergedOptions.baseUrl);
+        const savedEntry = servers.find((item) => normalizeBaseUrl(item.baseUrl) === normalizedBaseUrl);
+        if (savedEntry) {
+          await ensureServerHasCredentials(session, savedEntry, {
+            ...bootstrapCliOptions,
+            baseUrl: savedEntry.baseUrl,
+            serverName: savedEntry.name,
+          });
+          servers = mergeServerList(readGitServers<GitServerEntry[]>([]));
+        }
       }
 
       if (servers.length === 0) {
@@ -1766,6 +1790,15 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
         const merge = mergeServer([], server);
         writeGitServers(merge.servers);
         servers = mergeServerList(merge.servers);
+        const savedEntry = servers[0];
+        if (savedEntry) {
+          await ensureServerHasCredentials(session, savedEntry, {
+            ...bootstrapCliOptions,
+            baseUrl: savedEntry.baseUrl,
+            serverName: savedEntry.name,
+          });
+          servers = mergeServerList(readGitServers<GitServerEntry[]>([]));
+        }
       }
 
       if (mergedOptions.serverName && !mergedOptions.baseUrl) {
@@ -2617,6 +2650,32 @@ const promptAndPersistGitServer = async (
     await storeGitHubServer(server, session, cliOverrides);
   } else {
     await storeSshKeyOnly(server, session, cliOverrides);
+  }
+};
+
+// Every registration path (git-server-store, and the quick paths below that
+// git-sync falls into when it's handed a bare server with no credentials
+// yet) must end up with a token and/or an SSH association — never a
+// persisted server with neither. Reuses the exact same bootstrap the full
+// "Manage Git Servers" flow uses, whether that means the interactive 3-way
+// choice (session available) or the CLI-flag-driven path (scripted use).
+const ensureServerHasCredentials = async (
+  session: TuiSession | undefined,
+  server: GitServerEntry,
+  cliOptions: SshKeyStoreCliOptions
+): Promise<void> => {
+  const hasSshAssociation = hasValidSshAssociation(new URL(server.baseUrl).hostname);
+  if (server.token || hasSshAssociation) {
+    return;
+  }
+  if (session) {
+    await promptAndPersistGitServer(session, cliOptions, server);
+    return;
+  }
+  if (detectServerType(server.baseUrl) === "github") {
+    await storeGitHubServer(server, undefined, cliOptions);
+  } else {
+    await storeSshKeyOnly(server, undefined, cliOptions);
   }
 };
 

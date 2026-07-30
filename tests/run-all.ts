@@ -30,6 +30,7 @@ const testFiles = [
   "./tui_render_menu_host_test.js",
   "./gitlab_web_key_test.js",
   "./git_sync_auth_guard_test.js",
+  "./git_sync_quick_register_bootstrap_test.js",
   "./gitlab_personal_token_test.js",
   "./git_sync_tree_render_test.js",
   "./git_sync_summary_test.js",
