@@ -1873,8 +1873,40 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
       const { header, tree, statusMap, projects: filteredProjects } = await core.loadTree({
         config: mergedOptions,
         logger: logBroker,
-        onBasicAuthRequired: async (serverName, username) => {
-          return promptBasicAuthPassword(username, session, mergedOptions.password);
+        onMissingCredentials: async (server) => {
+          // Self-heals a server that has neither a token nor an SSH
+          // association yet (e.g. one saved through an older PAJÉ version,
+          // or one whose bootstrap was interrupted) — asks for the password
+          // exactly once, bootstraps a token, and persists it so this never
+          // has to happen again for this server.
+          const resolvedUsername = server.username?.trim();
+          if (!resolvedUsername) {
+            logToTui(t("cli.log.credentialsMissing"), "warn");
+            return null;
+          }
+          const password = await promptBasicAuthPassword(resolvedUsername, session, mergedOptions.password);
+          if (!password) {
+            logToTui(t("cli.log.credentialsMissing"), "warn");
+            return null;
+          }
+          try {
+            const tokenResult = await ensureGitLabPersonalAccessToken({
+              baseUrl: server.baseUrl,
+              name: server.tokenName?.trim() || "paje",
+              credentials: { username: resolvedUsername, password, source: "prompt" },
+              fetchImpl: globalThis.fetch,
+              logger: logToTuiPlain,
+            });
+            const existingServers = readGitServers<GitServerEntry[]>([]);
+            const merged = mergeServer(existingServers, { ...server, token: tokenResult.token });
+            writeGitServers(merged.servers);
+            logToTui(t("cli.log.tokenValid", { baseUrl: server.baseUrl }));
+            return { token: tokenResult.token };
+          } catch (error) {
+            const message = error instanceof Error ? error.message : t("cli.errors.unknown");
+            logToTui(t("cli.log.tokenValidateFail", { message }), "warn");
+            return null;
+          }
         },
         onRequestStart: (serverName, requestCount) => {
           const frame = spinnerFrames[spinnerFrameIndex % spinnerFrames.length];

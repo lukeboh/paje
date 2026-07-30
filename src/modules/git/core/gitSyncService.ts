@@ -72,7 +72,13 @@ export type GitSyncTreeView = {
 export type GitSyncLoadOptions = {
   config: GitSyncConfig;
   logger: LoggerBroker;
-  onBasicAuthRequired?: (serverName: string, username: string) => Promise<string | undefined>;
+  // Called when a server has neither a token nor an SSH association for its
+  // host — the presentation layer bootstraps one (prompting for a password
+  // once, generating/persisting a token) and hands the fresh token back so
+  // this run can keep going without restarting. Returning null means the
+  // caller declined or bootstrapping wasn't possible; that server is then
+  // skipped with the usual "no auth configured" warning.
+  onMissingCredentials?: (server: GitServerEntry) => Promise<{ token: string } | null>;
   onRequestStart?: (serverName: string, requestCount: number) => void;
   onStatusRefreshed?: (projectId: number, status: RepoSyncStatus) => void;
 };
@@ -145,7 +151,7 @@ const buildServersHeader = (servers: GitServerEntry[]): string => {
   return t("cli.sync.serverCount", { count: servers.length });
 };
 
-const mergeServer = (
+export const mergeServer = (
   servers: GitServerEntry[],
   server: GitServerEntry
 ): { servers: GitServerEntry[]; updated: boolean } => {
@@ -576,7 +582,7 @@ export const createGitSyncCore = (): GitSyncCore => {
 
       return servers;
     },
-    loadTree: async ({ config, logger, onBasicAuthRequired, onRequestStart, onStatusRefreshed }) => {
+    loadTree: async ({ config, logger, onMissingCredentials, onRequestStart, onStatusRefreshed }) => {
       const servers = await createGitSyncCore().listServers({ config, logger });
       if (servers.length === 0) {
         return { header: "GitLab", tree: [], statusMap: {}, projects: [] };
@@ -746,9 +752,17 @@ export const createGitSyncCore = (): GitSyncCore => {
           const serverHost = new URL(server.baseUrl).hostname;
           const hasSshAssociation = hasValidSshAssociation(serverHost);
 
+          let resolvedToken = server.token;
+          if (!resolvedToken && !hasSshAssociation && onMissingCredentials) {
+            const bootstrapped = await onMissingCredentials(server);
+            if (bootstrapped?.token) {
+              resolvedToken = bootstrapped.token;
+            }
+          }
+
           const api = new GitLabApi({
             baseUrl: server.baseUrl,
-            token: server.token,
+            token: resolvedToken,
             verbose: config.verbose ?? false,
             logger: (message) => logger.debug(message),
           });

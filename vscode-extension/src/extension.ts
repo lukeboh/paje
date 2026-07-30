@@ -3,6 +3,8 @@ import fs from "node:fs";
 import { setLocale, t } from "../../src/i18n/index.js";
 import {
   createGitSyncCore,
+  mergeServer,
+  type GitServerEntry,
   type GitSyncTreeView,
 } from "../../src/modules/git/core/gitSyncService.js";
 import { resolveGitSyncConfig } from "../../src/modules/git/core/gitSyncConfig.js";
@@ -10,6 +12,8 @@ import type { GitSyncConfig } from "../../src/modules/git/core/gitSyncConfig.js"
 import { LoggerBroker } from "../../src/modules/git/core/loggerBroker.js";
 import { createFileTransport, createPanelTransport } from "../../src/modules/git/core/loggerTransports.js";
 import { resolveEnvFileFromCli } from "../../src/modules/git/core/envResolver.js";
+import { ensureGitLabPersonalAccessToken } from "../../src/modules/git/sshManager.js";
+import { readGitServers, writeGitServers } from "../../src/modules/git/persistence.js";
 import {
   collectProjectNodesFromNode,
   recomputeTreeSelection,
@@ -55,13 +59,34 @@ export const activate = (context: vscode.ExtensionContext): void => {
       currentView = await core.loadTree({
         config,
         logger,
-        onBasicAuthRequired: async (serverName, username) => {
+        onMissingCredentials: async (server: GitServerEntry) => {
+          const resolvedUsername = server.username?.trim();
+          if (!resolvedUsername) {
+            return null;
+          }
           const password = await vscode.window.showInputBox({
-            prompt: t("vscodeExt.passwordPrompt", { server: serverName, username }),
+            prompt: t("vscodeExt.passwordPrompt", { server: server.name, username: resolvedUsername }),
             password: true,
             ignoreFocusOut: true,
           });
-          return password ?? "";
+          if (!password) {
+            return null;
+          }
+          try {
+            const tokenResult = await ensureGitLabPersonalAccessToken({
+              baseUrl: server.baseUrl,
+              name: server.tokenName?.trim() || "paje",
+              credentials: { username: resolvedUsername, password, source: "prompt" },
+              fetchImpl: globalThis.fetch,
+              logger: (message) => logger.info(message),
+            });
+            const existingServers = readGitServers<GitServerEntry[]>([]);
+            const merged = mergeServer(existingServers, { ...server, token: tokenResult.token });
+            writeGitServers(merged.servers);
+            return { token: tokenResult.token };
+          } catch {
+            return null;
+          }
         },
         onStatusRefreshed: (projectId, status) => provider.applyStatus(projectId, status),
       });
