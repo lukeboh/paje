@@ -60,13 +60,14 @@ export const activate = (context: vscode.ExtensionContext): void => {
       currentView = await core.loadTree({
         config,
         logger,
-        onMissingCredentials: async (server: GitServerEntry) => {
+        onMissingCredentials: async (server: GitServerEntry, reason: "missing" | "invalid") => {
           const resolvedUsername = server.username?.trim();
           if (!resolvedUsername) {
             return null;
           }
+          const promptKey = reason === "invalid" ? "vscodeExt.tokenExpiredPasswordPrompt" : "vscodeExt.passwordPrompt";
           const password = await vscode.window.showInputBox({
-            prompt: t("vscodeExt.passwordPrompt", { server: server.name, username: resolvedUsername }),
+            prompt: t(promptKey, { server: server.name, username: resolvedUsername }),
             password: true,
             ignoreFocusOut: true,
           });

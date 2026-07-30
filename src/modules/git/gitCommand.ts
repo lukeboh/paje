@@ -1865,16 +1865,20 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
       const { header, tree, statusMap, projects: filteredProjects } = await core.loadTree({
         config: mergedOptions,
         logger: logBroker,
-        onMissingCredentials: async (server) => {
-          // Self-heals a server that has neither a token nor an SSH
-          // association yet (e.g. one saved through an older PAJÉ version,
-          // or one whose bootstrap was interrupted) — asks for the password
-          // exactly once, bootstraps a token, and persists it so this never
-          // has to happen again for this server.
+        onMissingCredentials: async (server, reason) => {
+          // Self-heals a server with no working credential: either it never
+          // had a token at all (e.g. one saved through an older PAJÉ
+          // version, or one whose bootstrap was interrupted), or it had one
+          // that just got rejected (401/403) and rotating it silently
+          // didn't fix it. Either way, asks for the password exactly once,
+          // bootstraps a fresh token, and persists it.
           const resolvedUsername = server.username?.trim();
           if (!resolvedUsername) {
             logToTui(t("cli.log.credentialsMissing"), "warn");
             return null;
+          }
+          if (reason === "invalid") {
+            logToTui(t("cli.log.tokenExpiredPrompting", { server: server.name }), "warn");
           }
           const password = await promptBasicAuthPassword(resolvedUsername, session, mergedOptions.password);
           if (!password) {
