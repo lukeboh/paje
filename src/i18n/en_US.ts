@@ -323,6 +323,9 @@ const enUS: PtBrTranslations = {
           tokenNameDesc: "Name for the token created in GitLab (e.g. paje). Ignored for GitHub.",
         },
         authMethodQuestion: "How do you want to authenticate to this server?",
+        authMethodGithub: "I want to authenticate to github.com",
+        authMethodGithubDesc:
+          "Pre-fills the URL as https://github.com on the next screen and asks directly for a personal access token (github.com/settings/tokens). No password is needed.",
         authMethodSsh: "I have SSH access to the server (recommended)",
         authMethodSshDesc:
           "Sets up an SSH key for clones/pushes and also generates a token to query the API (list groups/projects) — both credentials are used together, each for its own purpose.",
