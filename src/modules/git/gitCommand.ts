@@ -2583,6 +2583,10 @@ const promptAndPersistGitServer = async (
   // which store* function actually runs, same as before this change.
   const knownType = existingServer?.type ?? (options.baseUrl?.trim() ? detectServerType(options.baseUrl) : undefined);
   let authChoice: "ssh" | "password" | "paste" = "ssh";
+  // Set only by the "authenticate to github.com" quick pick below — it's a
+  // shortcut for the same "paste" flow (github.com is detected from the
+  // baseUrl either way), it just saves typing the URL out.
+  let presetBaseUrl: string | undefined;
   if (knownType !== "github") {
     if (hasCliArg("use-basic-auth")) {
       authChoice = (options.useBasicAuth ?? false) ? "password" : "ssh";
@@ -2590,10 +2594,15 @@ const promptAndPersistGitServer = async (
       authChoice = options.token?.trim() ? "paste" : "ssh";
     } else {
       const defaultAuthChoice = existingServer ? (existingHasSshAssociation ? "ssh" : "password") : "ssh";
-      const promptedChoice = await session.promptList<"ssh" | "password" | "paste">({
+      const promptedChoice = await session.promptList<"github" | "ssh" | "password" | "paste">({
         title: t("cli.prompt.gitServer.title"),
         message: t("cli.prompt.gitServer.authMethodQuestion"),
         choices: [
+          {
+            label: t("cli.prompt.gitServer.authMethodGithub"),
+            value: "github",
+            description: t("cli.prompt.gitServer.authMethodGithubDesc"),
+          },
           {
             label: t("cli.prompt.gitServer.authMethodSsh"),
             value: "ssh",
@@ -2611,7 +2620,12 @@ const promptAndPersistGitServer = async (
           },
         ],
       });
-      authChoice = promptedChoice ?? defaultAuthChoice;
+      if (promptedChoice === "github") {
+        authChoice = "paste";
+        presetBaseUrl = "https://github.com";
+      } else {
+        authChoice = promptedChoice ?? defaultAuthChoice;
+      }
     }
   }
   const useBasicAuth = authChoice === "password";
@@ -2620,8 +2634,8 @@ const promptAndPersistGitServer = async (
   const formResult = await promptGitServerForm(
     session,
     {
-      baseUrl: existingServer?.baseUrl || options.baseUrl?.trim() || "https://gitlab.com",
-      serverName: existingServer?.name || options.serverName?.trim() || "GitLab",
+      baseUrl: existingServer?.baseUrl || presetBaseUrl || options.baseUrl?.trim() || "https://gitlab.com",
+      serverName: existingServer?.name || options.serverName?.trim() || (presetBaseUrl ? "GitHub" : "GitLab"),
       username: existingServer?.username || options.username?.trim() || "",
       password: "",
       tokenName: existingServer?.tokenName || options.tokenName?.trim() || "paje",

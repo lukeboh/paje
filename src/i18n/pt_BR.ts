@@ -321,6 +321,9 @@ const ptBR = {
           tokenNameDesc: "Nome do token criado no GitLab (ex.: paje). Ignorado para GitHub.",
         },
         authMethodQuestion: "Como você quer autenticar neste servidor?",
+        authMethodGithub: "Quero me autenticar ao github.com",
+        authMethodGithubDesc:
+          "Preenche a URL como https://github.com na tela seguinte e pede direto um token de acesso pessoal (github.com/settings/tokens). Nenhuma senha é necessária.",
         authMethodSsh: "Tenho acesso SSH ao servidor (recomendado)",
         authMethodSshDesc:
           "Configura uma chave SSH para clones/pushes e também gera um token para consultar a API (listar grupos/projetos) — as duas credenciais são usadas juntas, cada uma para uma finalidade.",

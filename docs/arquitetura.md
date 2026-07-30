@@ -333,8 +333,16 @@ credencial persistente.
 | GitLab, só token (sem chave SSH) | HTTPS + PAT | `pajeHttpUrl` com `oauth2:<token>@host` embutido |
 | GitHub (`type: "github"`) | HTTPS + PAT | `pajeHttpUrl` com `x-access-token:<token>@host` embutido |
 
-O cadastro (`git-server-store`, TUI) oferece 3 formas de obter esse token/chave,
-todas terminando no modelo acima:
+O cadastro (`git-server-store`, TUI) pergunta o método de autenticação antes
+de pedir a URL do servidor (para não obrigar a digitar a URL só para
+descobrir que a única opção válida para GitHub é colar um token), então a
+primeira opção da lista é um atalho dedicado ao GitHub; as outras 3 opções
+seguintes assumem GitLab e terminam todas no modelo acima:
+0. **Quero me autenticar ao github.com** — atalho: pré-preenche a URL como
+   `https://github.com` na tela seguinte e já pede direto o token (equivale a
+   escolher "Já tenho um token pessoal" com a URL resolvida automaticamente).
+   Não é uma 4ª forma de autenticação — só evita digitar a URL para chegar ao
+   mesmo fluxo que o GitHub já usa de qualquer forma.
 1. **Tenho acesso SSH (recomendado)** — o fluxo SSH tradicional; o PAJÉ verifica
    proativamente se a porta 22 está acessível antes de tentar o setup (se
    bloqueada, orienta a escolher uma das outras opções). Gera a chave **e** um
@@ -346,7 +354,10 @@ todas terminando no modelo acima:
 
 Para GitHub não há opção de senha (o GitHub não suporta esse fluxo): o registro
 sempre detecta um token existente ou pede para colar um, valida via `GET /user`
-e persiste o servidor com o login retornado.
+e persiste o servidor com o login retornado. Se a URL informada já for
+reconhecida como GitHub (`type` do servidor existente, ou uma URL passada via
+`--base-url`) a pergunta de método de autenticação nem aparece — vai direto
+para o fluxo de token.
 
 Um servidor já cadastrado sem token e sem chave SSH (ex.: de uma versão
 anterior do PAJÉ, ou um cadastro interrompido) não fica travado: na próxima
