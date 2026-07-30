@@ -331,18 +331,30 @@ credencial persistente.
 |---|---|---|
 | GitLab, com chave SSH associada ao host | SSH + token | URL `ssh_url_to_repo` via `~/.ssh/config` para clone/push; token para a API (listar grupos/projetos) — as duas credenciais são usadas juntas, cada uma para sua finalidade |
 | GitLab, só token (sem chave SSH) | HTTPS + PAT | `pajeHttpUrl` com `oauth2:<token>@host` embutido |
-| GitHub (`type: "github"`) | HTTPS + PAT | `pajeHttpUrl` com `x-access-token:<token>@host` embutido |
+| GitHub (`type: "github"`) | HTTPS + PAT ou OAuth (device flow) | `pajeHttpUrl` com `x-access-token:<token>@host` embutido — a origem do token (`tokenOrigin`) não muda como ele é usado depois |
 
 O cadastro (`git-server-store`, TUI) pergunta o método de autenticação antes
 de pedir a URL do servidor (para não obrigar a digitar a URL só para
 descobrir que a única opção válida para GitHub é colar um token), então a
 primeira opção da lista é um atalho dedicado ao GitHub; as outras 3 opções
 seguintes assumem GitLab e terminam todas no modelo acima:
-0. **Quero me autenticar ao github.com** — atalho: pré-preenche a URL como
-   `https://github.com` na tela seguinte e já pede direto o token (equivale a
-   escolher "Já tenho um token pessoal" com a URL resolvida automaticamente).
-   Não é uma 4ª forma de autenticação — só evita digitar a URL para chegar ao
-   mesmo fluxo que o GitHub já usa de qualquer forma.
+0. **Quero me autenticar ao github.com** — roda o **device flow OAuth** do
+   GitHub (`githubDeviceFlow.ts`, infraestrutura): pede um código de
+   dispositivo (`POST /login/device/code`), tenta abrir o navegador sozinho
+   nessa URL (`openInBrowser` — melhor esforço via `open`/`xdg-open`/`start`
+   conforme o SO; se falhar, o código e a URL de verificação continuam
+   visíveis para o usuário abrir manualmente), e faz polling em
+   `POST /login/oauth/access_token` até o usuário autorizar (respeitando
+   `authorization_pending`/`slow_down`) ou o código expirar/ser negado. O
+   token resultante é validado e persistido exatamente como um token colado
+   (`storeGitHubServer`), só que com `tokenOrigin: "oauth-device-flow"` em
+   vez de `"personal-access-token"` — não existe uma 4ª forma de guardar o
+   token, só uma 2ª forma de obtê-lo, sem digitar URL, usuário, senha nem
+   token nenhum. O Client ID usado (`GITHUB_OAUTH_CLIENT_ID`) é de um OAuth
+   App do próprio PAJÉ com "Device Flow" habilitado — não é segredo (Client
+   IDs de device flow são públicos por definição) e por isso fica embutido
+   no código, sem precisar de configuração por usuário. Restrito a
+   `github.com`; GitHub Enterprise Server continua exigindo colar um token.
 1. **Tenho acesso SSH (recomendado)** — o fluxo SSH tradicional; o PAJÉ verifica
    proativamente se a porta 22 está acessível antes de tentar o setup (se
    bloqueada, orienta a escolher uma das outras opções). Gera a chave **e** um
