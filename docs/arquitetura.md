@@ -147,7 +147,7 @@ npm test        # nenhum teste existente pode quebrar
 
 - Configurações e logs locais ficam em `~/.paje/`.
 - Servidores são gravados em `~/.paje/git-servers.json`.
-- Tokens são gravados em `~/.paje/git-servers.json` (somente token, nunca senha).
+- Tokens são gravados em `~/.paje/git-servers.json` (`GitServerEntry.token`) — **único segredo persistido**. Não há campo `password`/`useBasicAuth` no esquema: a senha é usada só em memória para gerar um token ou chave SSH novos (uma vez, no cadastro, ou automaticamente na próxima sincronização de um servidor sem credencial ainda — ver *Fluxo de autenticação por tipo de servidor*) e nunca é gravada em lugar nenhum, nem em `git-servers.json` nem em `env.yaml`.
 - A árvore de grupos/projetos é cacheada em `~/.paje/git-tree-cache.json` (ver seção *Cache da árvore*). Tokens **não** são gravados no cache — URLs autenticadas são reidratadas a partir da configuração atual do servidor.
 - Parâmetros de sessão podem vir de `~/.paje/env.yaml` ou de `--env-file <caminho>`.
 - O editor da TUI (`Ctrl+E`) grava alterações no `env.yaml` via `writeEnvYamlUpdates()` (`persistence.ts`), preservando comentários e convertendo chaves para kebab-case.
@@ -246,10 +246,10 @@ e exibida no modal de parâmetros carregados (`Ctrl+P` na TUI).
 | URL base do servidor | `--base-url` | `baseUrl` | `""` |
 | Tipo do servidor (`git-server-store`) | `--server-type` | — | auto-detectado pela URL |
 | PAT do GitHub (`git-server-store`) | `--token` | — | `""` |
-| Autenticação básica (HTTPS+PAT) | `--use-basic-auth` | `useBasicAuth` | `false` |
+| Bootstrap de token via senha, sem chave SSH (`git-server-store`) | `--use-basic-auth` | `useBasicAuth` | `false` |
 | Usuário GitLab | `--username` | `username` | `""` |
 | E-mail Git | `--user-email` | `userEmail` | `""` |
-| Senha / PAT | `--password` | `password` | `""` |
+| Senha (bootstrap único de token/chave SSH) | `--password` | — (nunca lida de `env.yaml`) | `""` |
 | Nome da chave SSH | `--key-label` | `keyLabel` | `""` |
 | Passphrase da chave SSH | `--passphrase` | `passphrase` | `""` |
 | Caminho da chave pública existente | `--public-key-path` | `publicKeyPath` | `""` |
@@ -277,8 +277,7 @@ com as seguintes propriedades:
 | `name` | `string` | Nome legível do servidor |
 | `type` | `"gitlab" \| "github"?` | Tipo do servidor; ausente = `gitlab`. Detectado pela URL no registro (`github.com` → `github`) ou forçado com `--server-type` |
 | `baseUrl` | `string` | URL base do servidor |
-| `useBasicAuth` | `boolean?` | Se `true`, usa HTTPS + token; se `false`/ausente, usa SSH |
-| `username` | `string?` | Usuário para autenticação básica |
+| `username` | `string?` | Usuário GitLab — usado só para reautenticar (bootstrap de token) quando necessário, nunca para autenticação corrente |
 | `token` | `string?` | PAT salvo — único segredo persistido em disco |
 | `userEmail` | `string?` | E-mail Git aplicado aos repos clonados deste servidor |
 | `baseDir` | `string?` | Diretório base de clone específico deste servidor |
@@ -322,16 +321,37 @@ antes da mesclagem de projetos de múltiplos servidores. O filtro global de `con
 
 ### Fluxo de autenticação por tipo de servidor
 
+Modelo *token-first*: todo servidor registrado termina com um token (único
+segredo persistido) e/ou uma chave SSH associada ao host em `~/.ssh/config` —
+nunca com uma senha, e nunca preso num estado intermediário sem nenhuma
+credencial persistente.
+
 | Servidor | Modo | Operações git usam |
 |---|---|---|
-| GitLab, `useBasicAuth: false` (padrão) | SSH | URL `ssh_url_to_repo` via `~/.ssh/config` |
-| GitLab, `useBasicAuth: true` | HTTPS + PAT | `pajeHttpUrl` com `oauth2:<token>@host` embutido |
+| GitLab, com chave SSH associada ao host | SSH + token | URL `ssh_url_to_repo` via `~/.ssh/config` para clone/push; token para a API (listar grupos/projetos) — as duas credenciais são usadas juntas, cada uma para sua finalidade |
+| GitLab, só token (sem chave SSH) | HTTPS + PAT | `pajeHttpUrl` com `oauth2:<token>@host` embutido |
 | GitHub (`type: "github"`) | HTTPS + PAT | `pajeHttpUrl` com `x-access-token:<token>@host` embutido |
 
-Ao executar `git-server-store` sem `--use-basic-auth` em servidor GitLab, o fluxo SSH
-é iniciado. O PAJÉ verifica proativamente se a porta 22 do servidor está acessível antes
-de tentar o setup. Se bloqueada, exibe orientação para geração de PAT e sugere
-reexecutar com `--use-basic-auth`.
+O cadastro (`git-server-store`, TUI) oferece 3 formas de obter esse token/chave,
+todas terminando no modelo acima:
+1. **Tenho acesso SSH (recomendado)** — o fluxo SSH tradicional; o PAJÉ verifica
+   proativamente se a porta 22 está acessível antes de tentar o setup (se
+   bloqueada, orienta a escolher uma das outras opções). Gera a chave **e** um
+   token — nunca só a chave.
+2. **Não tenho SSH, mas tenho usuário e senha** — a senha é usada uma única vez
+   para gerar um token via login web no GitLab; nunca é persistida.
+3. **Já tenho um token pessoal** — cola o token diretamente; validado antes de
+   ser persistido. Nenhuma senha é pedida.
+
+Para GitHub não há opção de senha (o GitHub não suporta esse fluxo): o registro
+sempre detecta um token existente ou pede para colar um, valida via `GET /user`
+e persiste o servidor com o login retornado.
+
+Um servidor já cadastrado sem token e sem chave SSH (ex.: de uma versão
+anterior do PAJÉ, ou um cadastro interrompido) não fica travado: na próxima
+`git-sync`, o bootstrap roda automaticamente — pede a senha uma única vez,
+gera e persiste o token, e a sincronização continua sem precisar reiniciar
+(`GitSyncLoadOptions.onMissingCredentials` em `core/gitSyncService.ts`).
 
 Para GitHub não há fluxo SSH: o registro valida o PAT via `GET /user` e persiste o
 servidor com o login retornado. Em `loadTree()`, o `GitHubApi` mapeia organizações

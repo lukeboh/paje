@@ -23,9 +23,9 @@ A TUI é iniciada ao executar `paje` sem parâmetros e selecionar **Sincronizar 
 | `--base-dir <dir>` | não | `repos` | CLI/env | Diretório base de clonagem |
 | `--server-name <name>` | não | — | CLI/env | Filtra servidores pelo nome |
 | `--base-url <url>` | não | — | CLI/env | Filtra servidores pela URL |
-| `--use-basic-auth` | não | `false` | CLI/env | Usa autenticação básica (GitLab) |
-| `--username <username>` | condicional | — | CLI/env | Usuário para auth básica |
-| `--password <password>` | condicional | — | prompt/env | Senha para auth básica |
+| `--use-basic-auth` | não | `false` | CLI/env | Ao cadastrar um servidor via `--server-name`/`--base-url`, bootstrap de token via usuário/senha em vez de chave SSH |
+| `--username <username>` | condicional | — | CLI/env | Usuário do GitLab, usado só para o bootstrap de token quando necessário |
+| `--password <password>` | condicional | — | CLI/prompt | Senha para o bootstrap único de token/chave SSH; **nunca** lida de `env.yaml` nem persistida |
 | `--user-email <email>` | não | — | CLI/env | Email Git local |
 | `--key-label <label>` | não | `paje` | CLI/env | Nome da chave SSH |
 | `--passphrase <passphrase>` | não | — | CLI/env | Passphrase da chave |
@@ -83,7 +83,8 @@ A TUI é iniciada ao executar `paje` sem parâmetros e selecionar **Sincronizar 
 - `--parallels` aceita `AUTO`, `0` ou número ≥ 1.
 - `--dry-run` evita alterações reais, apenas reporta ações.
 - Diretórios desmarcados na TUI são removidos; a confirmação é exibida apenas para estados `UNCOMMITTED`, `AHEAD` e `DIVERGED`.
-- Operações git usam SSH (GitLab padrão) ou HTTPS com token embutido (`oauth2:` para GitLab com `useBasicAuth`; `x-access-token:` para GitHub).
+- Operações git usam SSH (quando o servidor tem uma chave associada em `~/.ssh/config`) ou HTTPS com token embutido (`oauth2:` para GitLab; `x-access-token:` para GitHub).
+- Um servidor sem token e sem chave SSH (registro legado ou interrompido) faz o bootstrap automaticamente na sincronização: pede a senha uma única vez, gera e persiste o token, e a sincronização continua sem reiniciar. Se a senha não for informada, o servidor é pulado com o aviso de "sem autenticação configurada" de sempre.
 - O cache nunca armazena URLs com token (`pajeHttpUrl`); elas são reidratadas da configuração atual do servidor a cada carga.
 - Logs são centralizados no LoggerBroker (motor pino), com níveis configuráveis por transport (console/painel/arquivo).
 - O painel de logs da TUI deve espelhar o mesmo texto e ordem das mensagens da CLI, incluindo logs HTTP em modo `--verbose`.

@@ -4,8 +4,14 @@
 
 Registrar um servidor Git (GitLab ou GitHub) e suas credenciais.
 
-- **GitLab**: garante chave SSH válida e token pessoal — cria ou reutiliza chave, atualiza `~/.ssh/config`, registra no GitLab e persiste token em `~/.paje`. Alternativamente (`--use-basic-auth`), configura HTTPS + PAT sem SSH.
-- **GitHub**: valida um Personal Access Token via API e persiste o servidor com `type: "github"` (não há fluxo SSH).
+Modelo *token-first*: todo servidor termina com um token (único segredo
+persistido em `~/.paje/git-servers.json`) e/ou uma chave SSH associada ao
+host — nunca com uma senha, e nunca preso num estado sem credencial nenhuma.
+
+- **GitLab**: 3 formas de chegar lá (ver *Entradas → TUI* abaixo) — chave SSH
+  (que também sempre gera um token), bootstrap de token via usuário/senha (uso
+  único, senha nunca persistida), ou colar um token já existente.
+- **GitHub**: valida um Personal Access Token via API e persiste o servidor com `type: "github"` (não há fluxo SSH nem de senha — o GitHub não suporta gerar token por login).
 
 ## Entradas
 
@@ -22,8 +28,22 @@ Pode ser iniciado pelo menu TUI ao executar `paje` sem parâmetros. Abre a tela
 seguida de todos os servidores já salvos (nome, URL e um resumo — tipo,
 modo de autenticação, se há token salvo).
 
-- **Registrar novo**: abre o formulário combinado (URL, nome, usuário, senha,
-  nome do token) em uma única tela, com os campos em branco/genéricos.
+- **Registrar novo**: para GitLab, primeiro pergunta **como autenticar**
+  (lista de 3 opções, cada uma com uma descrição explicando o que vai
+  acontecer):
+  1. *Tenho acesso SSH ao servidor (recomendado)* — chave SSH **e** token
+     (as duas credenciais são usadas juntas: SSH para clone/push, token para
+     a API).
+  2. *Não tenho SSH, mas tenho usuário e senha* — a senha bootstrap um token
+     uma única vez e nunca é salva.
+  3. *Já tenho um token pessoal* — cola o token diretamente; nenhuma senha é
+     pedida.
+  Essa pergunta é pulada para servidores já identificados como GitHub (URL
+  `github.com` informada, ou servidor existente com `type: "github"`), já
+  que nenhuma das 3 opções se aplica — o fluxo do GitHub é sempre o mesmo.
+  Em seguida abre o formulário combinado numa única tela — URL, nome,
+  usuário e senha (opções 1/2) ou URL, nome, usuário e o token a colar
+  (opção 3) — com os campos em branco/genéricos.
 - **Selecionar um servidor existente**: mostra os detalhes salvos (inclusive
   propriedades que não aparecem no formulário — `userEmail`, `baseDir`,
   `filter`, validade do token) e, em seguida, abre o **mesmo formulário**,
@@ -57,9 +77,10 @@ O tipo é resolvido nesta ordem:
 | `--server-name <name>` | não | `GitLab` | CLI/env | Nome do servidor |
 | `--base-url <url>` | sim | — | CLI/env | URL base do servidor (GitLab ou GitHub) |
 | `--server-type <tipo>` | não | auto | CLI | `gitlab` ou `github` (detectado pela URL quando omitido) |
-| `--token <token>` | não (GitHub) | — | CLI/prompt | PAT do GitHub; sem ele, solicita interativamente ou reutiliza o salvo |
-| `--username <username>` | sim (GitLab) | — | CLI/env/prompt | Usuário do GitLab |
-| `--use-basic-auth` | não | `false` | CLI/env | HTTPS + PAT em vez de SSH (somente GitLab) |
+| `--token <token>` | não | — | CLI/prompt | PAT a colar (GitHub sempre; GitLab quando a opção "já tenho um token" é escolhida) |
+| `--username <username>` | sim (GitLab, exceto ao colar token) | — | CLI/env/prompt | Usuário do GitLab |
+| `--use-basic-auth` | não | `false` | CLI/env | Bootstrap de token via usuário/senha, sem chave SSH (somente GitLab) |
+| `--password <password>` | não | — | CLI/prompt | Senha para o bootstrap único de token/chave SSH; **nunca** lida de `env.yaml` nem persistida |
 | `--key-label <label>` | não | `paje` | CLI/env | Nome da chave SSH |
 | `--passphrase <passphrase>` | não | — | CLI/env/prompt | Passphrase da chave |
 | `--public-key-path <path>` | não | — | CLI/env | Chave pública existente |
@@ -75,20 +96,26 @@ O tipo é resolvido nesta ordem:
 | `--env-file <path>` | não | `~/.paje/env.yaml` | CLI | Arquivo de ambiente |
 | `-v, --verbose` | não | `false` | CLI/env | Logs detalhados |
 
-## Fluxo principal — GitLab (SSH, padrão)
+## Fluxo principal — GitLab, opção "Tenho acesso SSH" (padrão)
 
-1. Sonda TCP na porta 22 do servidor (timeout 3 s); se bloqueada, exibe guia de geração de PAT e orienta reexecutar com `--use-basic-auth`.
+1. Sonda TCP na porta 22 do servidor (timeout 3 s); se bloqueada, exibe guia de geração de PAT e orienta escolher uma das outras 2 opções (`--use-basic-auth` ou `--token`).
 2. Verifica chave SSH existente e permite reutilizar ou gerar uma nova (ed25519).
 3. Atualiza `~/.ssh/config` e `known_hosts`.
-4. Registra chave no GitLab (quando autenticado).
-5. Valida token existente; se inválido, tenta rotacionar e, se necessário, cria novo.
-6. Persiste dados em `~/.paje/git-servers.json`.
+4. Registra chave no GitLab (quando autenticado). Ao concluir, exibe uma mensagem explicando que a chave SSH e o token são duas credenciais distintas em uso: SSH para clone/push, token para a API.
+5. Valida token existente; se inválido, tenta rotacionar e, se necessário, cria novo — este passo é **sempre** executado, mesmo no caminho SSH: todo servidor termina com um token, não só uma chave.
+6. Persiste dados em `~/.paje/git-servers.json` (sem `useBasicAuth`, sem senha).
 
-## Fluxo principal — GitLab (HTTPS + PAT, `--use-basic-auth`)
+## Fluxo principal — GitLab, opção "Não tenho SSH, mas tenho usuário e senha" (`--use-basic-auth`)
 
 1. Valida token salvo e reutiliza se válido; rotaciona se inválido.
-2. Sem token: solicita usuário/senha (ou lê do env), cria novo PAT e persiste.
+2. Sem token: solicita usuário/senha (nunca lida de `env.yaml`), cria novo PAT via login web no GitLab e persiste. A senha é usada só nesse instante e descartada em seguida.
 3. Operações git passam a usar `oauth2:<token>@host` na URL HTTPS.
+
+## Fluxo principal — GitLab, opção "Já tenho um token pessoal" (`--token`)
+
+1. Sem chave SSH, sem senha, sem prompt de usuário — só o token.
+2. Valida o token informado (mesmo endpoint usado para revalidar tokens existentes); se inválido, informa e encerra sem persistir nada.
+3. Persiste o servidor com o token validado.
 
 ## Fluxo principal — GitHub
 

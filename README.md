@@ -118,21 +118,32 @@ Na TUI, a tela **Gerenciar Servidores Git** lista os servidores já salvos além
 | `--filter <padrão>` | `filter` | `""` | Filtro Ant/Glob salvo neste servidor |
 | `--env-file <path>` | — | `~/.paje/env.yaml` | Arquivo de credenciais |
 
+Na TUI, o cadastro de um servidor GitLab pergunta primeiro **como autenticar**:
+chave SSH (recomendado — gera chave **e** token), usuário/senha (bootstrap de
+token único, senha nunca persistida) ou colar um token já existente (nenhuma
+senha necessária). Todo servidor termina com um token e/ou chave SSH — nunca
+com uma senha guardada em lugar nenhum.
+
 **Fluxo SSH (padrão, `--use-basic-auth` ausente):**
 
 1. Sonda TCP na porta 22 do servidor (timeout 3 s).
-2. Se porta 22 bloqueada: exibe guia passo a passo para geração de PAT no GitLab (e futuramente GitHub) e encerra — reexecutar com `--use-basic-auth`.
+2. Se porta 22 bloqueada: exibe guia passo a passo para geração de PAT no GitLab (e futuramente GitHub) e encerra — reexecutar com `--use-basic-auth` ou `--token`.
 3. Gera ou reutiliza par de chaves ed25519.
 4. Atualiza `~/.ssh/config` e `~/.ssh/known_hosts`.
-5. Registra a chave pública no GitLab e cria/rotaciona PAT.
+5. Registra a chave pública no GitLab e cria/rotaciona PAT (sempre — mesmo no fluxo SSH, o servidor termina com um token também).
 6. Persiste o servidor e token em `~/.paje/git-servers.json`.
 
-**Fluxo HTTPS + PAT (`--use-basic-auth`, GitLab):**
+**Fluxo HTTPS + PAT via senha (`--use-basic-auth`, GitLab):**
 
 1. Valida token existente salvo (se houver) e reutiliza se válido.
 2. Se inválido, rotaciona automaticamente.
-3. Se não houver token, solicita usuário/senha ou lê do arquivo de ambiente, cria novo PAT e persiste.
+3. Se não houver token, solicita a senha (nunca lida de `env.yaml`), cria novo PAT via login web e persiste — a senha é usada uma única vez e descartada.
 4. As operações `git clone/pull/push` passam a usar URL HTTPS com `oauth2:<token>@host` embutido.
+
+**Fluxo "já tenho um token" (`--token`, GitLab):**
+
+1. Sem senha, sem chave SSH, sem prompt de usuário.
+2. Valida o token informado e persiste o servidor.
 
 **Fluxo GitHub (auto-detectado para `github.com` ou forçado com `--server-type github`):**
 
@@ -211,7 +222,6 @@ O PAJÉ lê parâmetros de `~/.paje/env.yaml` por padrão, ou do caminho informa
 locale: ""
 username: ""
 user-email: ""
-password: ""
 server-name: ""
 base-url: ""
 base-dir: "repos"
@@ -227,7 +237,7 @@ token-scopes: ["read_repository", "read_api", "read_virtual_registry", "self_rot
 token-expires-at: "2027-01-01"
 ```
 
-> Senhas não devem ser versionadas. Tokens de acesso pessoal (GitLab/GitHub) não ficam neste arquivo — são armazenados em `~/.paje/git-servers.json` após o registro do servidor. Use permissões restritas (`chmod 600`) para ambos os arquivos.
+> Este arquivo não tem — e nunca teve — um campo de senha: ela só existe em memória, pedida interativamente (ou via `--password`) para o bootstrap único de um token ou chave SSH, e nunca é persistida em lugar nenhum. Tokens de acesso pessoal (GitLab/GitHub) também não ficam neste arquivo — são armazenados em `~/.paje/git-servers.json` após o registro do servidor. Use permissões restritas (`chmod 600`) para ambos os arquivos.
 
 ---
 
