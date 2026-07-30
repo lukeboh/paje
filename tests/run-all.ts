@@ -4,6 +4,7 @@ globalBucket.__pajeTests = [];
 
 const testFiles = [
   "./git_sync_core_test.js",
+  "./github_api_error_status_test.js",
   "./git_tree_selection_test.js",
   "./git_parallel_sync_test.js",
   "./git_branch_service_test.js",
@@ -32,6 +33,9 @@ const testFiles = [
   "./git_sync_auth_guard_test.js",
   "./git_sync_quick_register_bootstrap_test.js",
   "./git_sync_missing_credentials_bootstrap_test.js",
+  "./git_sync_token_rotate_healing_test.js",
+  "./git_sync_token_invalid_bootstrap_test.js",
+  "./git_sync_github_token_expired_test.js",
   "./gitlab_personal_token_test.js",
   "./git_sync_tree_render_test.js",
   "./git_sync_summary_test.js",

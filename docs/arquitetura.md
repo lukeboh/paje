@@ -288,6 +288,7 @@ com as seguintes propriedades:
 | `tokenName` | `string?` | Nome do PAT no GitLab (usado na criação/rotação) |
 | `tokenScopes` | `string?` | Escopos do PAT separados por vírgula |
 | `tokenExpiresAt` | `string?` | Data de expiração do PAT (`YYYY-MM-DD`) |
+| `tokenOrigin` | `"personal-access-token" \| "oauth-device-flow"?` | De onde o token salvo veio — indica ao usuário onde revogá-lo/gerá-lo de novo (ex.: PAT de um lugar, autorização OAuth de outro). Ausente = tratado como `"personal-access-token"`. Todo ponto que grava/renova um token deve passar por `withToken()` (`core/gitSyncService.ts`) em vez de um spread manual, para nunca deixar este campo esquecido. |
 
 ### Prioridade das propriedades de servidor vs. parâmetros de sessão
 
@@ -359,6 +360,45 @@ para `GitLabGroup[]` (o login do usuário também vira um grupo pessoal) e repos
 para `GitLabProject[]`, de modo que todo o restante do pipeline (árvore, filtros,
 sincronização) é agnóstico do provedor. Em GitHub Enterprise Server a API é resolvida
 como `<baseUrl>/api/v3`; em github.com, `https://api.github.com`.
+
+### Detecção reativa de token inválido/expirado
+
+Um token salvo pode parar de funcionar a qualquer momento (expiração, revogação
+manual, política de expiração do servidor). O PAJÉ não valida o token
+proativamente a cada `git-sync` (custo extra de API mesmo quando o token está
+ok); em vez disso, reage quando `listGroups`/`listUserProjects` já falharam com
+401/403 (`loadTree()`, `core/gitSyncService.ts`) — tanto `GitLabApi` quanto
+`GitHubApi` anexam `status`/`error.details.status` ao erro lançado, o que
+permite ao core distinguir essa falha de um erro de rede genérico de forma
+uniforme para os dois tipos de servidor.
+
+A cura possível depende do que o servidor suporta:
+
+- **GitLab** — cadeia de cura em 3 passos, cada um só tentado se o anterior
+  falhar: (1) `rotatePersonalAccessToken` (`sshManager.ts`) — não precisa de
+  senha nem de interação do usuário, já que usa o próprio token (ainda válido
+  para rotação mesmo se rejeitado para listagem) via
+  `POST /api/v4/personal_access_tokens/self/rotate`; (2) se a rotação também
+  falhar (token de fato revogado, não só expirado), `onMissingCredentials(server,
+  "invalid")` — mesmo gancho já usado para "nunca teve token", pedindo a senha
+  uma única vez e gerando um novo via login web; (3) se ambos falharem, loga
+  `cli.sync.tokenExpired` e pula o servidor. Qualquer cura bem-sucedida persiste
+  o novo token (`withToken` + `mergeServer` + `writeGitServers`) e repete a
+  listagem antes de seguir em frente — a sincronização continua na mesma
+  execução, sem precisar reiniciar.
+- **GitHub** — não há rotação silenciosa nem bootstrap por senha (o GitHub não
+  suporta nenhum dos dois fluxos hoje); a única cura possível é uma mensagem
+  clara (`cli.sync.githubTokenExpired`) orientando a rodar `git-server-store` e
+  colar um token novo. A cura automática de verdade para GitHub é o device flow
+  OAuth (funcionalidade futura), que poderá plugar em `onMissingCredentials` do
+  mesmo jeito que o GitLab já faz.
+
+`onMissingCredentials` recebe um `reason: "missing" | "invalid"` — `"missing"`
+é o caso pré-existente (nunca houve token nem chave SSH associada); `"invalid"`
+é este caso novo (havia um token, mas ele foi rejeitado e a rotação não
+resolveu). A camada de apresentação (`gitCommand.ts`, `vscode-extension`) usa o
+motivo só para ajustar a mensagem do prompt — a lógica de bootstrap em si
+(pedir senha, `ensureGitLabPersonalAccessToken`, persistir) é a mesma.
 
 ## Componentes de TUI
 

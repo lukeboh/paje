@@ -15,6 +15,7 @@ import {
   readPublicKey,
   registerKeyInGitLab,
   resolveSshIdentityPath,
+  rotatePersonalAccessToken,
   sanitizePublicKey,
   upsertSshConfigHost,
 } from "../sshManager.js";
@@ -43,6 +44,14 @@ import type {
 import { LoggerBroker } from "./loggerBroker.js";
 import type { GitSyncConfig } from "./gitSyncConfig.js";
 
+// Where a persisted token came from — lets the UI point the user at the
+// right place to revoke/regenerate it (a classic PAT vs. an OAuth app
+// authorization live in different settings pages on GitLab/GitHub).
+// "oauth-device-flow" isn't produced anywhere yet; it's here so the field
+// already has a real second value the day that flow lands, instead of a
+// speculative union with just one member.
+export type TokenOrigin = "personal-access-token" | "oauth-device-flow";
+
 export type GitServerEntry = {
   id: string;
   name: string;
@@ -51,6 +60,7 @@ export type GitServerEntry = {
   username?: string;
   userEmail?: string;
   token?: string;
+  tokenOrigin?: TokenOrigin;
   baseDir?: string;
   noPublicRepos?: boolean;
   noArchivedRepos?: boolean;
@@ -60,6 +70,15 @@ export type GitServerEntry = {
   tokenScopes?: string;
   tokenExpiresAt?: string;
 };
+
+// Every place that persists a fresh/rotated token should go through this
+// instead of spreading { token } by hand, so tokenOrigin never silently
+// stays unset.
+export const withToken = (
+  server: GitServerEntry,
+  token: string,
+  origin: TokenOrigin = "personal-access-token"
+): GitServerEntry => ({ ...server, token, tokenOrigin: origin });
 
 export type GitSyncTreeView = {
   header: string;
@@ -72,13 +91,19 @@ export type GitSyncTreeView = {
 export type GitSyncLoadOptions = {
   config: GitSyncConfig;
   logger: LoggerBroker;
-  // Called when a server has neither a token nor an SSH association for its
-  // host — the presentation layer bootstraps one (prompting for a password
-  // once, generating/persisting a token) and hands the fresh token back so
-  // this run can keep going without restarting. Returning null means the
-  // caller declined or bootstrapping wasn't possible; that server is then
-  // skipped with the usual "no auth configured" warning.
-  onMissingCredentials?: (server: GitServerEntry) => Promise<{ token: string } | null>;
+  // Called when a server has no working credential: either there was never
+  // a token at all ("missing", and no SSH association either), or there was
+  // one but it just failed with 401/403 and rotating it silently didn't fix
+  // it ("invalid" — rotation is attempted first, without involving the
+  // presentation layer at all, since it needs no user interaction). Either
+  // way the presentation layer bootstraps a fresh token (prompting for a
+  // password once) and hands it back so this run can keep going without
+  // restarting. Returning null means the caller declined or bootstrapping
+  // wasn't possible; that server is then skipped with a warning.
+  onMissingCredentials?: (
+    server: GitServerEntry,
+    reason: "missing" | "invalid"
+  ) => Promise<{ token: string } | null>;
   onRequestStart?: (serverName: string, requestCount: number) => void;
   onStatusRefreshed?: (projectId: number, status: RepoSyncStatus) => void;
 };
@@ -744,7 +769,16 @@ export const createGitSyncCore = (): GitSyncCore => {
                 noArchivedRepos: server.noArchivedRepos,
               } as GitSyncConfig);
               return { server, groups, projects: serverFiltered };
-            } catch {
+            } catch (error) {
+              const status = (error as Error & { status?: number })?.status;
+              if (status === 401 || status === 403) {
+                // GitHub has no rotate-without-user-interaction endpoint and
+                // no password-bootstrap fallback (PATs/OAuth tokens aren't
+                // created that way there), so unlike GitLab this can't heal
+                // itself — the clearest thing to do is name the cause and
+                // point at the fix instead of silently skipping the server.
+                logger.warn(t("cli.sync.githubTokenExpired", { server: server.name }));
+              }
               return null;
             }
           }
@@ -754,33 +788,29 @@ export const createGitSyncCore = (): GitSyncCore => {
 
           let resolvedToken = server.token;
           if (!resolvedToken && !hasSshAssociation && onMissingCredentials) {
-            const bootstrapped = await onMissingCredentials(server);
+            const bootstrapped = await onMissingCredentials(server, "missing");
             if (bootstrapped?.token) {
               resolvedToken = bootstrapped.token;
             }
           }
 
-          const api = new GitLabApi({
+          if (!resolvedToken && !hasSshAssociation) {
+            logger.warn(t("cli.sync.noAuthConfigured", { server: server.name }));
+            return null;
+          }
+
+          let api = new GitLabApi({
             baseUrl: server.baseUrl,
             token: resolvedToken,
             verbose: config.verbose ?? false,
             logger: (message) => logger.debug(message),
           });
 
-          if (!api.hasAuth()) {
-            logger.warn(t("cli.sync.noAuthConfigured", { server: server.name }));
-            return null;
-          }
-
           if (hasSshAssociation || api.hasAuth()) {
             await ensureSshKey(api, logger, config);
           }
 
-          try {
-            const [groups, userProjects] = await Promise.all([
-              wrapRequest(server, t("cli.http.listGroups"), () => api.listGroups()),
-              wrapRequest(server, t("cli.http.listUserProjects"), () => api.listUserProjects()),
-            ]);
+          const buildResult = (groups: GitLabGroup[], userProjects: GitLabProject[]) => {
             const projects = userProjects.filter((project, index, all) => {
               return all.findIndex((item) => item.id === project.id) === index;
             });
@@ -789,11 +819,11 @@ export const createGitSyncCore = (): GitSyncCore => {
               const meta: Partial<GitLabProject> = {};
               if (server.baseDir) meta.pajeBaseDir = server.baseDir;
               if (server.userEmail) meta.pajeUserEmail = server.userEmail;
-              if (server.token) {
+              if (resolvedToken) {
                 try {
                   const url = new URL(project.http_url_to_repo);
                   url.username = "oauth2";
-                  url.password = server.token as string;
+                  url.password = resolvedToken;
                   meta.pajeHttpUrl = url.toString();
                 } catch {
                   // keep without pajeHttpUrl
@@ -809,8 +839,74 @@ export const createGitSyncCore = (): GitSyncCore => {
             } as GitSyncConfig);
 
             return { server, groups, projects: serverFiltered };
-          } catch {
-            return null;
+          };
+
+          const listOnce = () =>
+            Promise.all([
+              wrapRequest(server, t("cli.http.listGroups"), () => api.listGroups()),
+              wrapRequest(server, t("cli.http.listUserProjects"), () => api.listUserProjects()),
+            ]);
+
+          try {
+            const [groups, userProjects] = await listOnce();
+            return buildResult(groups, userProjects);
+          } catch (error) {
+            const status = (error as { details?: { status?: number } })?.details?.status;
+            const looksLikeAuthFailure = status === 401 || status === 403;
+            if (!looksLikeAuthFailure || !resolvedToken) {
+              // Not an auth problem (network error, etc.), or there was no
+              // token to have gone stale in the first place (pure-SSH case
+              // failing for some other reason) — behave as before.
+              return null;
+            }
+
+            // The token exists but the server just rejected it — try to heal
+            // it before giving up. Rotation needs no user interaction, so
+            // it's attempted first; only if that fails too does this fall
+            // back to the presentation layer's bootstrap (a fresh password).
+            let healedToken: string | null = null;
+            try {
+              const rotated = await rotatePersonalAccessToken({
+                baseUrl: server.baseUrl,
+                token: resolvedToken,
+                fetchImpl: globalThis.fetch,
+                logger: (message) => logger.debug(message),
+              });
+              healedToken = rotated.token;
+            } catch {
+              // Rotation itself failed — the token is likely fully revoked,
+              // not just expired. Fall through to the bootstrap below.
+            }
+
+            if (!healedToken && onMissingCredentials) {
+              const bootstrapped = await onMissingCredentials(server, "invalid");
+              healedToken = bootstrapped?.token ?? null;
+            }
+
+            if (!healedToken) {
+              logger.warn(t("cli.sync.tokenExpired", { server: server.name }));
+              return null;
+            }
+
+            const existingServers = readGitServers<GitServerEntry[]>([]);
+            const merged = mergeServer(existingServers, withToken(server, healedToken));
+            writeGitServers(merged.servers);
+
+            resolvedToken = healedToken;
+            api = new GitLabApi({
+              baseUrl: server.baseUrl,
+              token: resolvedToken,
+              verbose: config.verbose ?? false,
+              logger: (message) => logger.debug(message),
+            });
+
+            try {
+              const [groups, userProjects] = await listOnce();
+              return buildResult(groups, userProjects);
+            } catch {
+              logger.warn(t("cli.sync.tokenExpired", { server: server.name }));
+              return null;
+            }
           }
         })
       );

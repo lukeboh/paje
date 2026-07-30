@@ -76,7 +76,7 @@ import {
   type GitCredentials,
 } from "./sshManager.js";
 import { readGitServers, writeGitServers } from "./persistence.js";
-import { type GitServerEntry, type GitSyncSummary, createGitSyncCore, resolveRepoStatus, resolveParallels, isValidHttpUrl } from "./core/gitSyncService.js";
+import { type GitServerEntry, type GitSyncSummary, createGitSyncCore, resolveRepoStatus, resolveParallels, isValidHttpUrl, withToken } from "./core/gitSyncService.js";
 
 const buildServerPrefix = (server: GitServerEntry): string => {
   const normalizedName = server.name?.trim() || t("cli.sync.defaultServerLabel");
@@ -876,10 +876,9 @@ const storeGitHubServer = async (
     try {
       const user = await api.getAuthenticatedUser();
       logger(t("cli.prompt.github.tokenValid", { login: user.login }));
-      const serverWithToken: GitServerEntry = {
-        ...server,
-        type: "github",
-        token,
+      const serverWithToken = {
+        ...withToken(server, token),
+        type: "github" as const,
         username: existingServer?.username ?? user.login,
       };
       const merged = mergeServer(existingServers, serverWithToken);
@@ -930,10 +929,9 @@ const storeGitHubServer = async (
     return;
   }
 
-  const serverWithToken: GitServerEntry = {
-    ...server,
-    type: "github",
-    token,
+  const serverWithToken = {
+    ...withToken(server, token),
+    type: "github" as const,
     username: login,
   };
   const merged = mergeServer(existingServers, serverWithToken);
@@ -1024,7 +1022,7 @@ const storeSshKeyOnly = async (
     }
 
     const existingServersPaste = readGitServers<GitServerEntry[]>([]);
-    const serverWithPastedToken: GitServerEntry = { ...server, token: pastedToken };
+    const serverWithPastedToken = withToken(server, pastedToken);
     const mergedPaste = mergeServer(existingServersPaste, serverWithPastedToken);
     writeGitServers(mergedPaste.servers);
     return;
@@ -1120,7 +1118,7 @@ const storeSshKeyOnly = async (
           fetchImpl: globalThis.fetch,
           logger,
         });
-        const serverWithTokenBA: GitServerEntry = { ...server, token: rotated.token };
+        const serverWithTokenBA = withToken(server, rotated.token);
         const mergedServersBA = mergeServer(existingServersBA, serverWithTokenBA);
         writeGitServers(mergedServersBA.servers);
         logger?.(t("cli.log.tokenRotateSuccess", { baseUrl: normalizedBaseUrlBA }));
@@ -1164,7 +1162,7 @@ const storeSshKeyOnly = async (
       retryDelayMs: resolveEnvOrCliNumber(cli?.retryDelayMs, "retryDelayMs", "retry-delay-ms"),
     });
 
-    const basicAuthServerWithToken: GitServerEntry = { ...server, token: tokenResultBA.token };
+    const basicAuthServerWithToken = withToken(server, tokenResultBA.token);
     const basicAuthMergedServers = mergeServer(existingServersBA, basicAuthServerWithToken);
     writeGitServers(basicAuthMergedServers.servers);
     return;
@@ -1303,10 +1301,7 @@ const storeSshKeyOnly = async (
         fetchImpl: globalThis.fetch,
         logger,
       });
-      const serverWithToken: GitServerEntry = {
-        ...server,
-        token: rotated.token,
-      };
+      const serverWithToken = withToken(server, rotated.token);
       const mergedServers = mergeServer(existingServers, serverWithToken);
       writeGitServers(mergedServers.servers);
       logger?.(t("cli.log.tokenRotateSuccess", { baseUrl: normalizedBaseUrl }));
@@ -1349,10 +1344,7 @@ const storeSshKeyOnly = async (
     retryDelayMs: resolveEnvOrCliNumber(cli?.retryDelayMs, "retryDelayMs", "retry-delay-ms"),
   });
 
-  const serverWithToken: GitServerEntry = {
-    ...server,
-    token: tokenResult.token,
-  };
+  const serverWithToken = withToken(server, tokenResult.token);
   const mergedServers = mergeServer(existingServers, serverWithToken);
   writeGitServers(mergedServers.servers);
 };
@@ -1873,16 +1865,20 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
       const { header, tree, statusMap, projects: filteredProjects } = await core.loadTree({
         config: mergedOptions,
         logger: logBroker,
-        onMissingCredentials: async (server) => {
-          // Self-heals a server that has neither a token nor an SSH
-          // association yet (e.g. one saved through an older PAJÉ version,
-          // or one whose bootstrap was interrupted) — asks for the password
-          // exactly once, bootstraps a token, and persists it so this never
-          // has to happen again for this server.
+        onMissingCredentials: async (server, reason) => {
+          // Self-heals a server with no working credential: either it never
+          // had a token at all (e.g. one saved through an older PAJÉ
+          // version, or one whose bootstrap was interrupted), or it had one
+          // that just got rejected (401/403) and rotating it silently
+          // didn't fix it. Either way, asks for the password exactly once,
+          // bootstraps a fresh token, and persists it.
           const resolvedUsername = server.username?.trim();
           if (!resolvedUsername) {
             logToTui(t("cli.log.credentialsMissing"), "warn");
             return null;
+          }
+          if (reason === "invalid") {
+            logToTui(t("cli.log.tokenExpiredPrompting", { server: server.name }), "warn");
           }
           const password = await promptBasicAuthPassword(resolvedUsername, session, mergedOptions.password);
           if (!password) {
@@ -1898,7 +1894,7 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
               logger: logToTuiPlain,
             });
             const existingServers = readGitServers<GitServerEntry[]>([]);
-            const merged = mergeServer(existingServers, { ...server, token: tokenResult.token });
+            const merged = mergeServer(existingServers, withToken(server, tokenResult.token));
             writeGitServers(merged.servers);
             logToTui(t("cli.log.tokenValid", { baseUrl: server.baseUrl }));
             return { token: tokenResult.token };
