@@ -44,6 +44,7 @@ const testFiles = [
   "./tui_tree_text_filter_test.js",
   "./tui_no_flicker_test.js",
   "./tui_screen_transition_test.js",
+  "./tui_orientation_bar_truncate_test.js",
   "./vscode_tree_adapter_test.js",
   "./vscode_extension_smoke_test.js",
 ];

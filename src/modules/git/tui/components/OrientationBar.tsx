@@ -8,7 +8,7 @@ export type OrientationBarProps = {
 const OrientationBarComponent: React.FC<OrientationBarProps> = ({ message }) => {
   return (
     <Box flexDirection="row" width="100%" height={1}>
-      <Text>{message}</Text>
+      <Text wrap="truncate-end">{message}</Text>
     </Box>
   );
 };

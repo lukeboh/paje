@@ -18,6 +18,7 @@ Padronizar a experiência de navegação e mensagens da TUI em um layout de 4 pa
 3. **Barra de orientação** (1 linha)
    - Apresenta instruções contextuais do que o usuário pode fazer.
    - Deve refletir o item com foco ou a etapa atual.
+   - Usa `wrap="truncate-end"`: uma mensagem mais larga que o terminal é cortada nessa única linha — sem isso, o Ink quebra a linha (padrão) e a mensagem estoura a altura reservada de 1 linha, vazando visualmente para o painel de Log logo abaixo. Coberto por `tui_orientation_bar_truncate_test`.
 
 4. **Painel de log** (parte inferior)
    - Ocupa aproximadamente **15%** da altura da tela quando em modo padrão.
