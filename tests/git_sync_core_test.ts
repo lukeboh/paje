@@ -5,7 +5,9 @@ import {
   resolveSyncTargets,
   prepareTargets,
   resolveParallels,
+  withToken,
 } from "../src/modules/git/core/gitSyncService.js";
+import type { GitServerEntry } from "../src/modules/git/core/gitSyncService.js";
 import {
   resolveProjectLocalPath,
   resolveLocalPathConflicts,
@@ -343,6 +345,18 @@ const runCoreTests = async (): Promise<void> => {
   assert.equal(resolveParallels("0"), "auto", "'0' inválido → auto");
   assert.equal(resolveParallels("-2"), "auto", "negativo → auto");
   assert.equal(resolveParallels("abc"), "auto", "NaN → auto");
+
+  const bareServer: GitServerEntry = { id: "s1", name: "Servidor", baseUrl: "https://gitlab.example.com" };
+  const withDefaultOrigin = withToken(bareServer, "glpat-xyz");
+  assert.equal(withDefaultOrigin.token, "glpat-xyz", "withToken deve gravar o token");
+  assert.equal(
+    withDefaultOrigin.tokenOrigin,
+    "personal-access-token",
+    "withToken deve gravar 'personal-access-token' como origem padrão"
+  );
+  assert.equal(withDefaultOrigin.id, bareServer.id, "withToken não pode alterar campos que não sejam token/tokenOrigin");
+  const withExplicitOrigin = withToken(bareServer, "oauth-xyz", "oauth-device-flow");
+  assert.equal(withExplicitOrigin.tokenOrigin, "oauth-device-flow", "withToken deve aceitar uma origem explícita");
 
   console.log("git_sync_core_test: OK");
 };

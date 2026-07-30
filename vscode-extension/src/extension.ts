@@ -4,6 +4,7 @@ import { setLocale, t } from "../../src/i18n/index.js";
 import {
   createGitSyncCore,
   mergeServer,
+  withToken,
   type GitServerEntry,
   type GitSyncTreeView,
 } from "../../src/modules/git/core/gitSyncService.js";
@@ -81,7 +82,7 @@ export const activate = (context: vscode.ExtensionContext): void => {
               logger: (message) => logger.info(message),
             });
             const existingServers = readGitServers<GitServerEntry[]>([]);
-            const merged = mergeServer(existingServers, { ...server, token: tokenResult.token });
+            const merged = mergeServer(existingServers, withToken(server, tokenResult.token));
             writeGitServers(merged.servers);
             return { token: tokenResult.token };
           } catch {

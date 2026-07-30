@@ -4,6 +4,7 @@ globalBucket.__pajeTests = [];
 
 const testFiles = [
   "./git_sync_core_test.js",
+  "./github_api_error_status_test.js",
   "./git_tree_selection_test.js",
   "./git_parallel_sync_test.js",
   "./git_branch_service_test.js",

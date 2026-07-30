@@ -95,7 +95,9 @@ export class GitHubApi {
     this.logVerbose(`HTTP ${response.status} ${url}`);
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`GitHub API ${response.status}: ${text}`);
+      const error = new Error(`GitHub API ${response.status}: ${text}`) as Error & { status?: number };
+      error.status = response.status;
+      throw error;
     }
     return { data: (await response.json()) as T, headers: response.headers };
   }
@@ -170,7 +172,9 @@ export class GitHubApi {
     this.logVerbose(`HTTP ${response.status} ${url}`);
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`GitHub API ${response.status}: ${text}`);
+      const error = new Error(`GitHub API ${response.status}: ${text}`) as Error & { status?: number };
+      error.status = response.status;
+      throw error;
     }
     const data = (await response.json()) as { id: number };
     return { id: data.id };

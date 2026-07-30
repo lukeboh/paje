@@ -43,6 +43,14 @@ import type {
 import { LoggerBroker } from "./loggerBroker.js";
 import type { GitSyncConfig } from "./gitSyncConfig.js";
 
+// Where a persisted token came from — lets the UI point the user at the
+// right place to revoke/regenerate it (a classic PAT vs. an OAuth app
+// authorization live in different settings pages on GitLab/GitHub).
+// "oauth-device-flow" isn't produced anywhere yet; it's here so the field
+// already has a real second value the day that flow lands, instead of a
+// speculative union with just one member.
+export type TokenOrigin = "personal-access-token" | "oauth-device-flow";
+
 export type GitServerEntry = {
   id: string;
   name: string;
@@ -51,6 +59,7 @@ export type GitServerEntry = {
   username?: string;
   userEmail?: string;
   token?: string;
+  tokenOrigin?: TokenOrigin;
   baseDir?: string;
   noPublicRepos?: boolean;
   noArchivedRepos?: boolean;
@@ -60,6 +69,15 @@ export type GitServerEntry = {
   tokenScopes?: string;
   tokenExpiresAt?: string;
 };
+
+// Every place that persists a fresh/rotated token should go through this
+// instead of spreading { token } by hand, so tokenOrigin never silently
+// stays unset.
+export const withToken = (
+  server: GitServerEntry,
+  token: string,
+  origin: TokenOrigin = "personal-access-token"
+): GitServerEntry => ({ ...server, token, tokenOrigin: origin });
 
 export type GitSyncTreeView = {
   header: string;
