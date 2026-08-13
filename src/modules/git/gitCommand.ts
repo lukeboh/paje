@@ -76,7 +76,23 @@ import {
   type GitCredentials,
 } from "./sshManager.js";
 import { readGitServers, writeGitServers } from "./persistence.js";
-import { type GitServerEntry, type GitSyncSummary, createGitSyncCore, resolveRepoStatus, resolveParallels, isValidHttpUrl, withToken } from "./core/gitSyncService.js";
+import {
+  type GitServerEntry,
+  type GitSyncSummary,
+  type TokenOrigin,
+  createGitSyncCore,
+  resolveRepoStatus,
+  resolveParallels,
+  isValidHttpUrl,
+  withToken,
+} from "./core/gitSyncService.js";
+import {
+  requestGitHubDeviceCode,
+  pollGitHubDeviceAccessToken,
+  openInBrowser,
+  GitHubDeviceFlowError,
+  type GitHubDeviceCodeResult,
+} from "./githubDeviceFlow.js";
 
 const buildServerPrefix = (server: GitServerEntry): string => {
   const normalizedName = server.name?.trim() || t("cli.sync.defaultServerLabel");
@@ -857,7 +873,8 @@ const detectServerType = (baseUrl: string): "gitlab" | "github" => {
 const storeGitHubServer = async (
   server: GitServerEntry,
   session?: TuiSession,
-  cli?: SshKeyStoreCliOptions
+  cli?: SshKeyStoreCliOptions,
+  tokenOrigin: TokenOrigin = "personal-access-token"
 ): Promise<void> => {
   const logger = session
     ? (message: string) => {
@@ -877,7 +894,7 @@ const storeGitHubServer = async (
       const user = await api.getAuthenticatedUser();
       logger(t("cli.prompt.github.tokenValid", { login: user.login }));
       const serverWithToken = {
-        ...withToken(server, token),
+        ...withToken(server, token, tokenOrigin),
         type: "github" as const,
         username: existingServer?.username ?? user.login,
       };
@@ -930,7 +947,7 @@ const storeGitHubServer = async (
   }
 
   const serverWithToken = {
-    ...withToken(server, token),
+    ...withToken(server, token, tokenOrigin),
     type: "github" as const,
     username: login,
   };
@@ -2557,6 +2574,90 @@ const buildServerDetails = (server: GitServerEntry): string => {
   return lines.join("\n");
 };
 
+// The "I want to authenticate to github.com" quick pick: no URL/username/
+// password/token typing at all — requests a device code, opens the browser
+// to it (best-effort; the code + URL are always shown too, in case that
+// fails or the session is headless), waits for the user to authorize in the
+// browser, and hands the resulting token to storeGitHubServer exactly like
+// a pasted token would — the only difference is where the token came from.
+const runGitHubDeviceFlowRegistration = async (
+  session: TuiSession,
+  options: SshKeyStoreCliOptions,
+  existingServer?: GitServerEntry
+): Promise<void> => {
+  const baseUrl = "https://github.com";
+  const serverName = existingServer?.name || options.serverName?.trim() || "GitHub";
+
+  let deviceCode: GitHubDeviceCodeResult;
+  try {
+    deviceCode = await requestGitHubDeviceCode();
+  } catch {
+    await session.showMessage({
+      title: t("cli.prompt.github.title"),
+      message: t("cli.prompt.github.deviceFlowRequestFailed"),
+    });
+    return;
+  }
+
+  openInBrowser(deviceCode.verificationUriComplete ?? deviceCode.verificationUri);
+
+  await session.showMessage({
+    title: t("cli.prompt.github.title"),
+    message: t("cli.prompt.github.deviceFlowInstructions", {
+      url: deviceCode.verificationUri,
+      code: deviceCode.userCode,
+    }),
+  });
+
+  const loadingHandle = renderLoadingScreen(
+    {
+      title: t("cli.prompt.github.title"),
+      message: t("cli.prompt.github.deviceFlowWaiting"),
+      parameters: session.getParameters(),
+    },
+    session
+  );
+
+  let token: string;
+  try {
+    const result = await pollGitHubDeviceAccessToken({
+      deviceCode: deviceCode.deviceCode,
+      intervalSeconds: deviceCode.interval,
+      expiresInSeconds: deviceCode.expiresIn,
+    });
+    token = result.token;
+  } catch (error) {
+    loadingHandle.stop();
+    const code = error instanceof GitHubDeviceFlowError ? error.code : undefined;
+    const messageKey =
+      code === "access_denied"
+        ? "cli.prompt.github.deviceFlowDenied"
+        : code === "expired_token"
+          ? "cli.prompt.github.deviceFlowExpired"
+          : "cli.prompt.github.deviceFlowFailed";
+    await session.showMessage({ title: t("cli.prompt.github.title"), message: t(messageKey) });
+    return;
+  }
+  loadingHandle.stop();
+
+  const server: GitServerEntry = {
+    id: baseUrl,
+    name: serverName,
+    baseUrl,
+    type: "github",
+    userEmail: options.userEmail ?? existingServer?.userEmail,
+    baseDir: options.baseDir ?? existingServer?.baseDir,
+    noPublicRepos: options.noPublicRepos ?? existingServer?.noPublicRepos,
+    noArchivedRepos: options.noArchivedRepos ?? existingServer?.noArchivedRepos,
+    filter: options.filter ?? existingServer?.filter,
+    syncRepos: options.syncRepos ?? existingServer?.syncRepos,
+    tokenScopes: options.tokenScopes ?? existingServer?.tokenScopes,
+    tokenExpiresAt: options.tokenExpiresAt ?? existingServer?.tokenExpiresAt,
+  };
+
+  await storeGitHubServer(server, session, { ...options, token }, "oauth-device-flow");
+};
+
 // Shared by both entry points: registering a brand new server (existingServer
 // undefined — every field starts blank/generic) and editing one already saved
 // (existingServer set — the form opens pre-filled, and properties the form
@@ -2583,10 +2684,6 @@ const promptAndPersistGitServer = async (
   // which store* function actually runs, same as before this change.
   const knownType = existingServer?.type ?? (options.baseUrl?.trim() ? detectServerType(options.baseUrl) : undefined);
   let authChoice: "ssh" | "password" | "paste" = "ssh";
-  // Set only by the "authenticate to github.com" quick pick below — it's a
-  // shortcut for the same "paste" flow (github.com is detected from the
-  // baseUrl either way), it just saves typing the URL out.
-  let presetBaseUrl: string | undefined;
   if (knownType !== "github") {
     if (hasCliArg("use-basic-auth")) {
       authChoice = (options.useBasicAuth ?? false) ? "password" : "ssh";
@@ -2621,11 +2718,10 @@ const promptAndPersistGitServer = async (
         ],
       });
       if (promptedChoice === "github") {
-        authChoice = "paste";
-        presetBaseUrl = "https://github.com";
-      } else {
-        authChoice = promptedChoice ?? defaultAuthChoice;
+        await runGitHubDeviceFlowRegistration(session, options, existingServer);
+        return;
       }
+      authChoice = promptedChoice ?? defaultAuthChoice;
     }
   }
   const useBasicAuth = authChoice === "password";
@@ -2634,8 +2730,8 @@ const promptAndPersistGitServer = async (
   const formResult = await promptGitServerForm(
     session,
     {
-      baseUrl: existingServer?.baseUrl || presetBaseUrl || options.baseUrl?.trim() || "https://gitlab.com",
-      serverName: existingServer?.name || options.serverName?.trim() || (presetBaseUrl ? "GitHub" : "GitLab"),
+      baseUrl: existingServer?.baseUrl || options.baseUrl?.trim() || "https://gitlab.com",
+      serverName: existingServer?.name || options.serverName?.trim() || "GitLab",
       username: existingServer?.username || options.username?.trim() || "",
       password: "",
       tokenName: existingServer?.tokenName || options.tokenName?.trim() || "paje",

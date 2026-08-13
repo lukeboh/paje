@@ -323,7 +323,7 @@ const ptBR = {
         authMethodQuestion: "Como você quer autenticar neste servidor?",
         authMethodGithub: "Quero me autenticar ao github.com",
         authMethodGithubDesc:
-          "Preenche a URL como https://github.com na tela seguinte e pede direto um token de acesso pessoal (github.com/settings/tokens). Nenhuma senha é necessária.",
+          "Abre o navegador para você autorizar o PAJÉ e gera o token automaticamente. Nenhuma senha, nem token colado à mão.",
         authMethodSsh: "Tenho acesso SSH ao servidor (recomendado)",
         authMethodSshDesc:
           "Configura uma chave SSH para clones/pushes e também gera um token para consultar a API (listar grupos/projetos) — as duas credenciais são usadas juntas, cada uma para uma finalidade.",
@@ -417,6 +417,14 @@ const ptBR = {
         tokenInvalid: "Token inválido ou sem permissões suficientes.",
         tokenMissing: "Token não informado.",
         unknownType: "Tipo de servidor desconhecido: \"{{type}}\". Use gitlab ou github. Detectando pelo URL...",
+        deviceFlowRequestFailed:
+          "Não foi possível iniciar a autenticação com o GitHub. Verifique sua conexão e tente novamente.",
+        deviceFlowInstructions:
+          "Abra {{url}} no navegador (tentamos abrir automaticamente) e digite o código: {{code}}\n\nPressione Enter aqui depois de abrir a página para continuar aguardando a autorização.",
+        deviceFlowWaiting: "Aguardando você autorizar o PAJÉ no navegador...",
+        deviceFlowDenied: "A autorização foi negada no GitHub. Cadastre o servidor novamente para tentar de novo.",
+        deviceFlowExpired: "O código expirou antes da autorização ser concluída. Cadastre o servidor novamente para tentar de novo.",
+        deviceFlowFailed: "Falha ao autenticar com o GitHub. Cadastre o servidor novamente para tentar de novo.",
       },
     },
     summary: {

@@ -17,6 +17,7 @@ const testFiles = [
   "./git_server_store_manage_test.js",
   "./git_server_store_paste_token_test.js",
   "./git_server_store_github_quick_pick_test.js",
+  "./git_server_store_github_device_flow_denied_test.js",
   "./git_server_store_edit_test.js",
   "./ssh_key_overwrite_test.js",
   "./logger_transports_test.js",

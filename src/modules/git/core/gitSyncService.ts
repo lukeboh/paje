@@ -47,9 +47,8 @@ import type { GitSyncConfig } from "./gitSyncConfig.js";
 // Where a persisted token came from — lets the UI point the user at the
 // right place to revoke/regenerate it (a classic PAT vs. an OAuth app
 // authorization live in different settings pages on GitLab/GitHub).
-// "oauth-device-flow" isn't produced anywhere yet; it's here so the field
-// already has a real second value the day that flow lands, instead of a
-// speculative union with just one member.
+// "oauth-device-flow" is produced by the GitHub device-flow quick pick
+// (gitCommand.ts's runGitHubDeviceFlowRegistration, via githubDeviceFlow.ts).
 export type TokenOrigin = "personal-access-token" | "oauth-device-flow";
 
 export type GitServerEntry = {

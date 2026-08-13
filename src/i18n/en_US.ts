@@ -325,7 +325,7 @@ const enUS: PtBrTranslations = {
         authMethodQuestion: "How do you want to authenticate to this server?",
         authMethodGithub: "I want to authenticate to github.com",
         authMethodGithubDesc:
-          "Pre-fills the URL as https://github.com on the next screen and asks directly for a personal access token (github.com/settings/tokens). No password is needed.",
+          "Opens the browser for you to authorize PAJÉ and generates the token automatically. No password, no manually pasted token.",
         authMethodSsh: "I have SSH access to the server (recommended)",
         authMethodSshDesc:
           "Sets up an SSH key for clones/pushes and also generates a token to query the API (list groups/projects) — both credentials are used together, each for its own purpose.",
@@ -418,6 +418,13 @@ const enUS: PtBrTranslations = {
         tokenInvalid: "Invalid token or insufficient permissions.",
         tokenMissing: "Token not provided.",
         unknownType: "Unknown server type: \"{{type}}\". Use gitlab or github. Detecting from URL...",
+        deviceFlowRequestFailed: "Could not start authentication with GitHub. Check your connection and try again.",
+        deviceFlowInstructions:
+          "Open {{url}} in your browser (we tried to open it automatically) and enter the code: {{code}}\n\nPress Enter here after opening the page to keep waiting for authorization.",
+        deviceFlowWaiting: "Waiting for you to authorize PAJÉ in the browser...",
+        deviceFlowDenied: "Authorization was denied on GitHub. Register the server again to try once more.",
+        deviceFlowExpired: "The code expired before authorization completed. Register the server again to try once more.",
+        deviceFlowFailed: "Failed to authenticate with GitHub. Register the server again to try once more.",
       },
     },
     summary: {
