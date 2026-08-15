@@ -49,6 +49,8 @@ Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/lukeb
 
 Mesmo comportamento do instalador Linux (checa o Git — instalando via `winget` se necessário —, clona o repositório, executa health-check e oferece adicionar o PAJÉ ao `PATH` do usuário), adaptado às ferramentas nativas do PowerShell 5.1+/7+. Se o PowerShell bloquear a execução do script baixado, rode `Unblock-File install-paje.ps1` antes, ou ajuste a política de execução da sessão atual com `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`.
 
+O instalador também cria `paje.cmd` junto do `paje.ps1` — um shim que permite chamar `paje` (sem digitar a extensão) tanto no `cmd.exe` quanto dentro do próprio PowerShell, exatamente como no Linux. Isso é necessário porque `.ps1` não faz parte do `PATHEXT` padrão do Windows, e o PowerShell recusa por segurança rodar um script pelo nome nu mesmo com o diretório no `PATH` — só `.cmd`/`.bat`/`.exe` resolvem dessa forma.
+
 ### Windows (cmd)
 
 Equivalente ao comando acima, mas rodável direto no `cmd.exe` — já contorna o bloqueio de política de execução sem precisar de `Unblock-File`/`Set-ExecutionPolicy` manual, já que `-ExecutionPolicy Bypass` é aplicado só ao processo do PowerShell que baixa e executa o script, sem alterar nenhuma configuração persistente do sistema:
@@ -67,7 +69,7 @@ npm run dev -- <comando>      # execução de desenvolvimento
 npm run build:vscode          # empacotar a extensão VSCode (vscode-extension/)
 ```
 
-No Windows, os mesmos comandos funcionam substituindo `paje` por `.\paje.ps1` (ou apenas `paje` se o diretório de instalação já estiver no `PATH`).
+No Windows, os mesmos comandos funcionam com `paje` normalmente, desde que o diretório de instalação esteja no `PATH` (o instalador oferece isso automaticamente) — o shim `paje.cmd` cuida de repassar tudo para `paje.ps1`. Sem isso no `PATH`, use `.\paje.cmd` (ou `.\paje.ps1`) de dentro do diretório de instalação.
 
 ---
 
