@@ -630,11 +630,23 @@ export const ensurePajeKeyPair = async (options: {
   }
 
   if (overwrite && (fs.existsSync(privateKeyPath) || fs.existsSync(publicKeyPath))) {
+    // Unlike POSIX rename(), Windows' fs.renameSync throws if the
+    // destination already exists (e.g. overwriting the same key label a
+    // second time leaves a .bak from the first overwrite) — remove any
+    // stale backup first so this works the same on both platforms.
     if (fs.existsSync(privateKeyPath)) {
-      fs.renameSync(privateKeyPath, `${privateKeyPath}.bak`);
+      const backupPath = `${privateKeyPath}.bak`;
+      if (fs.existsSync(backupPath)) {
+        fs.rmSync(backupPath);
+      }
+      fs.renameSync(privateKeyPath, backupPath);
     }
     if (fs.existsSync(publicKeyPath)) {
-      fs.renameSync(publicKeyPath, `${publicKeyPath}.pub.bak`);
+      const backupPath = `${publicKeyPath}.pub.bak`;
+      if (fs.existsSync(backupPath)) {
+        fs.rmSync(backupPath);
+      }
+      fs.renameSync(publicKeyPath, backupPath);
     }
     logger?.(`Chave existente renomeada para ${privateKeyPath}.bak (e .pub.bak).`);
   }

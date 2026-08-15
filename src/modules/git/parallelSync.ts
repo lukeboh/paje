@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import path from "node:path";
 import { t } from "../../i18n/index.js";
 import { GitRepositoryTarget, ParallelSyncOptions } from "./types.js";
+import { hasGitDir } from "./gitRepoScanner.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -134,15 +135,6 @@ const runGitWithProgress = async (options: {
 
 export const ensureParentDir = async (targetPath: string): Promise<void> => {
   await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
-};
-
-const hasGitDir = async (targetPath: string): Promise<boolean> => {
-  const gitDir = path.join(targetPath, ".git");
-  const exists = await execFileAsync("test", ["-d", gitDir]).then(
-    () => true,
-    () => false
-  );
-  return exists;
 };
 
 const readRepoStatus = async (target: GitRepositoryTarget): Promise<RepoStatusSnapshot> => {

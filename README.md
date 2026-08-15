@@ -19,11 +19,13 @@ O PAJÉ automatiza tarefas repetitivas de ambiente de desenvolvimento com servid
 
 ## Requisitos
 
-- Linux com Bash (WSL suportado — `paje.sh` filtra o PATH do Windows automaticamente)
+- Linux/macOS com Bash, ou Windows 10+ com PowerShell (WSL também suportado — `paje.sh` filtra o PATH do Windows automaticamente)
 - Git
 - Node.js 24.x (Active LTS) + npm
 
 ## Instalação
+
+### Linux, macOS ou WSL
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/lukeboh/paje/main/install-paje.sh -o install-paje.sh \
@@ -38,6 +40,15 @@ Para garantir Node.js 24.x correto:
 ./config-paje.sh
 ```
 
+### Windows (PowerShell)
+
+```powershell
+Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/lukeboh/paje/main/install-paje.ps1" -OutFile install-paje.ps1
+.\install-paje.ps1
+```
+
+Mesmo comportamento do instalador Linux (checa o Git — instalando via `winget` se necessário —, clona o repositório, executa health-check e oferece adicionar o PAJÉ ao `PATH` do usuário), adaptado às ferramentas nativas do PowerShell 5.1+/7+. Se o PowerShell bloquear a execução do script baixado, rode `Unblock-File install-paje.ps1` antes, ou ajuste a política de execução da sessão atual com `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`.
+
 ## Como executar
 
 ```bash
@@ -47,6 +58,8 @@ paje git-server-store [opções]# CLI — registrar servidor, SSH e token
 npm run dev -- <comando>      # execução de desenvolvimento
 npm run build:vscode          # empacotar a extensão VSCode (vscode-extension/)
 ```
+
+No Windows, os mesmos comandos funcionam substituindo `paje` por `.\paje.ps1` (ou apenas `paje` se o diretório de instalação já estiver no `PATH`).
 
 ---
 
