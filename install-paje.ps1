@@ -136,7 +136,7 @@ function Confirm-PajeOnPath([string]$DestDir) {
         return
     }
     if (-not (Read-YesNo "Deseja incluir o PAJE no PATH do usuario?" "S")) {
-        Write-WarnMsg "PAJE nao foi adicionado ao PATH. Chame o script diretamente: $DestDir\paje.ps1"
+        Write-WarnMsg "PAJE nao foi adicionado ao PATH. Chame o script diretamente: $DestDir\paje.cmd"
         return
     }
     $newPath = if ([string]::IsNullOrWhiteSpace($currentPath)) { $DestDir } else { "$currentPath;$DestDir" }
@@ -149,6 +149,14 @@ function Confirm-FinalVerification([string]$DestDir) {
     $entrypoint = Join-Path $DestDir "paje.ps1"
     if (-not (Test-Path $entrypoint)) {
         Exit-WithError "Arquivo de inicializacao nao encontrado: $entrypoint"
+    }
+    # paje.cmd e o shim que permite chamar "paje" sem extensao (cmd.exe e o
+    # proprio PowerShell so resolvem nomes nus para .cmd/.bat/.exe no PATH,
+    # nunca para .ps1 por seguranca) - sem ele, o comando "paje" nao existe
+    # mesmo com o diretorio no PATH.
+    $shim = Join-Path $DestDir "paje.cmd"
+    if (-not (Test-Path $shim)) {
+        Exit-WithError "Shim de linha de comando nao encontrado: $shim"
     }
     Write-Info "Verificacao final OK."
 }
@@ -177,9 +185,9 @@ function Invoke-Main {
 
     if (Read-YesNo "Deseja iniciar o PAJE agora?" "S") {
         Write-Info "Iniciando PAJE..."
-        & (Join-Path $destDir "paje.ps1")
+        & (Join-Path $destDir "paje.cmd")
     } else {
-        Write-Info "Instalacao finalizada. Execute com: $destDir\paje.ps1"
+        Write-Info "Instalacao finalizada. Execute com: paje (se estiver no PATH) ou $destDir\paje.cmd"
     }
 }
 
