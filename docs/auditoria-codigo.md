@@ -88,6 +88,35 @@ Chave adicionada a `pt_BR.ts` e `en_US.ts` como `cli.log.tuiUnavailable` ("Sess�
 
 ---
 
+### ~~BUG-12~~ — `parallelSync.ts` — `hasGitDir` local chamava o binário POSIX `test`, quebrando no Windows
+**Severidade: ALTO** | **Status: RESOLVIDO**
+
+`parallelSync.ts` tinha sua própria cópia de `hasGitDir` que detectava um repositório
+já clonado via `execFile("test", ["-d", gitDir])` — `test` é um binário/builtin do
+shell POSIX inexistente no Windows. A chamada falhava silenciosamente lá (erro
+engolido por `.then(() => true, () => false)`), então todo repositório era tratado
+como "não clonado ainda", mesmo os já existentes, quebrando a detecção de status.
+Além do bug de portabilidade, era uma duplicata: `gitRepoScanner.ts` já exportava um
+`hasGitDir` correto e portátil (via `fs.promises.stat`). Corrigido removendo a cópia
+local e importando a versão de `gitRepoScanner.ts` (`parallelSync.ts:8`). Teste de
+regressão em `tests/git_has_git_dir_portable_test.ts`.
+
+---
+
+### ~~BUG-13~~ — `sshManager.ts` — `ensurePajeKeyPair` quebrava ao sobrescrever a mesma chave duas vezes no Windows
+**Severidade: MÉDIO** | **Status: RESOLVIDO**
+
+Ao sobrescrever uma chave SSH existente, o código renomeava a chave antiga para
+`.bak` via `fs.renameSync`. No POSIX, `rename()` sobrescreve silenciosamente um
+destino já existente; no Windows, `fs.renameSync` lança `EEXIST` nesse caso — então
+sobrescrever a mesma chave uma segunda vez (deixando um `.bak` da primeira vez)
+falhava só nesse SO. Corrigido em `sshManager.ts` removendo qualquer `.bak`/`.pub.bak`
+pré-existente antes de renomear. Teste de regressão em
+`tests/ssh_key_overwrite_repeated_test.ts` (simula o `EEXIST` do Windows trocando
+`fs.renameSync` por uma versão mais estrita, mesmo rodando em Linux).
+
+---
+
 ## 2. INCONSISTÊNCIAS ENTRE ARQUIVOS
 
 ### ~~INC-01~~ — Separador de branch em `syncRepos`: `#` no CLI vs `@` na TUI
