@@ -49,6 +49,14 @@ Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/lukeb
 
 Mesmo comportamento do instalador Linux (checa o Git — instalando via `winget` se necessário —, clona o repositório, executa health-check e oferece adicionar o PAJÉ ao `PATH` do usuário), adaptado às ferramentas nativas do PowerShell 5.1+/7+. Se o PowerShell bloquear a execução do script baixado, rode `Unblock-File install-paje.ps1` antes, ou ajuste a política de execução da sessão atual com `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`.
 
+### Windows (cmd)
+
+Equivalente ao comando acima, mas rodável direto no `cmd.exe` — já contorna o bloqueio de política de execução sem precisar de `Unblock-File`/`Set-ExecutionPolicy` manual, já que `-ExecutionPolicy Bypass` é aplicado só ao processo do PowerShell que baixa e executa o script, sem alterar nenhuma configuração persistente do sistema:
+
+```cmd
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -UseBasicParsing -Uri https://raw.githubusercontent.com/lukeboh/paje/main/install-paje.ps1 -OutFile install-paje.ps1" && powershell -NoProfile -ExecutionPolicy Bypass -File install-paje.ps1
+```
+
 ## Como executar
 
 ```bash
