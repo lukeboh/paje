@@ -24,6 +24,7 @@ export const buildGitLabTree = (
       children: [],
       selected: false,
       partiallySelected: false,
+      excludePattern: `${group.full_path}/**`,
     });
   });
 
@@ -54,6 +55,7 @@ export const buildGitLabTree = (
       localPath: project.pajeOriginalPathWithNamespace ?? project.path_with_namespace,
       selected: false,
       partiallySelected: false,
+      excludePattern: project.path_with_namespace,
     };
 
     if (namespaceId && groupMap.has(namespaceId)) {
@@ -169,6 +171,28 @@ export const filterTreeByText = (nodes: GitLabTreeNode[], query: string): GitLab
   return nodes
     .map((node) => visit(node))
     .filter((node): node is GitLabTreeNode => node !== null);
+};
+
+// Permanently removes the given node ids (and their whole subtree, for a
+// group) from the tree. Used right after an excludeFilter pattern is
+// persisted to env.yaml, so the current screen reflects the exclusion
+// instantly instead of waiting for the next reload — the persisted config
+// is what guarantees the node stays gone on future loads; this is purely
+// for immediate visual feedback in the tree already on screen.
+export const removeTreeNodes = (nodes: GitLabTreeNode[], nodeIds: Set<string>): GitLabTreeNode[] => {
+  const visit = (node: GitLabTreeNode): GitLabTreeNode | null => {
+    if (nodeIds.has(node.id)) {
+      return null;
+    }
+    if (!node.children) {
+      return node;
+    }
+    const filteredChildren = node.children
+      .map((child) => visit(child))
+      .filter((child): child is GitLabTreeNode => child !== null);
+    return { ...node, children: filteredChildren };
+  };
+  return nodes.map((node) => visit(node)).filter((node): node is GitLabTreeNode => node !== null);
 };
 
 export const collectProjectNodesFromNode = (node: GitLabTreeNode): GitLabTreeNode[] => {
