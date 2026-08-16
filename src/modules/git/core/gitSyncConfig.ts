@@ -35,6 +35,7 @@ export type GitSyncConfigInput = {
   noPublicRepos?: boolean;
   noArchivedRepos?: boolean;
   filter?: string;
+  excludeFilter?: string;
   syncRepos?: string;
   dryRun?: boolean;
   parallels?: string;
@@ -141,6 +142,7 @@ export const resolveGitSyncConfig = (
     false
   );
   const filterResolution = resolveEnvOrCliString(cliOptions.filter, "filter", "filter");
+  const excludeFilterResolution = resolveEnvOrCliString(cliOptions.excludeFilter, "excludeFilter", "exclude-filter");
   const syncReposResolution = resolveEnvOrCliArray(cliOptions.syncRepos, "syncRepos", "sync-repos");
   const dryRunResolution = resolveEnvOrCliBoolean(cliOptions.dryRun, "dryRun", "dry-run", cliDryRun, false);
   const parallelsResolution = resolveEnvOrCliString(cliOptions.parallels, "parallels", "parallels");
@@ -166,6 +168,7 @@ export const resolveGitSyncConfig = (
     noPublicRepos: (noPublicReposResolution.value as boolean | undefined) ?? false,
     noArchivedRepos: (noArchivedReposResolution.value as boolean | undefined) ?? false,
     filter: (filterResolution.value as string | undefined) ?? "",
+    excludeFilter: (excludeFilterResolution.value as string | undefined) ?? "",
     syncRepos: (syncReposResolution.value as string | undefined) ?? "",
     dryRun: (dryRunResolution.value as boolean | undefined) ?? false,
     parallels: (parallelsResolution.value as string | undefined) ?? "",
@@ -277,6 +280,12 @@ export const resolveGitSyncConfig = (
         description: t("parameters.gitSync.filter"),
         value: config.filter,
         source: buildSource(filterResolution),
+      }),
+      buildParameter({
+        name: "excludeFilter",
+        description: t("parameters.gitSync.excludeFilter"),
+        value: config.excludeFilter,
+        source: buildSource(excludeFilterResolution),
       }),
       buildParameter({
         name: "syncRepos",

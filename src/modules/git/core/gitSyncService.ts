@@ -508,6 +508,7 @@ const buildSummary = (): GitSyncSummary => ({
 
 export const filterProjects = (projects: GitLabProject[], config: GitSyncConfig): GitLabProject[] => {
   const filterPatterns = compileAntPatterns(config.filter);
+  const excludePatterns = compileAntPatterns(config.excludeFilter);
   return projects.filter((project) => {
     if (config.noArchivedRepos && project.archived) {
       return false;
@@ -515,17 +516,40 @@ export const filterProjects = (projects: GitLabProject[], config: GitSyncConfig)
     if (config.noPublicRepos && project.visibility === "public") {
       return false;
     }
-    if (filterPatterns.length === 0) {
-      return true;
-    }
     const candidates = [
       project.path_with_namespace,
       project.pajeOriginalPathWithNamespace,
       project.namespace?.full_path,
       project.namespace?.full_path ? `${project.namespace.full_path}/${project.name}` : undefined,
     ].filter(Boolean) as string[];
+    // matchesAntPatterns treats an empty pattern list as "matches
+    // everything" (right for the include filter below, where no filter
+    // means show all) — for excludeFilter that would invert the meaning
+    // and hide every project, so the length check here is required, not
+    // just an optimization.
+    if (excludePatterns.length > 0 && candidates.some((candidate) => matchesAntPatterns(candidate, excludePatterns))) {
+      return false;
+    }
+    if (filterPatterns.length === 0) {
+      return true;
+    }
     return candidates.some((candidate) => matchesAntPatterns(candidate, filterPatterns));
   });
+};
+
+// Excludes groups whose full_path matches excludeFilter — filterProjects
+// alone only drops projects, so a fully-excluded folder would otherwise
+// still show up in the tree as an empty group. A pattern like "grupo/**"
+// matches the group's own full_path (zero-width case) and every descendant
+// at any depth, so excluding a folder here cascades to child groups for
+// free; only patterns ending in "/**" cascade this way, which is exactly
+// what the TUI's exclude action always generates (see treeBuilder.ts).
+export const filterGroups = (groups: GitLabGroup[], config: GitSyncConfig): GitLabGroup[] => {
+  const excludePatterns = compileAntPatterns(config.excludeFilter);
+  if (excludePatterns.length === 0) {
+    return groups;
+  }
+  return groups.filter((group) => !matchesAntPatterns(group.full_path, excludePatterns));
 };
 
 export const prepareTargets = (
@@ -654,7 +678,7 @@ export const createGitSyncCore = (): GitSyncCore => {
           const resolvedPaths = resolveLocalPathConflicts(filteredProjects);
 
           const statusMap = cached.statusMap;
-          const tree = buildGitLabTree(groups, filteredProjects);
+          const tree = buildGitLabTree(filterGroups(groups, config), filteredProjects);
           const applyStatusToTree = (node: GitLabTreeNode): void => {
             if (node.type === "project" && node.project) {
               node.status = statusMap[node.project.id];
@@ -969,7 +993,7 @@ export const createGitSyncCore = (): GitSyncCore => {
         // non-critical
       }
 
-      const tree = buildGitLabTree(groups, filteredProjects);
+      const tree = buildGitLabTree(filterGroups(groups, config), filteredProjects);
       const applyStatusToTree = (node: GitLabTreeNode): void => {
         if (node.type === "project" && node.project) {
           node.status = statusMap[node.project.id];

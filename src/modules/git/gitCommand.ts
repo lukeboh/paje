@@ -221,6 +221,7 @@ type GitSyncCliOptions = {
   noPublicRepos?: boolean;
   noArchivedRepos?: boolean;
   filter?: string;
+  excludeFilter?: string;
   syncRepos?: string;
   dryRun?: boolean;
   parallels?: string;
@@ -1678,6 +1679,7 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
     .option("--no-public-repos [value]", t("cli.command.gitSync.options.noPublicRepos"), false)
     .option("--no-archived-repos [value]", t("cli.command.gitSync.options.noArchivedRepos"), false)
     .option("-f, --filter <pattern>", t("cli.command.gitSync.options.filter"))
+    .option("--exclude-filter <pattern>", t("cli.command.gitSync.options.excludeFilter"))
     .option("--sync-repos <pattern>", t("cli.command.gitSync.options.syncRepos"))
     .option("--parallels <value>", t("cli.command.gitSync.options.parallels"))
     .option("--dry-run", t("cli.command.gitSync.options.dryRun"), false)
