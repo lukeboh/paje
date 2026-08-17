@@ -9,6 +9,7 @@ const testFiles = [
   "./git_parallel_sync_test.js",
   "./git_has_git_dir_portable_test.js",
   "./git_branch_service_test.js",
+  "./git_branch_bulk_test.js",
   "./git_command_helpers_test.js",
   "./git_command_select_server_test.js",
   "./ssh_config_test.js",
