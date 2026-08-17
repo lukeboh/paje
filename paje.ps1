@@ -4,6 +4,13 @@ $ErrorActionPreference = "Stop"
 
 $RootDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
+# Precisa ser capturado ANTES do "Set-Location $RootDir" abaixo — dali em
+# diante o diretorio de trabalho do processo e o de instalacao do PAJE, nao
+# mais o de onde o usuario chamou "paje". gitCommand.ts usa isso pra
+# posicionar o cursor da arvore no repositorio correspondente ao diretorio
+# de origem.
+$env:PAJE_INVOKED_FROM = (Get-Location).Path
+
 if (-not (Test-Path (Join-Path $RootDir "package.json"))) {
     Write-Host "[ERRO] package.json nao encontrado. Execute o PAJE a partir do diretorio raiz." -ForegroundColor Red
     exit 1

@@ -471,6 +471,23 @@ como shell principal no Windows e uma solução via `doskey`/registro
 `AutoRun` seria superfície nova desproporcional ao tamanho desta evolução;
 `paje.cmd` não é tocado.
 
+**O outro lado dessa mesma volta** (`RF-10`): quando a árvore do git-sync
+abre, ela tenta posicionar o cursor no repositório correspondente ao
+diretório de onde o `paje` foi chamado — mas `paje.sh`/`paje.ps1` fazem
+`cd`/`Set-Location` para o diretório de instalação do PAJÉ **antes** de
+iniciar o processo Node (necessário pra rodar `npm run dev` a partir da
+raiz do projeto), o que apagava o diretório original do
+`process.cwd()` visto pelo código — o cursor sempre "via" o próprio
+diretório do PAJÉ, nunca o do usuário. Os dois scripts agora capturam o
+diretório de invocação **antes** desse `cd` e exportam em
+`PAJE_INVOKED_FROM`; `gitCommand.ts` lê essa variável (caindo em
+`process.cwd()` só quando ausente, ex.: `npm run dev` chamado direto em
+desenvolvimento) e passa como `cwd` explícito pro
+`git rev-parse --show-toplevel` que resolve o repositório atual — sem
+precisar `cd` o processo Node em si. Isso fecha o ciclo com o `Ctrl+Q`: sair
+num diretório e chamar `paje` de novo de lá deve reabrir a árvore já
+destacando aquele mesmo repositório.
+
 ### Fluxo de autenticação por tipo de servidor
 
 Modelo *token-first*: todo servidor registrado termina com um token (único

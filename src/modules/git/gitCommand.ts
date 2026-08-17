@@ -2199,7 +2199,14 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
       }
       tree.forEach((node) => buildProjectNodeMap(node));
 
-      const cwdGitRoot = await runGit(["rev-parse", "--show-toplevel"]).then((s) => s.trim()).catch(() => "");
+      // paje.sh/paje.ps1 cd para o diretório de instalação do PAJÉ antes de
+      // iniciar este processo Node — process.cwd() aqui dentro nunca reflete
+      // de onde o usuário realmente chamou "paje". Os dois exportam
+      // PAJE_INVOKED_FROM com o diretório original antes desse cd; sem essa
+      // variável (ex.: "npm run dev" chamado direto em desenvolvimento),
+      // cai de volta em process.cwd().
+      const invokedFromDir = process.env.PAJE_INVOKED_FROM || process.cwd();
+      const cwdGitRoot = await runGit(["rev-parse", "--show-toplevel"], invokedFromDir).then((s) => s.trim()).catch(() => "");
       let initialSelectedNodeId: string | undefined;
       if (cwdGitRoot) {
         const normalizedCwdRoot = path.resolve(cwdGitRoot);

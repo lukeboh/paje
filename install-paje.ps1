@@ -237,6 +237,11 @@ function paje {
 }
 "@
     Write-Info "Funcao paje (cd persistente) adicionada a `$PROFILE."
+    # $PROFILE so e lido automaticamente na abertura de uma sessao do
+    # PowerShell — editar o arquivo em disco nao recarrega a funcao nesta
+    # sessao ja aberta (mesma ideia do "source" no lado Linux).
+    Write-WarnMsg "A funcao paje so entra em vigor em sessoes novas do PowerShell."
+    Write-WarnMsg "Para usar agora nesta sessao, execute: . `$PROFILE"
 }
 
 function Confirm-FinalVerification([string]$DestDir) {

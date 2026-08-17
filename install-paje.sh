@@ -270,6 +270,7 @@ ensure_paje_on_path() {
 
   case ":$PATH:" in
     *":$dest_dir:"*)
+      log_info "PAJÉ já está no PATH desta sessão."
       return 0
       ;;
   esac
@@ -376,10 +377,13 @@ ensure_paje_shell_function() {
     printf '}\n'
   } >>"$rc_file" || abort "Falha ao atualizar $rc_file"
 
-  if [[ -f "$rc_file" ]]; then
-    # shellcheck disable=SC1090
-    source "$rc_file" || log_warn "Não foi possível aplicar o source em $rc_file."
-  fi
+  # Diferente do PATH em ensure_paje_on_path, aqui não tem "source" que
+  # ajude: este script inteiro já é um processo filho do terminal do
+  # usuário, e um "source" rodado aqui dentro só afetaria esse processo
+  # filho — nunca o shell interativo que chamou install-paje.sh. Avisa em
+  # vez de fingir que a função já está ativa nesta sessão.
+  log_warn "A função paje() só entra em vigor em terminais novos."
+  log_warn "Para usar agora nesta sessão, execute: source $rc_file"
 }
 
 summary() {
@@ -473,8 +477,15 @@ main() {
   ensure_dependencies_installed "$dest_dir"
 
   ensure_cli_symlink "$dest_dir"
-  ensure_paje_on_path "$dest_dir"
+  # ensure_paje_shell_function ANTES de ensure_paje_on_path: esta última
+  # pode oferecer "recarregar o shell agora?" e, se aceito, faz
+  # "exec $SHELL -l" — substituindo o processo do instalador por um shell
+  # de login novo, que nunca retorna pro resto deste main(). Se a função
+  # paje() só fosse escrita depois disso, esse caminho a deixaria de fora
+  # do reload; escrevendo antes, um único "sim" ali já recarrega as duas
+  # coisas de uma vez.
   ensure_paje_shell_function
+  ensure_paje_on_path "$dest_dir"
   final_verification "$dest_dir"
 
   if ask_yes_no "Deseja iniciar o PAJÉ agora? (S/N) [padrão: S] " "S"; then
