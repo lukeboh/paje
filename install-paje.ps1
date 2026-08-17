@@ -145,6 +145,42 @@ function Confirm-PajeOnPath([string]$DestDir) {
     Write-Info "PAJE adicionado ao PATH do usuario ($DestDir). Ja disponivel nesta sessao; novos terminais tambem terao automaticamente."
 }
 
+# Registra uma funcao "paje" no $PROFILE do usuario que envolve o binario
+# real (paje.cmd) para permitir "cd persistente" ao sair via Ctrl+Q na
+# arvore git-sync. paje.cmd sempre roda como processo novo (powershell -File
+# paje.ps1) - um Set-Location dentro dele nunca afeta a sessao interativa
+# que chamou. So uma funcao do proprio $PROFILE, que roda no processo da
+# sessao, consegue. A funcao sombreia o comando "paje" do PATH (resolucao de
+# comando do PowerShell prioriza funcoes sobre executaveis externos).
+function Confirm-PajeShellFunction([string]$DestDir) {
+    $marker = "# PAJE - cd persistente"
+    if ((Test-Path $PROFILE) -and (Select-String -Path $PROFILE -Pattern ([regex]::Escape($marker)) -Quiet)) {
+        Write-Info "Funcao paje (cd persistente) ja presente em `$PROFILE."
+        return
+    }
+
+    if (-not (Test-Path $PROFILE)) {
+        New-Item -ItemType File -Path $PROFILE -Force | Out-Null
+    }
+
+    $pajeCmdPath = Join-Path $DestDir "paje.cmd"
+    Add-Content -Path $PROFILE -Value @"
+$marker
+function paje {
+    & "$pajeCmdPath" @args
+    `$cdTarget = Join-Path `$env:USERPROFILE ".paje\cd-target"
+    if (Test-Path `$cdTarget) {
+        `$dir = (Get-Content `$cdTarget -Raw).Trim()
+        Remove-Item `$cdTarget -Force
+        if (`$dir -and (Test-Path `$dir)) {
+            Set-Location `$dir
+        }
+    }
+}
+"@
+    Write-Info "Funcao paje (cd persistente) adicionada a `$PROFILE."
+}
+
 function Confirm-FinalVerification([string]$DestDir) {
     $entrypoint = Join-Path $DestDir "paje.ps1"
     if (-not (Test-Path $entrypoint)) {
@@ -181,6 +217,7 @@ function Invoke-Main {
     }
 
     Confirm-PajeOnPath $destDir
+    Confirm-PajeShellFunction $destDir
     Confirm-FinalVerification $destDir
 
     if (Read-YesNo "Deseja iniciar o PAJE agora?" "S") {

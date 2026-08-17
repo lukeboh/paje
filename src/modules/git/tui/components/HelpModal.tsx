@@ -54,6 +54,7 @@ const resolveShortcutKey = (input: string, key: Key): string | null => {
       w: "Ctrl+W",
       b: "Ctrl+B",
       x: "Ctrl+X",
+      q: "Ctrl+Q",
     };
     if (ctrlMap[lower]) {
       return ctrlMap[lower];
@@ -178,6 +179,12 @@ const buildGroups = (options: { logMaximized: boolean; workspaceMaximized: boole
           id: "tree-bulk-return-default",
           key: "Ctrl+R",
           description: t("helpModal.shortcuts.tree.bulkReturnDefault"),
+          contexts: ["tree"],
+        },
+        {
+          id: "tree-exit-at-directory",
+          key: "Ctrl+Q",
+          description: t("helpModal.shortcuts.tree.exitAtDirectory"),
           contexts: ["tree"],
         },
       ],

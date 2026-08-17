@@ -32,7 +32,7 @@ curl -fsSL https://raw.githubusercontent.com/lukeboh/paje/main/install-paje.sh -
   && chmod +x install-paje.sh && ./install-paje.sh
 ```
 
-O instalador verifica o Git, clona o repositório, executa health-check, cria o link `paje` e opcionalmente adiciona ao `PATH`.
+O instalador verifica o Git, clona o repositório, executa health-check, cria o link `paje`, opcionalmente adiciona ao `PATH` e registra uma função `paje()` no `.bashrc`/`.zshrc`/`.profile` (necessária para o "cd persistente" do `Ctrl+Q` — ver "Sair no diretório do repositório destacado" abaixo). **Quem já tinha o PAJÉ instalado antes dessa função existir** precisa rodar o instalador de novo (ele detecta o que já está feito e só acrescenta o que falta) ou reabrir o terminal/rodar `source ~/.bashrc` (ou equivalente) depois — sem isso, `Ctrl+Q` continua encerrando o PAJÉ normalmente, só que o terminal não muda de diretório.
 
 Para garantir Node.js 24.x correto:
 
@@ -50,6 +50,8 @@ Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/lukeb
 Mesmo comportamento do instalador Linux (checa o Git — instalando via `winget` se necessário —, clona o repositório, executa health-check e oferece adicionar o PAJÉ ao `PATH` do usuário), adaptado às ferramentas nativas do PowerShell 5.1+/7+. Se o PowerShell bloquear a execução do script baixado, rode `Unblock-File install-paje.ps1` antes, ou ajuste a política de execução da sessão atual com `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`.
 
 O instalador também cria `paje.cmd` junto do `paje.ps1` — um shim que permite chamar `paje` (sem digitar a extensão) tanto no `cmd.exe` quanto dentro do próprio PowerShell, exatamente como no Linux. Isso é necessário porque `.ps1` não faz parte do `PATHEXT` padrão do Windows, e o PowerShell recusa por segurança rodar um script pelo nome nu mesmo com o diretório no `PATH` — só `.cmd`/`.bat`/`.exe` resolvem dessa forma.
+
+O instalador também registra uma função `paje` no `$PROFILE` do PowerShell, necessária para o "cd persistente" do `Ctrl+Q` (mesma lógica do `.bashrc`/`.zshrc` no Linux — ver "Sair no diretório do repositório destacado" abaixo). Quem já tinha o PAJÉ instalado antes dessa função existir precisa rodar o instalador de novo ou reabrir o PowerShell. **`cmd.exe` puro (sem passar pela função do PowerShell) não ganha essa funcionalidade** — `Ctrl+Q` continua encerrando o PAJÉ normalmente, só que o terminal não muda de diretório.
 
 ### Windows (cmd)
 
@@ -114,6 +116,8 @@ Carrega a árvore de grupos/projetos de todos os servidores configurados (GitLab
 - **Checkout em massa (Ctrl+K)**: na TUI, com um ou mais itens marcados por checkbox, pede o nome de uma branch e faz checkout dela em todos os repositórios marcados. Se a branch não existir em algum deles, avisa quais faltam e oferece a opção de criá-la (e enviá-la ao remoto) ali também. Sem nenhum item marcado, apenas avisa — não há fallback para o item destacado.
 - **Voltar em massa à branch padrão (Ctrl+R)**: mesma exigência de seleção do Ctrl+K; volta cada repositório marcado à sua própria branch padrão, pulando (sem travar o lote) os que não têm branch padrão conhecida.
 - **Renomear branch (dentro do Ctrl+B)**: a modal de branch já existente ganhou a opção "✎ Renomear branch atual" — renomeia localmente (`git branch -m`) e, se houver remoto configurado, envia o novo nome e remove o antigo do remoto (nessa ordem, para nunca deixar a branch sem nenhuma cópia remota). Opera sobre um único repositório (o destacado), não em massa.
+- **Tag ARQUIVADO**: repositórios com `archived: true` na API de origem exibem uma tag "ARQUIVADO" (cinza) junto de servidor/branch/status na árvore, sempre que não estiverem ocultos por `--no-archived-repos`.
+- **Sair no diretório do repositório destacado (Ctrl+Q)**: encerra o PAJÉ e deixa o terminal posicionado no diretório do repositório destacado pelo cursor (não precisa estar marcado por checkbox). Exige um projeto com clone git já existente localmente; num grupo, ou num projeto ainda não clonado, apenas avisa. **Requer a função de shell instalada pelo instalador** (ver seção de Instalação) — sem ela, o PAJÉ ainda encerra normalmente, mas o terminal não muda de diretório.
 - Em servidores GitHub, organizações são exibidas como grupos e o login do usuário aparece como grupo pessoal.
 - O log usa `LoggerBroker` (motor pino) com transports para console (`info`), painel TUI (`info`; `debug` com `--verbose`) e arquivo diário `~/.paje/logs` via pino-pretty.
 
@@ -324,6 +328,10 @@ Layout detalhado em [`docs/TUI-leiaute.md`](docs/TUI-leiaute.md).
 | `Enter` | Sincronizar apenas o escopo destacado (linha/grupo) |
 | `Ctrl+X` | Alternar filtro: todos / apenas selecionados |
 | `Ctrl+B` | Abrir modal de seleção de branch |
+| `Ctrl+D` | Excluir item destacado da árvore (`excludeFilter`) |
+| `Ctrl+K` | Checkout em massa nos itens marcados (com opção de criar) |
+| `Ctrl+R` | Voltar os itens marcados para a branch padrão de cada um |
+| `Ctrl+Q` | Sair no diretório do repositório destacado |
 | `Esc` | Cancelar |
 
 > Nota: o terminal envia o mesmo byte para `Ctrl+M` e `Enter`, e o byte de backspace para `Ctrl+H`. Por isso a pesquisa por nome exige `Ctrl+F` antes de digitar, e a ajuda (`Ctrl+H`) é reconhecida pelo byte de backspace nas telas sem campo de texto ativo.

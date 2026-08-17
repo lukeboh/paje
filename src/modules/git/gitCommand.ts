@@ -2240,7 +2240,7 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
         return `${bar} ${percentLabel} ${volumeLabel} ${speedLabel} ${objectsLabel}`;
       };
 
-      await renderRepositoryTree(tree, (id) => toggleById(tree, id), session, {
+      const treeResult = await renderRepositoryTree(tree, (id) => toggleById(tree, id), session, {
         header,
         footer: t("tui.tree.orientationConfirm"),
         parameters: session?.getParameters() ?? parametersSummary,
@@ -2420,6 +2420,19 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
           );
         },
       });
+
+      if (treeResult.exitToDirectory) {
+        // The one deliberate process.exit in this codebase: the tree screen
+        // already wrote ~/.paje/cd-target (writeCdTarget, tui.app.tsx) before
+        // resolving with exitToDirectory — the shell function the installer
+        // registers (see install-paje.sh/install-paje.ps1) reads that file
+        // and does the actual cd once this process is gone. Terminating here
+        // (rather than looping back to the menu, or threading a "should
+        // exit" flag through cli.ts's generic while-loop) is what makes
+        // Ctrl+Q work the same whether PAJÉ was invoked via the interactive
+        // menu or as a direct `paje git-sync`.
+        process.exit(0);
+      }
 
       return;
     });

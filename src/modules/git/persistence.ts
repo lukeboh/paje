@@ -10,6 +10,7 @@ export type PajePaths = {
   serversFile: string;
   tokensFile: string;
   treeCacheFile: string;
+  cdTargetFile: string;
 };
 
 const DEFAULT_BASE_DIR = ".paje";
@@ -21,12 +22,14 @@ export const resolvePajePaths = (): PajePaths => {
   const serversFile = path.join(baseDir, "git-servers.json");
   const tokensFile = path.join(baseDir, "git-tokens.json");
   const treeCacheFile = path.join(baseDir, "git-tree-cache.json");
+  const cdTargetFile = path.join(baseDir, "cd-target");
   return {
     baseDir,
     logsDir,
     serversFile,
     tokensFile,
     treeCacheFile,
+    cdTargetFile,
   };
 };
 
@@ -78,6 +81,15 @@ export const readGitTreeCache = (): GitTreeCacheEntry | null => {
 export const writeGitTreeCache = (entry: GitTreeCacheEntry): void => {
   const { treeCacheFile } = resolvePajePaths();
   writeJsonFile(treeCacheFile, entry);
+};
+
+// Plain text, not JSON — the only consumer is a shell function (bash/zsh
+// paje(), PowerShell's paje profile function) appended by the installer,
+// which just needs the raw path to cd into after PAJÉ exits.
+export const writeCdTarget = (targetPath: string): void => {
+  const { cdTargetFile, baseDir } = resolvePajePaths();
+  fs.mkdirSync(baseDir, { recursive: true });
+  fs.writeFileSync(cdTargetFile, targetPath, "utf-8");
 };
 
 const camelToKebab = (name: string): string =>

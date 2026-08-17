@@ -114,6 +114,7 @@ const enUS: PtBrTranslations = {
         exclude: "exclude from tree (never sync or show it again)",
         bulkCheckout: "bulk checkout on marked repositories (with option to create)",
         bulkReturnDefault: "return marked repositories to each one's default branch",
+        exitAtDirectory: "exit and switch to the highlighted repository's directory",
       },
     },
   },
@@ -121,9 +122,9 @@ const enUS: PtBrTranslations = {
     tree: {
       empty: "(No repositories found)",
       orientationDefault:
-        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | Ctrl+S to sync all | Enter to sync highlighted scope | Esc to cancel | Ctrl+F to search by name | Ctrl+X to filter selected | Ctrl+B to branch | Ctrl+D to exclude from tree | Ctrl+K to bulk checkout | Ctrl+R to bulk return to default | Ctrl+W to expand workspace | Ctrl+L to expand log | Ctrl+H for help",
+        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | Ctrl+S to sync all | Enter to sync highlighted scope | Esc to cancel | Ctrl+F to search by name | Ctrl+X to filter selected | Ctrl+B to branch | Ctrl+D to exclude from tree | Ctrl+K to bulk checkout | Ctrl+R to bulk return to default | Ctrl+Q to exit at highlighted directory | Ctrl+W to expand workspace | Ctrl+L to expand log | Ctrl+H for help",
       orientationConfirm:
-        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | Ctrl+S to confirm selection (all) | Enter to confirm selection (scope) | Esc to cancel | Ctrl+F to search by name | Ctrl+X to filter selected | Ctrl+B to branch | Ctrl+D to exclude from tree | Ctrl+K to bulk checkout | Ctrl+R to bulk return to default | Ctrl+W to expand workspace | Ctrl+L to expand log | Ctrl+H for help",
+        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | Ctrl+S to confirm selection (all) | Enter to confirm selection (scope) | Esc to cancel | Ctrl+F to search by name | Ctrl+X to filter selected | Ctrl+B to branch | Ctrl+D to exclude from tree | Ctrl+K to bulk checkout | Ctrl+R to bulk return to default | Ctrl+Q to exit at highlighted directory | Ctrl+W to expand workspace | Ctrl+L to expand log | Ctrl+H for help",
       textFilterIndicator: 'Filter: "{{query}}" — {{count}} item(s) | Esc clears | Backspace erases',
       filterAll: "[DEBUG] Showing all repositories.",
       filterSelected: "[DEBUG] Showing only selected repositories.",
@@ -143,6 +144,10 @@ const enUS: PtBrTranslations = {
       bulkSkippedBranchMissing: "{{label}}: skipped (branch doesn't exist and creation wasn't requested).",
       bulkSkippedNoDefaultBranch: "{{label}}: skipped (default branch unknown).",
       bulkFailed: "{{label}}: failed — {{error}}",
+      archivedTag: "ARCHIVED",
+      exitAtDirectoryInvalid: "Select a valid cloned repository to exit into its directory.",
+      exitAtDirectoryConfirmTitle: "Exit and change directory",
+      exitAtDirectoryConfirmMessage: "PAJÉ will exit and the terminal will be positioned at: {{path}}",
     },
     loading: {
       repositories: "Loading repositories...",

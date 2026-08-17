@@ -310,6 +310,46 @@ ensure_paje_on_path() {
   fi
 }
 
+# Registra uma função paje() que envolve o binário real (o symlink criado por
+# ensure_cli_symlink) para permitir "cd persistente" ao sair via Ctrl+Q na
+# árvore git-sync. Um processo filho (paje.sh, e o "npm run dev" que ele
+# executa) nunca consegue mudar o diretório do shell que o chamou — só uma
+# função do próprio shell, que roda no processo do usuário, consegue. A
+# própria função sombreia o comando "paje": "command paje" dentro dela
+# ignora a função na resolução e chama o symlink real.
+ensure_paje_shell_function() {
+  local rc_file
+  rc_file="$(detect_shell_rc)"
+  local marker="# PAJÉ - cd persistente"
+
+  if [[ -f "$rc_file" ]] && grep -Fxq "$marker" "$rc_file"; then
+    log_info "Função paje() de cd persistente já presente em $rc_file."
+    return 0
+  fi
+
+  log_info "Adicionando função paje() (cd persistente) em $rc_file"
+  {
+    printf "\n%s\n" "$marker"
+    printf 'paje() {\n'
+    printf '  command paje "$@"\n'
+    printf '  local _paje_cd_target="$HOME/.paje/cd-target"\n'
+    printf '  if [[ -f "$_paje_cd_target" ]]; then\n'
+    printf '    local _paje_dir\n'
+    printf '    _paje_dir="$(cat "$_paje_cd_target")"\n'
+    printf '    rm -f "$_paje_cd_target"\n'
+    printf '    if [[ -n "$_paje_dir" && -d "$_paje_dir" ]]; then\n'
+    printf '      cd "$_paje_dir" || true\n'
+    printf '    fi\n'
+    printf '  fi\n'
+    printf '}\n'
+  } >>"$rc_file" || abort "Falha ao atualizar $rc_file"
+
+  if [[ -f "$rc_file" ]]; then
+    # shellcheck disable=SC1090
+    source "$rc_file" || log_warn "Não foi possível aplicar o source em $rc_file."
+  fi
+}
+
 summary() {
   local repo_url="$1"
   local dest_dir="$2"
@@ -399,6 +439,7 @@ main() {
 
   ensure_cli_symlink "$dest_dir"
   ensure_paje_on_path "$dest_dir"
+  ensure_paje_shell_function
   final_verification "$dest_dir"
 
   if ask_yes_no "Deseja iniciar o PAJÉ agora? (S/N) [padrão: S] " "S"; then
