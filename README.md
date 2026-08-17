@@ -4,18 +4,57 @@ O PAJÉ automatiza tarefas repetitivas de ambiente de desenvolvimento com servid
 
 ## Características
 
-- **CLI + TUI + VSCode**: execução por comando (`paje <comando>`), interface textual guiada ao iniciar sem parâmetros, e extensão VSCode com a árvore de repositórios na sidebar — as três camadas de apresentação consomem o mesmo core.
-- **Sincronização paralela de repositórios**: seleção de grupos/projetos, clone/pull em paralelo, resumo de status.
+### Sincronização
+
+- **Sincronização paralela de repositórios**: seleção de grupos/projetos por checkbox, clone/pull em paralelo (paralelismo configurável ou automático), resumo final com contagem por ação e progresso individual por repositório (barra, % , volume, velocidade, objetos) durante a execução.
 - **GitLab e GitHub**: suporte a gitlab.com, GitLab self-hosted, github.com e GitHub Enterprise Server — tipo detectado automaticamente pela URL.
-- **Multi-servidor**: múltiplos servidores simultâneos (inclusive misturando GitLab e GitHub), cada um com suas próprias configurações (diretório, filtros, e-mail).
-- **Abertura instantânea da árvore**: cache local (`~/.paje/git-tree-cache.json`) permite exibir a árvore imediatamente; o status de cada repositório é atualizado em segundo plano.
-- **Cursor posicionado no contexto**: ao executar `paje git-sync` de dentro de um clone, a árvore abre com o cursor no repositório correspondente.
-- **Filtro por digitação**: digitar na árvore filtra os repositórios em tempo real (nome e caminho, sem diferenciar maiúsculas); Esc limpa o filtro.
-- **Editor de parâmetros na TUI**: `Ctrl+E` abre editor do `env.yaml` com edição inline, alterações pendentes e gravação preservando comentários.
-- **Gerenciamento de SSH e tokens**: geração ou reaproveitamento de chaves, atualização de `~/.ssh/config`, `known_hosts`, criação e rotação de PAT.
-- **Logs estruturados com pino**: console, arquivo diário e painel TUI colorizado por nível.
-- **Persistência local**: servidores e tokens em `~/.paje/git-servers.json`; cache da árvore em `~/.paje/git-tree-cache.json`; logs em `~/.paje/logs`.
-- **Configuração por arquivo**: parâmetros em `~/.paje/env.yaml` (ou `--env-file`), com prioridade sobre padrões embutidos.
+- **Multi-servidor**: múltiplos servidores simultâneos (inclusive misturando GitLab e GitHub), cada um com suas próprias configurações (diretório, filtros, e-mail), mesclados numa única árvore consolidada — grupos com o mesmo caminho em servidores diferentes viram um único nó, e colisões de caminho local recebem sufixo automático.
+- **Abertura instantânea da árvore**: cache local (`~/.paje/git-tree-cache.json`) permite exibir a árvore imediatamente; o status de cada repositório é recalculado em segundo plano, linha a linha, sem travar a interface.
+- **Cursor posicionado no contexto**: ao executar `paje git-sync` (ou `paje`) de dentro de um clone, a árvore abre com o cursor no repositório correspondente — inclusive depois de sair com `Ctrl+Q` (ver abaixo) e chamar o `paje` de novo de lá.
+- **Filtro por digitação (`Ctrl+F`)**: filtra a árvore em tempo real por nome/caminho, sem diferenciar maiúsculas; `Ctrl+X` alterna para exibir só os itens marcados.
+- **Filtros por padrão Ant/Glob**: `filter` (allow-list) e `excludeFilter` (deny-list — nunca sincroniza nem exibe, mesmo com acesso), combináveis, com múltiplos padrões separados por `;`; `Ctrl+D` na árvore adiciona o item destacado ao `excludeFilter` direto pela interface.
+- **Ocultar públicos/arquivados**: `--no-public-repos`/`--no-archived-repos`; repositórios arquivados exibidos ganham uma tag "ARQUIVADO" (cinza) na árvore.
+- **Sincronização seletiva**: `--sync-repos` sincroniza uma lista específica de `grupo/repo#branch`; `--prepare-local-dirs` só cria a estrutura de pastas sem clonar; `--dry-run` simula sem persistir nada.
+- **Sair no diretório do repositório destacado (`Ctrl+Q`)**: encerra o PAJÉ e deixa o terminal posicionado no diretório do repositório destacado pelo cursor — fecha o ciclo com o item anterior.
+
+### Branches
+
+- **Trocar/criar branch (`Ctrl+B`)**: lista as branches locais do repositório destacado, permite trocar ou criar uma nova a partir dali.
+- **Renomear branch (`Ctrl+B`)**: renomeia local e — se houver remoto configurado — remotamente também (envia o novo nome e remove o antigo do remoto, nessa ordem, para nunca deixar a branch sem nenhuma cópia lá).
+- **Checkout em massa, com opção de criar (`Ctrl+K`)**: troca de branch em todos os repositórios marcados de uma vez; se a branch não existir em algum deles, oferece criá-la e enviá-la ao remoto ali também.
+- **Voltar em massa à branch padrão (`Ctrl+R`)**: volta cada repositório marcado para sua própria branch padrão, pulando sem travar o lote os que não têm essa informação.
+
+### Autenticação e segurança
+
+- **Cadastro guiado por método**: chave SSH (recomendado — gera chave **e** token), usuário/senha (bootstrap de token único, senha nunca persistida) ou colar um token já existente — todo servidor termina com token e/ou chave SSH, nunca com senha guardada.
+- **GitHub OAuth Device Flow**: cadastro de conta GitHub sem colar token manualmente — abre o navegador sozinho (melhor esforço), mostra o código, e faz polling até a autorização.
+- **Sondagem de porta 22**: antes de tentar SSH, testa conectividade; se bloqueada, orienta a escolher usuário/senha ou token colado em vez de travar no meio do fluxo.
+- **`known_hosts` gerenciado automaticamente**: adiciona hosts SSH ausentes via `ssh-keyscan` sozinho (com aviso no log), tanto no cadastro quanto no início de toda sincronização — mesmo quando a árvore vem do cache — para nunca deixar um clone em paralelo travado numa pergunta interativa do SSH sem resposta.
+- **Rotação e cura automática de token**: um PAT do GitLab expirado/revogado é detectado reativamente (401/403) e curado em até 3 passos na mesma execução — rotaciona sozinho, senão pede a senha uma vez para gerar um novo, senão avisa claramente e pula o servidor — sem precisar reiniciar a sincronização.
+- **Bootstrap de credencial faltante durante o próprio `git-sync`**: um servidor cadastrado sem token e sem chave SSH (ex.: versão antiga, cadastro interrompido) não fica travado — o bootstrap roda na hora, pede a senha uma vez e continua.
+- **Gerenciar servidores cadastrados**: lista todos com resumo (tipo · método de auth · status do token) e detalhe completo; selecionar um abre o mesmo formulário de cadastro pré-preenchido, para editar sem duplicar nem perder propriedades que o formulário não exibe.
+- **Reaproveitar chave SSH existente** (`--public-key-path`) ou sobrescrever a atual (`--key-overwrite`) em vez de sempre gerar uma nova.
+
+### Configuração e persistência
+
+- **Configuração por arquivo**: parâmetros em `~/.paje/env.yaml` (ou `--env-file`), com prioridade sobre padrões embutidos; criado automaticamente na primeira execução a partir de um template comentado.
+- **Editor de parâmetros na TUI (`Ctrl+E`)**: edição inline do `env.yaml` sem sair da interface, com alterações pendentes até salvar — grava preservando comentários e ordem das linhas, nunca reescrevendo o arquivo do zero.
+- **Ordem de prioridade clara**: propriedade do servidor > argumento de linha de comando > `env.yaml` > padrão embutido — cada servidor pode sobrepor filtros, diretório e e-mail individualmente.
+- **Persistência local**: servidores e tokens em `~/.paje/git-servers.json` (único segredo persistido em disco); cache da árvore em `~/.paje/git-tree-cache.json` (nunca com tokens); logs em `~/.paje/logs`.
+
+### Interface
+
+- **CLI + TUI + VSCode**: execução por comando (`paje <comando>`), interface textual guiada ao iniciar sem parâmetros, e extensão VSCode com a árvore de repositórios na sidebar — as três camadas de apresentação consomem o mesmo core.
+- **Modal de ajuda contextual (`Ctrl+H`)**: lista os atalhos válidos na tela atual; apertar a tecla ali dentro fecha a ajuda e já executa o atalho.
+- **Modal de parâmetros carregados (`Ctrl+P`)**: mostra de onde veio cada valor em uso (CLI, env.yaml, calculado).
+- **Área de trabalho e log em tela cheia** (`Ctrl+W`/`Ctrl+L`): alterna cada painel entre o layout padrão e ocupar a tela inteira.
+- **Logs estruturados com pino**: console, arquivo diário e painel TUI colorizado por nível (debug/info/aviso/erro), com scroll automático.
+- **Interface em português e inglês**: detecta o idioma automaticamente (ou `--locale`) — CLI, TUI e extensão VSCode inteiramente traduzidas.
+
+### Multiplataforma
+
+- Linux, macOS, Windows (PowerShell e cmd) e WSL — instalador dedicado por plataforma, com verificação/instalação automática de Git e Node.js 24.x.
+- No WSL, filtra automaticamente entradas do PATH do Windows para não conflitar com binários Linux.
 
 ## Requisitos
 
@@ -348,6 +387,15 @@ npm test        # suite completa (runner tolerante a falhas + resumo final)
 - O runner (`tests/run-all.ts`) é tolerante a falhas: um teste que quebra não impede os demais de rodar. Ao final é impresso `Todos os arquivos de teste passaram.` ou a lista de arquivos com falha, e o exit code reflete o resultado.
 - Os testes de TUI usam `tests/tui_test_utils.ts` (TTY simulado com bytes reais de teclado — `KEYS.ctrlP`, `KEYS.ctrlE` etc. — e captura de frames do Ink).
 - Os testes de chave SSH requerem `ssh-keygen`; em containers sem ele: `apt-get install -y openssh-client`.
+
+---
+
+## Roadmap
+
+Ideias registradas para o futuro — **ainda não implementadas**, sem previsão:
+
+- **Sincronizar todas as branches dos repositórios locais** (não só a que está em checkout no momento): um comando novo (`Ctrl+Alt+S` na árvore), tanto individual (repositório destacado) quanto em massa (todos os marcados), que atualiza cada branch local a partir do remoto sem precisar fazer checkout nela primeiro.
+- **Purge de branches locais que não existem mais no servidor**: individual ou em massa. O purge já apaga a branch local — exceto quando ela ainda não foi mergeada, caso em que pergunta ao usuário se quer fazer checkout para essa branch não mergeada, ignorá-la (deixar como está), ou apagá-la mesmo assim.
 
 ---
 
