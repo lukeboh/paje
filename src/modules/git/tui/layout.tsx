@@ -13,6 +13,8 @@ import { ParametersModal } from "./components/ParametersModal.js";
 import { EditParamsModal } from "./components/EditParamsModal.js";
 import { BranchModal, type BranchChoice } from "./components/BranchModal.js";
 import { ExcludeModal } from "./components/ExcludeModal.js";
+import { ConfirmModal } from "./components/ConfirmModal.js";
+import { TextInputModal } from "./components/TextInputModal.js";
 import { HelpModal, type HelpContext } from "./components/HelpModal.js";
 import { t } from "../../../i18n/index.js";
 import { PajeLogger } from "../logger.js";
@@ -40,6 +42,20 @@ export type LayoutProps = {
     label: string;
     pattern: string;
     onConfirm: () => void;
+    onCancel: () => void;
+  };
+  confirmModal?: {
+    title: string;
+    message: string;
+    detail?: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+  };
+  textInputModal?: {
+    title: string;
+    label: string;
+    initialValue?: string;
+    onConfirm: (value: string) => void;
     onCancel: () => void;
   };
   helpContext?: HelpContext;
@@ -71,6 +87,8 @@ export const Layout: React.FC<LayoutProps> = ({
   escapeEnabled = true,
   branchModal,
   excludeModal,
+  confirmModal,
+  textInputModal,
   helpContext,
   onHelpShortcut,
   envFilePath,
@@ -339,6 +357,28 @@ export const Layout: React.FC<LayoutProps> = ({
                       pattern={excludeModal.pattern}
                       onConfirm={excludeModal.onConfirm}
                       onCancel={excludeModal.onCancel}
+                    />
+                  ) : modalState.modalType === "confirm" && confirmModal ? (
+                    <ConfirmModal
+                      isOpen={modalState.modalOpen}
+                      width={modalWidth}
+                      height={modalHeight}
+                      title={confirmModal.title}
+                      message={confirmModal.message}
+                      detail={confirmModal.detail}
+                      onConfirm={confirmModal.onConfirm}
+                      onCancel={confirmModal.onCancel}
+                    />
+                  ) : modalState.modalType === "text-input" && textInputModal ? (
+                    <TextInputModal
+                      isOpen={modalState.modalOpen}
+                      width={modalWidth}
+                      height={modalHeight}
+                      title={textInputModal.title}
+                      label={textInputModal.label}
+                      initialValue={textInputModal.initialValue}
+                      onConfirm={textInputModal.onConfirm}
+                      onCancel={textInputModal.onCancel}
                     />
                   ) : modalState.modalType === "help" ? (
                     <HelpModal

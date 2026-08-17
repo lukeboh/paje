@@ -119,6 +119,31 @@ Quando um repositório está **divergido** (`ahead > 0` e `behind > 0`), o siste
 - A ação pode ser repetida em outros itens para excluir mais de um repositório/pasta na mesma sessão.
 - Os parâmetros exibidos em `Ctrl+P`/editados em `Ctrl+E` devem refletir o novo valor de `excludeFilter` imediatamente após confirmar, sem precisar reabrir a tela.
 
+### RF-12 — Checkout em massa, com opção de criar (`Ctrl+K`)
+
+- `Ctrl+K` exige pelo menos um item marcado com checkbox; sem marcação, o sistema apenas registra um aviso no log e não abre nenhum modal (não há fallback para o item destacado — a operação muta a working tree de vários repositórios de uma vez).
+- Com itens marcados, um modal de texto pede o nome da branch de destino.
+- O sistema verifica, somente em modo leitura, em quais repositórios marcados a branch já existe (local ou remotamente), sem alterar nada.
+- Se a branch já existir em todos os repositórios marcados, o checkout é feito diretamente, sem confirmação adicional.
+- Se faltar em algum, um modal de confirmação lista quantos/quais repositórios não têm a branch e explica os dois desfechos possíveis: `Enter` cria a branch e a envia ao remoto também nesses repositórios; `Esc` troca apenas onde a branch já existe e pula o restante.
+- Cada repositório processado gera uma linha de log com o resultado (`trocado`, `criado`, `pulado`, `falhou`) e a árvore atualiza a coluna de branch/status do respectivo nó imediatamente.
+- Uma falha em um repositório (ex.: alterações não commitadas que o git recusa sobrescrever) não interrompe o processamento dos demais.
+
+### RF-13 — Voltar em massa à branch padrão (`Ctrl+R`)
+
+- `Ctrl+R` exige pelo menos um item marcado com checkbox; sem marcação, mesmo comportamento de aviso do RF-12 (sem fallback para o item destacado).
+- Um modal de confirmação pergunta se deve voltar os repositórios marcados para a branch padrão de cada um (`Enter` confirma, `Esc` cancela).
+- Repositórios sem branch padrão conhecida (`default_branch` ausente no projeto) são pulados, não travam a operação dos demais.
+- Mesmo tratamento de resultado por item do RF-12 (log por status, atualização da árvore, falha isolada não aborta o lote).
+
+### RF-14 — Renomear branch, local e remotamente (dentro do `Ctrl+B`)
+
+- Diferente dos RF-12/RF-13, esta é uma operação de **um repositório por vez** — o já existente modal de branch (`Ctrl+B`) ganha uma opção "✎ Renomear branch atual", visível apenas quando o repositório destacado tem uma branch atual conhecida.
+- Ao confirmar o novo nome, o sistema renomeia a branch localmente (`git branch -m`).
+- Se o repositório tiver remoto configurado, o novo nome também é enviado ao remoto e a branch antiga é removida de lá — nessa ordem (cria/envia o novo nome primeiro, só depois apaga o antigo), para nunca deixar o remoto sem nenhuma cópia da branch em caso de falha no meio do processo.
+- Se o repositório não tiver remoto configurado, a renomeação fica só local.
+- Se o envio do novo nome falhar, a renomeação é revertida por erro (mesmo tratamento de falha do fluxo de branch já existente). Se apenas a remoção do nome antigo no remoto falhar (o novo nome já foi enviado com sucesso), o sistema avisa no log, mas não trata como falha — a renomeação em si foi concluída.
+
 ## Requisitos de usabilidade
 
 ### RU-01 — Estrutura da TUI
@@ -138,6 +163,7 @@ Quando um repositório está **divergido** (`ahead > 0` e `behind > 0`), o siste
 - Deve exibir o atalho `Ctrl+F` para pesquisar por nome e `Ctrl+X` para alternar o filtro de itens marcados.
 - Deve exibir os atalhos `Ctrl+W` para maximizar/restaurar a área de trabalho e `Ctrl+L` para maximizar/restaurar o log.
 - Deve exibir `Ctrl+B` para a modal de branch, `Ctrl+D` para excluir da árvore e `Ctrl+H` para a modal de ajuda.
+- Deve exibir `Ctrl+K` para checkout em massa (com opção de criar) e `Ctrl+R` para voltar em massa à branch padrão, nos itens marcados.
 
 ### RU-03 — Log de operações
 

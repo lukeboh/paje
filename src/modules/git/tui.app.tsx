@@ -7,9 +7,20 @@ import { useLayoutMetrics, useModalStateController } from "./tui/layoutContext.j
 import { appendLogEntry } from "./tui/logStore.js";
 import type { GitLabTreeNode, RepoSyncStatus, RepoSyncState } from "./types.js";
 import type { TuiSession } from "./tuiSession.js";
-import { filterTreeBySelection, filterTreeByText, recomputeTreeSelection, removeTreeNodes } from "./treeBuilder.js";
+import { collectProjectNodes, filterTreeBySelection, filterTreeByText, recomputeTreeSelection, removeTreeNodes } from "./treeBuilder.js";
 import { t } from "../../i18n/index.js";
-import { checkoutBranch, createBranchAndPush, listLocalBranches, resolveRepoStatus } from "./core/gitBranchService.js";
+import {
+  checkBranchAvailability,
+  checkoutBranch,
+  checkoutDefaultBranchBulk,
+  checkoutOrCreateBranchBulk,
+  createBranchAndPush,
+  listLocalBranches,
+  renameBranch,
+  resolveRepoStatus,
+  type BulkBranchResult,
+} from "./core/gitBranchService.js";
+import { readLocalRepoInfo } from "./gitRepoScanner.js";
 import { splitFilterPatterns } from "./patternFilter.js";
 import { writeEnvYamlUpdates } from "./persistence.js";
 
@@ -374,8 +385,23 @@ export const renderRepositoryTree = async (
       // without needing to reload the whole screen. Mirrors the
       // envOverrides map Layout already keeps for EditParamsModal's saves.
       const [excludeFilterOverride, setExcludeFilterOverride] = useState<string | undefined>(undefined);
+      const [bulkTargetNodes, setBulkTargetNodes] = useState<GitLabTreeNode[]>([]);
+      const [bulkCheckoutBranch, setBulkCheckoutBranch] = useState("");
+      const [confirmModalConfig, setConfirmModalConfig] = useState<{
+        title: string;
+        message: string;
+        detail?: string;
+        onConfirm: () => void;
+        onCancel: () => void;
+      } | null>(null);
       const resolvedRef = useRef(false);
       const syncInProgressRef = useRef(false);
+      // Bulk branch operations (Ctrl+K/Ctrl+R) mutate working trees the same
+      // way a sync does — this guards them against running concurrently with
+      // a sync, or with each other, without needing to touch syncInProgressRef
+      // itself (kept separate so neither guard has to know about the other's
+      // internals, just check the flag).
+      const branchOpInProgressRef = useRef(false);
 
       const parametersSnapshot = useMemo(() => {
         const base = options?.parameters ?? [];
@@ -449,7 +475,7 @@ export const renderRepositoryTree = async (
             return;
           }
           if (confirmed && options?.onConfirm) {
-            if (syncInProgressRef.current) {
+            if (syncInProgressRef.current || branchOpInProgressRef.current) {
               return;
             }
             syncInProgressRef.current = true;
@@ -581,6 +607,173 @@ export const renderRepositoryTree = async (
         appendLogEntry(t("tui.tree.excluded", { label, pattern }), "info");
       }, [excludeModalNodeId, excludeModalPattern, excludeModalLabel, excludeFilterOverride, options?.parameters, options?.envFilePath, nodes, modalState]);
 
+      // Shared target-gathering for both bulk operations: only checkbox-
+      // selected project nodes, never an implicit fallback to the highlighted
+      // one — these mutate working trees across potentially many repos, so
+      // "nothing marked" silently becoming "one arbitrary target" would be
+      // surprising. If nothing is marked, this warns and the caller bails out
+      // without opening any modal.
+      const collectBulkTargets = useCallback((): GitLabTreeNode[] => {
+        return collectProjectNodes(nodes).filter(
+          (node): node is GitLabTreeNode & { localPath: string } => Boolean(node.selected && node.localPath && node.project)
+        );
+      }, [nodes]);
+
+      // Shared result handling for both bulk operations: logs one line per
+      // target by status, refreshes the tree node's status for anything that
+      // actually ended up on a (possibly new) branch, single re-render at the
+      // end. Relies on checkoutOrCreateBranchBulk/checkoutDefaultBranchBulk
+      // preserving input order in their result array to zip back to nodes by
+      // index instead of needing a separate id/path lookup.
+      const applyBulkResults = useCallback(
+        async (results: BulkBranchResult[], targetNodes: GitLabTreeNode[]) => {
+          for (let index = 0; index < results.length; index += 1) {
+            const result = results[index];
+            const node = targetNodes[index];
+            if (!node) {
+              continue;
+            }
+            switch (result.status) {
+              case "checked-out":
+                appendLogEntry(t("tui.tree.bulkCheckedOut", { label: result.target.label }), "info");
+                break;
+              case "created":
+                appendLogEntry(t("tui.tree.bulkCreated", { label: result.target.label }), "info");
+                break;
+              case "skipped":
+                appendLogEntry(
+                  t(
+                    result.reason === "no-default-branch"
+                      ? "tui.tree.bulkSkippedNoDefaultBranch"
+                      : "tui.tree.bulkSkippedBranchMissing",
+                    { label: result.target.label }
+                  ),
+                  "warn"
+                );
+                break;
+              case "failed":
+                appendLogEntry(
+                  t("tui.tree.bulkFailed", { label: result.target.label, error: result.message ?? "" }),
+                  "error"
+                );
+                break;
+            }
+            if ((result.status === "checked-out" || result.status === "created") && node.localPath) {
+              const status = await resolveRepoStatus({
+                targetPath: node.localPath,
+                defaultBranch: node.project?.default_branch,
+                fetch: true,
+              });
+              node.status = status;
+            }
+          }
+          setVersion((value: number) => value + 1);
+        },
+        []
+      );
+
+      const runBulkCheckout = useCallback(
+        async (targetNodes: GitLabTreeNode[], branch: string, createIfMissing: boolean) => {
+          branchOpInProgressRef.current = true;
+          try {
+            const targets = targetNodes.map((node) => ({ targetPath: node.localPath as string, label: node.label }));
+            const results = await checkoutOrCreateBranchBulk(targets, branch, createIfMissing);
+            await applyBulkResults(results, targetNodes);
+          } finally {
+            branchOpInProgressRef.current = false;
+          }
+        },
+        [applyBulkResults]
+      );
+
+      const confirmBulkCheckoutBranch = useCallback(
+        async (branch: string) => {
+          modalState.closeModal();
+          const targets = bulkTargetNodes.map((node) => ({ targetPath: node.localPath as string, label: node.label }));
+          const { withoutBranch } = await checkBranchAvailability(targets, branch);
+          if (withoutBranch.length === 0) {
+            await runBulkCheckout(bulkTargetNodes, branch, false);
+            setBulkTargetNodes([]);
+            return;
+          }
+          const missingNodes = bulkTargetNodes.filter((node) =>
+            withoutBranch.some((target) => target.targetPath === node.localPath)
+          );
+          setBulkCheckoutBranch(branch);
+          setConfirmModalConfig({
+            title: t("tui.tree.bulkCreateConfirmTitle"),
+            message: t("tui.tree.bulkCreateConfirmMessage", { branch, count: String(missingNodes.length) }),
+            detail: missingNodes.map((node) => node.label).join(", "),
+            onConfirm: () => {
+              modalState.closeModal();
+              void runBulkCheckout(bulkTargetNodes, branch, true).finally(() => setBulkTargetNodes([]));
+            },
+            onCancel: () => {
+              modalState.closeModal();
+              void runBulkCheckout(bulkTargetNodes, branch, false).finally(() => setBulkTargetNodes([]));
+            },
+          });
+          modalState.openModal("confirm");
+        },
+        [bulkTargetNodes, modalState, runBulkCheckout]
+      );
+
+      const openBulkCheckout = useCallback(() => {
+        if (branchOpInProgressRef.current || syncInProgressRef.current) {
+          return;
+        }
+        const targetNodes = collectBulkTargets();
+        if (targetNodes.length === 0) {
+          appendLogEntry(t("tui.tree.bulkNoSelection"), "warn");
+          return;
+        }
+        setBulkTargetNodes(targetNodes);
+        setBulkCheckoutBranch("");
+        modalState.openModal("text-input");
+      }, [collectBulkTargets, modalState]);
+
+      const runBulkReturnToDefault = useCallback(
+        async (targetNodes: GitLabTreeNode[]) => {
+          branchOpInProgressRef.current = true;
+          try {
+            const results = await checkoutDefaultBranchBulk(
+              targetNodes.map((node) => ({
+                targetPath: node.localPath as string,
+                label: node.label,
+                defaultBranch: node.project?.default_branch,
+              }))
+            );
+            await applyBulkResults(results, targetNodes);
+          } finally {
+            branchOpInProgressRef.current = false;
+          }
+        },
+        [applyBulkResults]
+      );
+
+      const openBulkReturnToDefault = useCallback(() => {
+        if (branchOpInProgressRef.current || syncInProgressRef.current) {
+          return;
+        }
+        const targetNodes = collectBulkTargets();
+        if (targetNodes.length === 0) {
+          appendLogEntry(t("tui.tree.bulkNoSelection"), "warn");
+          return;
+        }
+        setConfirmModalConfig({
+          title: t("tui.tree.bulkReturnConfirmTitle"),
+          message: t("tui.tree.bulkReturnConfirmMessage", { count: String(targetNodes.length) }),
+          onConfirm: () => {
+            modalState.closeModal();
+            void runBulkReturnToDefault(targetNodes);
+          },
+          onCancel: () => {
+            modalState.closeModal();
+          },
+        });
+        modalState.openModal("confirm");
+      }, [collectBulkTargets, modalState, runBulkReturnToDefault]);
+
       const toggleSelectionFilter = useCallback(() => {
         setShowOnlySelected((value) => !value);
         setSelectedIndex(0);
@@ -599,6 +792,14 @@ export const renderRepositoryTree = async (
           }
           if (key.ctrl && lower === "d") {
             openExcludeModal();
+            return;
+          }
+          if (key.ctrl && lower === "k") {
+            openBulkCheckout();
+            return;
+          }
+          if (key.ctrl && lower === "r") {
+            openBulkReturnToDefault();
             return;
           }
           if (key.return) {
@@ -737,6 +938,14 @@ export const renderRepositoryTree = async (
               openExcludeModal();
               return;
             }
+            if (key.ctrl && lower === "k") {
+              openBulkCheckout();
+              return;
+            }
+            if (key.ctrl && lower === "r") {
+              openBulkReturnToDefault();
+              return;
+            }
             if (key.ctrl && lower === "x") {
               toggleSelectionFilter();
               return;
@@ -793,7 +1002,23 @@ export const renderRepositoryTree = async (
                 return;
               }
               try {
-                if (choice.isNew) {
+                if (choice.isRename && choice.oldName) {
+                  const repoInfo = await readLocalRepoInfo(branchModalTargetPath);
+                  const renameResult = await renameBranch(branchModalTargetPath, choice.oldName, choice.name, {
+                    hasRemote: Boolean(repoInfo.remoteUrl),
+                  });
+                  if (renameResult.remoteDeleteFailed) {
+                    appendLogEntry(
+                      t("branchModal.renameRemoteDeleteWarning", { oldName: choice.oldName, newName: choice.name }),
+                      "warn"
+                    );
+                  } else {
+                    appendLogEntry(
+                      t("branchModal.renameSuccess", { oldName: choice.oldName, newName: choice.name }),
+                      "info"
+                    );
+                  }
+                } else if (choice.isNew) {
                   await createBranchAndPush(branchModalTargetPath, choice.name);
                 } else {
                   const checkoutCommand = await checkoutBranch(branchModalTargetPath, choice.name);
@@ -829,6 +1054,19 @@ export const renderRepositoryTree = async (
             pattern: excludeModalPattern,
             onConfirm: confirmExclude,
             onCancel: cancelExclude,
+          }}
+          confirmModal={confirmModalConfig ?? undefined}
+          textInputModal={{
+            title: t("tui.tree.bulkCheckoutTitle"),
+            label: t("tui.tree.bulkCheckoutLabel"),
+            initialValue: bulkCheckoutBranch,
+            onConfirm: (value) => {
+              void confirmBulkCheckoutBranch(value);
+            },
+            onCancel: () => {
+              modalState.closeModal();
+              setBulkTargetNodes([]);
+            },
           }}
           onEscape={() => {
             debugLogger.info("[TUI][TREE] onEscape -> commitResolve(false)");
