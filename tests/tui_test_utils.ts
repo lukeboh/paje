@@ -27,6 +27,8 @@ export const KEYS = {
   escape: "\u001b",
   arrowDown: "\u001b[B",
   arrowUp: "\u001b[A",
+  pageDown: "\u001b[6~",
+  pageUp: "\u001b[5~",
 } as const;
 
 export const createFakeTTY = (columns = 80, rows = 24): FakeTTY => {
