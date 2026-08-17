@@ -552,6 +552,36 @@ para `GitLabProject[]`, de modo que todo o restante do pipeline (árvore, filtro
 sincronização) é agnóstico do provedor. Em GitHub Enterprise Server a API é resolvida
 como `<baseUrl>/api/v3`; em github.com, `https://api.github.com`.
 
+### Garantia de `known_hosts` antes de qualquer operação git
+
+`ensureKnownHost`/`hasValidSshAssociation` (`core/gitSyncService.ts`) já
+rodavam por servidor dentro do laço de busca na API (via `ensureSshKey`),
+mas **só no caminho sem cache** — quando `loadTree()` responde a partir de
+`~/.paje/git-tree-cache.json` (`cached.configHash === configHash`), esse
+laço inteiro é pulado, e com ele a checagem de `known_hosts`. Numa máquina
+onde `~/.paje` existe (config + cache) mas `~/.ssh` está incompleto (ex.:
+copiado parcialmente, ou uma instalação nova que nunca rodou
+`git-server-store` nesta máquina), isso significa que a primeira operação
+SSH de verdade só acontecia dentro do `syncSelected()` — com N clones/fetches
+em paralelo, cada um preso numa pergunta interativa do SSH
+(`Are you sure you want to continue connecting...`) que nenhum processo em
+segundo plano tem como responder, travando a sincronização inteira sem
+mensagem de erro nenhuma.
+
+`ensureKnownHostsForServers(servers, logger, verbose)` corrige isso rodando
+**uma vez, incondicionalmente**, logo depois que `listServers()` resolve a
+lista de servidores em `loadTree()` — antes até da checagem de cache. Para
+cada host com associação SSH válida (`hasValidSshAssociation`, a mesma
+checagem já usada em `ensureSshKey`), verifica `isHostInKnownHosts` e, se
+faltar, chama `addHostToKnownHosts` (`ssh-keyscan`) automaticamente — sem
+pedir confirmação (diferente do fluxo de cadastro em `gitCommand.ts`, que
+pergunta antes de adicionar; aqui o servidor já foi explicitamente
+registrado pelo usuário em algum momento, então adicionar o host ao
+`known_hosts` desta máquina é apenas completar essa confiança já dada, não
+concedê-la de novo). `ensureKnownHost` loga em `warn` quando detecta o host
+ausente e em `info` quando adiciona com sucesso — sempre visível no log,
+não só em modo `--verbose`.
+
 ### Detecção reativa de token inválido/expirado
 
 Um token salvo pode parar de funcionar a qualquer momento (expiração, revogação

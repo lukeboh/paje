@@ -51,6 +51,7 @@ const testFiles = [
   "./tui_edit_params_modal_test.js",
   "./tui_help_modal_context_test.js",
   "./git_sync_cache_refresh_test.js",
+  "./git_sync_known_hosts_test.js",
   "./tui_tree_text_filter_test.js",
   "./tui_tree_exclude_test.js",
   "./tui_branch_rename_test.js",

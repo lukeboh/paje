@@ -432,12 +432,44 @@ const ensureKnownHost = async (server: string, logger: LoggerBroker, verbose?: b
   if (await isHostInKnownHosts(server)) {
     return;
   }
+  logger.warn(t("cli.sync.knownHostMissing", { host: server }));
   const added = await addHostToKnownHosts(server, {
     verbose,
     logger: (message) => logger.debug(message),
   });
-  if (!added) {
+  if (added) {
+    logger.info(t("cli.sync.knownHostAdded", { host: server }));
+  } else {
     logger.warn(t("cli.prompt.trust.cannotAddHost", { server }));
+  }
+};
+
+// Roda uma vez por host SSH distinto entre os servidores resolvidos, antes
+// de qualquer operação git — inclusive quando loadTree() usa a árvore
+// cacheada (que pula o laço de fetch por servidor mais abaixo, onde este
+// mesmo host normalmente também seria verificado via ensureSshKey). Sem
+// isso, um known_hosts incompleto nesta máquina (ex.: ~/.paje copiado sem
+// ~/.ssh) só seria descoberto quando o clone/fetch em paralelo já estivesse
+// em andamento, cada um preso numa pergunta interativa do SSH que nenhum
+// deles tem como responder.
+const ensureKnownHostsForServers = async (
+  servers: GitServerEntry[],
+  logger: LoggerBroker,
+  verbose: boolean
+): Promise<void> => {
+  const hosts = new Set<string>();
+  for (const server of servers) {
+    try {
+      const host = new URL(server.baseUrl).hostname;
+      if (hasValidSshAssociation(host)) {
+        hosts.add(host);
+      }
+    } catch {
+      // URL inválida já é descartada em listServers(); ignora aqui.
+    }
+  }
+  for (const host of hosts) {
+    await ensureKnownHost(host, logger, verbose);
   }
 };
 
@@ -635,6 +667,8 @@ export const createGitSyncCore = (): GitSyncCore => {
       if (servers.length === 0) {
         return { header: "GitLab", tree: [], statusMap: {}, projects: [] };
       }
+
+      await ensureKnownHostsForServers(servers, logger, config.verbose ?? false);
 
       const configHash = computeConfigHash(servers);
       const cached = readGitTreeCache();

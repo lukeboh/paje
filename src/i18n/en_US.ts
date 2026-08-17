@@ -520,6 +520,8 @@ const enUS: PtBrTranslations = {
       serverCount: "GitLab servers: {{count}}",
       invalidBaseUrl: "Server {{server}} has an invalid or empty base URL and was skipped. Edit or remove it in the server settings.",
       noAuthConfigured: "No authentication configured for {{server}}.",
+      knownHostMissing: "SSH host {{host}} is not yet in ~/.ssh/known_hosts — adding it automatically via ssh-keyscan.",
+      knownHostAdded: "SSH host {{host}} added to ~/.ssh/known_hosts.",
       tokenExpired: "The token for {{server}} expired or was revoked, and it could not be renewed automatically. Register the server again (git-server-store) to generate a new token.",
       githubTokenExpired: "The GitHub token for {{server}} expired or was revoked. Run 'paje git-server-store' and paste a new token (github.com/settings/tokens) to continue.",
       noValidServer: "No server with valid authentication.",

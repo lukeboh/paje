@@ -520,6 +520,8 @@ const ptBR = {
       serverCount: "Servidores GitLab: {{count}}",
       invalidBaseUrl: "O servidor {{server}} tem uma URL base vazia ou inválida e foi ignorado. Edite ou remova-o nas configurações de servidor.",
       noAuthConfigured: "Sem autenticação configurada para {{server}}.",
+      knownHostMissing: "Host SSH {{host}} ainda não está em ~/.ssh/known_hosts — adicionando automaticamente via ssh-keyscan.",
+      knownHostAdded: "Host SSH {{host}} adicionado a ~/.ssh/known_hosts.",
       tokenExpired: "O token de {{server}} expirou ou foi revogado, e não foi possível renová-lo automaticamente. Cadastre o servidor novamente (git-server-store) para gerar um novo token.",
       githubTokenExpired: "O token do GitHub para {{server}} expirou ou foi revogado. Rode 'paje git-server-store' e cole um token novo (github.com/settings/tokens) para continuar.",
       noValidServer: "Nenhum servidor com autenticação válida.",
