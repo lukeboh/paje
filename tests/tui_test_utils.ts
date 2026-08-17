@@ -17,8 +17,10 @@ export const KEYS = {
   ctrlE: "\u0005",
   ctrlF: "\u0006",
   ctrlH: "\u0008", // terminals send the backspace byte for Ctrl+H
+  ctrlK: "\u000b",
   ctrlL: "\u000c",
   ctrlP: "\u0010",
+  ctrlR: "\u0012",
   ctrlS: "\u0013",
   ctrlW: "\u0017",
   ctrlX: "\u0018",
