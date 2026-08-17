@@ -392,10 +392,18 @@ npm test        # suite completa (runner tolerante a falhas + resumo final)
 
 ## Roadmap
 
+### Novas funcionalidades planejadas
+
 Ideias registradas para o futuro — **ainda não implementadas**, sem previsão:
 
 - **Sincronizar todas as branches dos repositórios locais** (não só a que está em checkout no momento): um comando novo (`Ctrl+Alt+S` na árvore), tanto individual (repositório destacado) quanto em massa (todos os marcados), que atualiza cada branch local a partir do remoto sem precisar fazer checkout nela primeiro.
 - **Purge de branches locais que não existem mais no servidor**: individual ou em massa. O purge já apaga a branch local — exceto quando ela ainda não foi mergeada, caso em que pergunta ao usuário se quer fazer checkout para essa branch não mergeada, ignorá-la (deixar como está), ou apagá-la mesmo assim.
+
+### Bugs conhecidos
+
+Relatados, ainda **não reproduzidos/diagnosticados** neste ambiente de desenvolvimento:
+
+- **TUI trava sem responder a nenhuma tecla no Windows, depois que a árvore carrega** — relatado com 3 servidores já cadastrados (ainda não confirmado se é a causa). Depois que a árvore do `git-sync` termina de carregar, nenhuma tecla tem efeito; a única forma de sair é fechar o terminal à força, e o problema se repete em execuções seguintes. Sem um ambiente Windows disponível para reproduzir diretamente — hipótese a investigar: alguma camada da cadeia `paje.cmd` → `powershell.exe` → `npm run dev` → `tsx`/`node` pode não estar entregando ao processo um `stdin` em modo raw de verdade, que é o que o Ink precisa para capturar teclado.
 
 ---
 
