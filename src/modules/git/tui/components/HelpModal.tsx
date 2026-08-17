@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Box, Text, useInput, type Key } from "ink";
 import { t } from "../../../../i18n/index.js";
 
@@ -31,7 +31,6 @@ export type HelpModalProps = {
 type ModalLine = {
   key: string;
   content: React.ReactNode;
-  enabled: boolean;
 };
 
 const splitShortcutKey = (value: string): string[] =>
@@ -173,28 +172,31 @@ const buildGroups = (options: { logMaximized: boolean; workspaceMaximized: boole
         { id: "tree-search", key: "Ctrl+F", description: t("helpModal.shortcuts.tree.search"), contexts: ["tree"] },
         { id: "tree-filter", key: "Ctrl+X", description: t("helpModal.shortcuts.tree.filter"), contexts: ["tree"] },
         { id: "tree-branch", key: "Ctrl+B", description: t("helpModal.shortcuts.tree.branch"), contexts: ["tree"] },
+        { id: "tree-exclude", key: "Ctrl+D", description: t("helpModal.shortcuts.tree.exclude"), contexts: ["tree"] },
       ],
     },
   ];
 };
 
+// Only shortcuts (and, transitively, groups) that actually apply to the
+// current screen are rendered — showing an inapplicable group dimmed out
+// used to waste space that context-relevant shortcuts needed, pushing them
+// past the modal's fixed height with no way to scroll down to them.
 const buildLines = (groups: HelpGroup[], context: HelpContext): ModalLine[] => {
   const lines: ModalLine[] = [];
   groups.forEach((group) => {
-    lines.push({ key: `group-${group.id}`, content: <Text>{group.title}</Text>, enabled: true });
-    group.shortcuts.forEach((shortcut) => {
-      const enabled = shortcut.contexts.includes(context);
+    const applicable = group.shortcuts.filter((shortcut) => shortcut.contexts.includes(context));
+    if (applicable.length === 0) {
+      return;
+    }
+    lines.push({ key: `group-${group.id}`, content: <Text>{group.title}</Text> });
+    applicable.forEach((shortcut) => {
       lines.push({
         key: `shortcut-${group.id}-${shortcut.id}`,
-        enabled,
-        content: (
-          <Text>
-            {`  ${shortcut.key} — ${shortcut.description}`}
-          </Text>
-        ),
+        content: <Text>{`  ${shortcut.key} — ${shortcut.description}`}</Text>,
       });
     });
-    lines.push({ key: `spacer-${group.id}`, content: <Text>{" "}</Text>, enabled: true });
+    lines.push({ key: `spacer-${group.id}`, content: <Text>{" "}</Text> });
   });
   return lines;
 };
@@ -214,6 +216,12 @@ export const HelpModal: React.FC<HelpModalProps> = ({
   const contentHeight = Math.max(1, height - headerHeight - 2 - 1);
   const groups = useMemo(() => buildGroups({ logMaximized, workspaceMaximized }), [logMaximized, workspaceMaximized]);
   const lines = useMemo(() => buildLines(groups, context), [groups, context]);
+  const maxOffset = Math.max(0, lines.length - contentHeight);
+  const [scrollOffset, setScrollOffset] = useState(0);
+
+  useEffect(() => {
+    setScrollOffset(0);
+  }, [isOpen, context]);
 
   useInput(
     (input, key) => {
@@ -222,6 +230,31 @@ export const HelpModal: React.FC<HelpModalProps> = ({
       }
       if (key.escape) {
         onClose();
+        return;
+      }
+      // Navigation keys scroll the (possibly long) shortcut list itself —
+      // same as every other modal in the app (ParametersModal, BranchModal)
+      // — instead of being replayed as shortcuts against the screen behind
+      // it. Before this, they fell through to the replay logic below: since
+      // "↑/↓" is itself a valid tree shortcut, pressing it just closed help
+      // and moved the tree's cursor, with no way to ever see content past a
+      // fixed, non-scrolling height. (Home/End aren't handled here: Ink's
+      // useInput never sets key.home/key.end — see resolveShortcutKey below,
+      // which has the same latent gap for the tree's own Home/End shortcut.)
+      if (key.upArrow) {
+        setScrollOffset((current) => Math.max(0, current - 1));
+        return;
+      }
+      if (key.downArrow) {
+        setScrollOffset((current) => Math.min(maxOffset, current + 1));
+        return;
+      }
+      if (key.pageUp) {
+        setScrollOffset((current) => Math.max(0, current - contentHeight));
+        return;
+      }
+      if (key.pageDown) {
+        setScrollOffset((current) => Math.min(maxOffset, current + contentHeight));
         return;
       }
       const resolvedKey = resolveShortcutKey(input, key);
@@ -240,7 +273,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({
     { isActive: isOpen }
   );
 
-  const visibleLines = lines.slice(0, contentHeight);
+  const visibleLines = lines.slice(scrollOffset, scrollOffset + contentHeight);
 
   return (
     <Box
@@ -261,7 +294,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({
       </Box>
       <Box flexDirection="column" marginTop={1} height={contentHeight}>
         {visibleLines.map((line) => (
-          <Text key={line.key} backgroundColor={backgroundColor} dimColor={!line.enabled}>
+          <Text key={line.key} backgroundColor={backgroundColor}>
             {line.content}
           </Text>
         ))}

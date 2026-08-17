@@ -109,6 +109,7 @@ const ptBR = {
         search: "iniciar pesquisa por nome",
         filter: "filtrar selecionados",
         branch: "selecionar branch",
+        exclude: "excluir da árvore (nunca sincronizar nem exibir)",
       },
     },
   },
@@ -116,13 +117,15 @@ const ptBR = {
     tree: {
       empty: "(Nenhum repositório encontrado)",
       orientationDefault:
-        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | Ctrl+S para sincronizar tudo | Enter para sincronizar apenas o escopo destacado | Esc para cancelar | Ctrl+F para pesquisar por nome | Ctrl+X para filtrar selecionados | Ctrl+B para branch | Ctrl+W para ampliar área de trabalho | Ctrl+L para ampliar log | Ctrl+H para ajuda",
+        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | Ctrl+S para sincronizar tudo | Enter para sincronizar apenas o escopo destacado | Esc para cancelar | Ctrl+F para pesquisar por nome | Ctrl+X para filtrar selecionados | Ctrl+B para branch | Ctrl+D para excluir da árvore | Ctrl+W para ampliar área de trabalho | Ctrl+L para ampliar log | Ctrl+H para ajuda",
       orientationConfirm:
-        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | Ctrl+S para confirmar seleção (tudo) | Enter para confirmar seleção (escopo) | Esc para cancelar | Ctrl+F para pesquisar por nome | Ctrl+X para filtrar selecionados | Ctrl+B para branch | Ctrl+W para ampliar área de trabalho | Ctrl+L para ampliar log | Ctrl+H para ajuda",
+        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | Ctrl+S para confirmar seleção (tudo) | Enter para confirmar seleção (escopo) | Esc para cancelar | Ctrl+F para pesquisar por nome | Ctrl+X para filtrar selecionados | Ctrl+B para branch | Ctrl+D para excluir da árvore | Ctrl+W para ampliar área de trabalho | Ctrl+L para ampliar log | Ctrl+H para ajuda",
       textFilterIndicator: 'Filtro: "{{query}}" — {{count}} item(ns) | Esc limpa | Backspace apaga',
       filterAll: "[DEBUG] Exibindo todos os repositórios.",
       filterSelected: "[DEBUG] Exibindo apenas repositórios marcados.",
       singleInvalid: "Selecione um repositório válido para sincronizar apenas um item.",
+      excluded: "Adicionado a excludeFilter: {{label}} ({{pattern}})",
+      excludeSaveError: "Falha ao salvar excludeFilter: {{message}}",
     },
     loading: {
       repositories: "Carregando repositórios...",
@@ -141,6 +144,11 @@ const ptBR = {
     updateError: "Falha ao atualizar branch: {{error}}",
     checkoutCommand: "[DEBUG] Checkout executado: {{command}}",
     noLocalPath: "Repositório local não encontrado para seleção de branch.",
+  },
+  excludeModal: {
+    title: "Excluir da árvore",
+    hint: "Enter confirma | Esc cancela",
+    message: "Adicionar a excludeFilter (não sincroniza nem exibe de novo, mesmo com acesso): {{label}}",
   },
   session: {
     orientation: {
@@ -188,6 +196,7 @@ const ptBR = {
       noPublicRepos: "Oculta repositórios públicos",
       noArchivedRepos: "Oculta repositórios arquivados",
       filter: "Filtro Ant/Glob para path_with_namespace",
+      excludeFilter: "Filtro Ant/Glob de exclusão para path_with_namespace (repositórios/pastas nunca sincronizados nem exibidos, mesmo com acesso)",
       syncRepos: "Repos/branchs para sincronizar",
       dryRun: "Simula operações sem persistir",
       parallels: "Número de processos/threads para sincronização",
@@ -251,6 +260,7 @@ const ptBR = {
           noPublicRepos: "Oculta repositórios públicos",
           noArchivedRepos: "Oculta repositórios arquivados",
           filter: "Filtro Ant/Glob para path_with_namespace (separe por ;)",
+          excludeFilter: "Filtro Ant/Glob de exclusão para path_with_namespace (separe por ;) — nunca sincroniza nem exibe, mesmo com acesso",
           syncRepos: "Repos/branchs para sincronizar (separe por ;)",
           parallels: "Número de processos/threads para sincronização (AUTO|0|1..N)",
           dryRun: "Simula operações sem persistir",

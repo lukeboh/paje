@@ -255,7 +255,8 @@ e exibida no modal de parâmetros carregados (`Ctrl+P` na TUI).
 | Caminho da chave pública existente | `--public-key-path` | `publicKeyPath` | `""` |
 | Ocultar repos públicos | `--no-public-repos` | `noPublicRepos` | `false` |
 | Ocultar repos arquivados | `--no-archived-repos` | `noArchivedRepos` | `false` |
-| Filtro Ant/Glob de path | `--filter` | `filter` | `""` |
+| Filtro Ant/Glob de path (allow-list) | `--filter` | `filter` | `""` |
+| Filtro Ant/Glob de exclusão (deny-list) | `--exclude-filter` | `excludeFilter` | `""` |
 | Repos/branches a sincronizar | `--sync-repos` | `syncRepos` | `""` |
 | Nível de detalhe | `--verbose` | `verbose` | `false` |
 | Simular sem persistir | `--dry-run` | `dryRun` | `false` |
@@ -319,6 +320,44 @@ httpUrl: project.pajeHttpUrl,   // URL HTTPS com token OAuth2 embutido
 O filtro por servidor é aplicado por `filterProjects()` dentro do loop por servidor,
 antes da mesclagem de projetos de múltiplos servidores. O filtro global de `config`
 é aplicado novamente após a mesclagem como segundo passe.
+
+### `excludeFilter` — lista de exclusão (deny-list)
+
+Ao contrário de `filter` (allow-list, com variante por servidor), `excludeFilter`
+existe **só** como parâmetro global de sessão (`env.yaml`/`--exclude-filter`) —
+não há campo equivalente em `GitServerEntry`. Um projeto é excluído se qualquer
+um dos mesmos candidatos usados por `filter` (`path_with_namespace`,
+`pajeOriginalPathWithNamespace`, `namespace.full_path`, `namespace.full_path/name`)
+casar com algum padrão; `matchesAntPatterns` trata lista de padrões vazia como
+"casa tudo" (comportamento certo para `filter`, onde ausência de filtro mostra
+tudo) — `filterProjects()` guarda esse caso explicitamente para `excludeFilter`
+vazio nunca excluir nada.
+
+`filterProjects()` só filtra projetos; `filterGroups()` (mesmo arquivo) faz o
+equivalente para grupos, comparando `group.full_path`, e é aplicado junto de
+`filterProjects()` nos dois pontos globais de `loadTree()` (cache-hit e
+fresh-fetch), nunca nos filtros por servidor. Um padrão terminado em `/**`
+(ex.: `grupo/**`) casa tanto o `full_path` do próprio grupo quanto qualquer
+descendente em qualquer profundidade — por isso excluir uma pasta cascateia
+para todos os subgrupos e projetos dentro dela sem lógica extra de recursão.
+Esse é o único formato de padrão que cascateia de verdade: um padrão exato de
+grupo (sem `/**`) só remove aquele grupo, e os filhos dele "sobem" para a raiz
+da árvore (mesmo comportamento que `buildGitLabTree` já tem para qualquer
+grupo sem pai presente na lista). A ação `Ctrl+D` na TUI sempre gera o padrão
+com `/**` para grupos — esse caso só é relevante para quem edita `env.yaml` à
+mão.
+
+Na TUI, `Ctrl+D` no item destacado (`tui.app.tsx`) abre um modal de confirmação
+(`ExcludeModal`) com o padrão exato que será adicionado — `path_with_namespace`
+para um projeto, `full_path + "/**"` para um grupo, ambos pré-computados por
+`buildGitLabTree()` em `GitLabTreeNode.excludePattern`. Ao confirmar: o padrão é
+mesclado ao valor atual de `excludeFilter` e gravado via `writeEnvYamlUpdates()`
+(mesmo precedente de `EditParamsModal.tsx` — presentation chamando
+`persistence.ts` direto para essa gravação pontual de uma chave), e o nó (e
+toda a subárvore, se for grupo) é removido da árvore em memória via
+`removeTreeNodes()` (`treeBuilder.ts`) para feedback instantâneo, sem esperar
+recarregar — quem garante que o item não volta nas próximas sincronizações é o
+valor já persistido em `env.yaml`.
 
 ### Fluxo de autenticação por tipo de servidor
 

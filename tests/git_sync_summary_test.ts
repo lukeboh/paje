@@ -217,6 +217,17 @@ const runSummaryTests = async (): Promise<void> => {
     output.includes("Repositories identified:  2");
   assert.ok(filterSummary, "Resumo deve respeitar filtro por padrão");
 
+  output = "";
+  await runCli(["git-sync", "--base-dir", "repos", "--env-file", envPath, "--exclude-filter=grupo/**"]);
+  assert.ok(!output.includes("grupo/public-repo"), "Não deve listar repositórios da pasta excluída (grupo/)");
+  assert.ok(!output.includes("private-repo"), "Não deve listar repositórios da pasta excluída (grupo/)");
+  assert.ok(output.includes("dev-repo") || output.includes("dev-public"), "Deve continuar listando repositórios fora da pasta excluída (devops/)");
+  const excludeFilterSummary =
+    output.includes("Repositórios identificados:  2") ||
+    output.includes("Reposit?rios identificados:  2") ||
+    output.includes("Repositories identified:  2");
+  assert.ok(excludeFilterSummary, "Resumo deve respeitar exclude-filter, inclusive cascateando a pasta inteira");
+
   console.log = originalLog;
   process.env.HOME = originalHome;
   process.argv = originalArgv;

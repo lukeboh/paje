@@ -13,6 +13,7 @@ export type FakeTTY = {
 export const KEYS = {
   ctrlB: "\u0002",
   ctrlC: "\u0003",
+  ctrlD: "\u0004",
   ctrlE: "\u0005",
   ctrlF: "\u0006",
   ctrlH: "\u0008", // terminals send the backspace byte for Ctrl+H
@@ -26,6 +27,8 @@ export const KEYS = {
   escape: "\u001b",
   arrowDown: "\u001b[B",
   arrowUp: "\u001b[A",
+  pageDown: "\u001b[6~",
+  pageUp: "\u001b[5~",
 } as const;
 
 export const createFakeTTY = (columns = 80, rows = 24): FakeTTY => {

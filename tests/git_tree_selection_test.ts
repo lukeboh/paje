@@ -5,6 +5,7 @@ import {
   collectProjectNodesFromNode,
   collectSelectedProjects,
   recomputeTreeSelection,
+  removeTreeNodes,
   toggleTreeNode,
 } from "../src/modules/git/treeBuilder.js";
 import { GitLabGroup, GitLabProject } from "../src/modules/git/types.js";
@@ -58,5 +59,47 @@ assert.strictEqual(tree[0].selected, true, "Grupo raiz deve ficar selecionado qu
 
 const groupProjects = collectProjectNodesFromNode(tree[0]);
 assert.strictEqual(groupProjects.length, 2, "Coleta de projetos por grupo deve incluir todos os filhos");
+
+// =============================================================================
+// excludePattern — o padrão que a ação Ctrl+D grava em excludeFilter
+// =============================================================================
+
+const subGroupNode = tree[0].children?.find((child) => child.type === "group");
+const rootProjectNode = tree[0].children?.find((child) => child.type === "project");
+assert.strictEqual(tree[0].excludePattern, "grupo-a/**", "Grupo raiz: padrão de exclusão é full_path + /**");
+assert.strictEqual(subGroupNode?.excludePattern, "grupo-a/sub-a1/**", "Subgrupo: padrão de exclusão é full_path + /**");
+assert.strictEqual(rootProjectNode?.excludePattern, "grupo-a/projeto-1", "Projeto: padrão de exclusão é o path_with_namespace exato, sem sufixo");
+const subGroupProjectNode = subGroupNode?.children?.find((child) => child.type === "project");
+assert.strictEqual(subGroupProjectNode?.excludePattern, "grupo-a/sub-a1/projeto-2", "Projeto aninhado: mesmo padrão exato");
+
+// =============================================================================
+// removeTreeNodes
+// =============================================================================
+
+{
+  const pruned = removeTreeNodes(tree, new Set([rootProjectNode!.id]));
+  const prunedRoot = pruned[0];
+  assert.strictEqual(collectProjectNodesFromNode(prunedRoot).length, 1, "Remover um projeto folha só tira ele, mantém o resto da árvore");
+  assert.ok(
+    !collectProjectNodesFromNode(prunedRoot).some((node) => node.id === rootProjectNode!.id),
+    "O projeto removido não deve mais aparecer"
+  );
+  assert.strictEqual(tree[0].children?.length, 2, "removeTreeNodes não deve mutar a árvore original");
+}
+
+{
+  const pruned = removeTreeNodes(tree, new Set([subGroupNode!.id]));
+  const prunedRoot = pruned[0];
+  assert.strictEqual(collectProjectNodesFromNode(prunedRoot).length, 1, "Remover um grupo tira o grupo inteiro, cascateando pros filhos");
+  assert.ok(
+    !collectProjectNodesFromNode(prunedRoot).some((node) => node.id === subGroupProjectNode!.id),
+    "O projeto dentro do subgrupo removido também deve sumir"
+  );
+}
+
+{
+  const pruned = removeTreeNodes(tree, new Set(["id-que-nao-existe"]));
+  assert.strictEqual(collectProjectNodesFromNode(pruned[0]).length, 2, "Remover um id inexistente não altera a árvore");
+}
 
 console.log("git_tree_selection_test: OK");

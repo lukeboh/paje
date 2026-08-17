@@ -35,7 +35,8 @@ Este documento define os requisitos da funcionalidade **Sincronizar repositório
 ### RF-02 — Filtros e parâmetros aplicados
 
 - A árvore deve respeitar todos os filtros definidos por arquivo de configuração e CLI:
-  - `filter` (Ant/Glob)
+  - `filter` (Ant/Glob, allow-list)
+  - `excludeFilter` (Ant/Glob, deny-list — repositórios/pastas nunca aparecem nem sincronizam, mesmo com acesso)
   - `noPublicRepos`
   - `noArchivedRepos`
   - `prepareLocalDirs`
@@ -108,6 +109,16 @@ Quando um repositório está **divergido** (`ahead > 0` e `behind > 0`), o siste
 - O scroll inicial deve deixar algumas linhas de contexto acima do repositório selecionado.
 - Quando não houver correspondência, o cursor inicia na primeira linha.
 
+### RF-11 — Excluir da árvore (`Ctrl+D`)
+
+- `Ctrl+D` no item destacado (grupo ou projeto) deve abrir um modal de confirmação mostrando o padrão exato que será adicionado a `excludeFilter`:
+  - Projeto: `path_with_namespace` exato.
+  - Grupo: `full_path` do grupo sufixado com `/**` (cascateia para todos os subgrupos e projetos dentro dele).
+- `Enter` no modal confirma: o padrão é somado ao valor atual de `excludeFilter` (nunca sobrescreve o que já existia) e gravado em `env.yaml`; o item — e toda a subárvore, se for grupo — desaparece da árvore imediatamente, sem precisar recarregar.
+- `Esc` no modal cancela sem alterar `env.yaml` nem a árvore.
+- A ação pode ser repetida em outros itens para excluir mais de um repositório/pasta na mesma sessão.
+- Os parâmetros exibidos em `Ctrl+P`/editados em `Ctrl+E` devem refletir o novo valor de `excludeFilter` imediatamente após confirmar, sem precisar reabrir a tela.
+
 ## Requisitos de usabilidade
 
 ### RU-01 — Estrutura da TUI
@@ -126,7 +137,7 @@ Quando um repositório está **divergido** (`ahead > 0` e `behind > 0`), o siste
 - A linha de orientações deve indicar ações básicas: navegar, selecionar, sincronizar, cancelar.
 - Deve exibir o atalho `Ctrl+F` para pesquisar por nome e `Ctrl+X` para alternar o filtro de itens marcados.
 - Deve exibir os atalhos `Ctrl+W` para maximizar/restaurar a área de trabalho e `Ctrl+L` para maximizar/restaurar o log.
-- Deve exibir `Ctrl+B` para a modal de branch e `Ctrl+H` para a modal de ajuda.
+- Deve exibir `Ctrl+B` para a modal de branch, `Ctrl+D` para excluir da árvore e `Ctrl+H` para a modal de ajuda.
 
 ### RU-03 — Log de operações
 

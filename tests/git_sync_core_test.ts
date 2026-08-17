@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   filterProjects,
+  filterGroups,
   resolveSyncReposSpecs,
   resolveSyncTargets,
   prepareTargets,
@@ -12,7 +13,7 @@ import {
   resolveProjectLocalPath,
   resolveLocalPathConflicts,
 } from "../src/modules/git/gitPathUtils.js";
-import type { GitLabProject } from "../src/modules/git/types.js";
+import type { GitLabProject, GitLabGroup } from "../src/modules/git/types.js";
 import type { GitSyncConfig } from "../src/modules/git/core/gitSyncConfig.js";
 
 // ---------------------------------------------------------------------------
@@ -44,6 +45,7 @@ const baseConfig = (overrides: Partial<GitSyncConfig> = {}): GitSyncConfig => ({
   noPublicRepos: false,
   noArchivedRepos: false,
   filter: undefined,
+  excludeFilter: undefined,
   syncRepos: undefined,
   parallel: undefined,
   shallow: false,
@@ -203,6 +205,66 @@ const runCoreTests = async (): Promise<void> => {
     const result = filterProjects(projects, baseConfig({ filter: "grupo/*", noPublicRepos: true }));
     assert.equal(result.length, 2, "filtro glob combinado com noPublicRepos");
     assert.ok(result.every((p) => p.path_with_namespace.startsWith("grupo/")));
+  }
+
+  // =========================================================================
+  // filterProjects — excludeFilter
+  // =========================================================================
+
+  {
+    const result = filterProjects(projects, baseConfig({ excludeFilter: "" }));
+    assert.equal(result.length, 5, "excludeFilter vazio não exclui nada (regressão: matchesAntPatterns trata lista vazia como 'passa tudo')");
+  }
+
+  {
+    const result = filterProjects(projects, baseConfig({ excludeFilter: "grupo/private-repo" }));
+    assert.equal(result.length, 4, "excludeFilter: exclui projeto exato");
+    assert.ok(!result.some((p) => p.path_with_namespace === "grupo/private-repo"));
+  }
+
+  {
+    const result = filterProjects(projects, baseConfig({ excludeFilter: "grupo/**" }));
+    assert.equal(result.length, 2, "excludeFilter com /** exclui toda a pasta grupo/");
+    assert.ok(result.every((p) => !p.path_with_namespace.startsWith("grupo/")));
+  }
+
+  {
+    const result = filterProjects(projects, baseConfig({ filter: "grupo/*", excludeFilter: "grupo/private-repo" }));
+    assert.equal(result.length, 2, "excludeFilter tem prioridade sobre filter: remove mesmo o que filter incluiria");
+    assert.ok(!result.some((p) => p.path_with_namespace === "grupo/private-repo"));
+    assert.ok(result.every((p) => p.path_with_namespace.startsWith("grupo/")));
+  }
+
+  // =========================================================================
+  // filterGroups
+  // =========================================================================
+
+  const groups: GitLabGroup[] = [
+    { id: 1, name: "grupo", full_path: "grupo", parent_id: null },
+    { id: 2, name: "subgrupo", full_path: "grupo/subgrupo", parent_id: 1 },
+    { id: 3, name: "devops", full_path: "devops", parent_id: null },
+  ];
+
+  {
+    const result = filterGroups(groups, baseConfig());
+    assert.equal(result.length, 3, "sem excludeFilter: todos os grupos passam");
+  }
+
+  {
+    const result = filterGroups(groups, baseConfig({ excludeFilter: "" }));
+    assert.equal(result.length, 3, "excludeFilter vazio não exclui grupo nenhum");
+  }
+
+  {
+    const result = filterGroups(groups, baseConfig({ excludeFilter: "devops" }));
+    assert.equal(result.length, 2, "excludeFilter: exclui grupo exato pelo full_path");
+    assert.ok(!result.some((g) => g.full_path === "devops"));
+  }
+
+  {
+    const result = filterGroups(groups, baseConfig({ excludeFilter: "grupo/**" }));
+    assert.equal(result.length, 1, "excludeFilter com /** exclui o grupo e o subgrupo aninhado");
+    assert.equal(result[0].full_path, "devops");
   }
 
   // =========================================================================

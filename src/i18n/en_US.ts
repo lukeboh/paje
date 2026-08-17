@@ -111,6 +111,7 @@ const enUS: PtBrTranslations = {
         search: "start search by name",
         filter: "filter selected",
         branch: "select branch",
+        exclude: "exclude from tree (never sync or show it again)",
       },
     },
   },
@@ -118,13 +119,15 @@ const enUS: PtBrTranslations = {
     tree: {
       empty: "(No repositories found)",
       orientationDefault:
-        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | Ctrl+S to sync all | Enter to sync highlighted scope | Esc to cancel | Ctrl+F to search by name | Ctrl+X to filter selected | Ctrl+B to branch | Ctrl+W to expand workspace | Ctrl+L to expand log | Ctrl+H for help",
+        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | Ctrl+S to sync all | Enter to sync highlighted scope | Esc to cancel | Ctrl+F to search by name | Ctrl+X to filter selected | Ctrl+B to branch | Ctrl+D to exclude from tree | Ctrl+W to expand workspace | Ctrl+L to expand log | Ctrl+H for help",
       orientationConfirm:
-        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | Ctrl+S to confirm selection (all) | Enter to confirm selection (scope) | Esc to cancel | Ctrl+F to search by name | Ctrl+X to filter selected | Ctrl+B to branch | Ctrl+W to expand workspace | Ctrl+L to expand log | Ctrl+H for help",
+        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | Ctrl+S to confirm selection (all) | Enter to confirm selection (scope) | Esc to cancel | Ctrl+F to search by name | Ctrl+X to filter selected | Ctrl+B to branch | Ctrl+D to exclude from tree | Ctrl+W to expand workspace | Ctrl+L to expand log | Ctrl+H for help",
       textFilterIndicator: 'Filter: "{{query}}" — {{count}} item(s) | Esc clears | Backspace erases',
       filterAll: "[DEBUG] Showing all repositories.",
       filterSelected: "[DEBUG] Showing only selected repositories.",
       singleInvalid: "Select a valid repository to sync a single item.",
+      excluded: "Added to excludeFilter: {{label}} ({{pattern}})",
+      excludeSaveError: "Failed to save excludeFilter: {{message}}",
     },
     loading: {
       repositories: "Loading repositories...",
@@ -143,6 +146,11 @@ const enUS: PtBrTranslations = {
     updateError: "Failed to update branch: {{error}}",
     checkoutCommand: "[DEBUG] Checkout executed: {{command}}",
     noLocalPath: "Local repository not found for branch selection.",
+  },
+  excludeModal: {
+    title: "Exclude from tree",
+    hint: "Enter confirms | Esc cancels",
+    message: "Add to excludeFilter (never synced or shown again, even with access): {{label}}",
   },
   session: {
     orientation: {
@@ -190,6 +198,7 @@ const enUS: PtBrTranslations = {
       noPublicRepos: "Hide public repositories",
       noArchivedRepos: "Hide archived repositories",
       filter: "Ant/Glob filter for path_with_namespace",
+      excludeFilter: "Ant/Glob exclude filter for path_with_namespace (repositories/folders never synced or shown, even with access)",
       syncRepos: "Repos/branches to sync",
       dryRun: "Simulate operations without persisting",
       parallels: "Number of processes/threads for synchronization",
@@ -253,6 +262,7 @@ const enUS: PtBrTranslations = {
           noPublicRepos: "Hide public repositories",
           noArchivedRepos: "Hide archived repositories",
           filter: "Ant/Glob filter for path_with_namespace (separate with ;)",
+          excludeFilter: "Ant/Glob exclude filter for path_with_namespace (separate with ;) — never synced or shown, even with access",
           syncRepos: "Repos/branches to sync (separate with ;)",
           parallels: "Number of processes/threads for synchronization (AUTO|0|1..N)",
           dryRun: "Simulate operations without persisting",

@@ -54,6 +54,12 @@ export type GitLabTreeNode = {
   selected?: boolean;
   partiallySelected?: boolean;
   status?: RepoSyncStatus;
+  // The excludeFilter pattern that would hide this exact node (and, for a
+  // group, everything under it) if added to config.excludeFilter — a
+  // project's own path_with_namespace, or a group's full_path suffixed with
+  // "/**" so the pattern cascades to every descendant. Computed once in
+  // buildGitLabTree so the TUI never has to reimplement that logic.
+  excludePattern?: string;
 };
 
 export type GitRepositoryTarget = {

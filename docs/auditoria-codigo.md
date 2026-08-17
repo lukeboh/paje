@@ -117,6 +117,44 @@ pré-existente antes de renomear. Teste de regressão em
 
 ---
 
+### ~~BUG-14~~ — `HelpModal.tsx` — modal de ajuda sem rolagem, com grupos inaplicáveis desperdiçando espaço
+**Severidade: MÉDIO** | **Status: RESOLVIDO**
+
+Duas causas somadas podiam deixar atalhos de verdade impossíveis de ver: (1)
+`buildLines` sempre renderizava TODOS os grupos de atalhos (global, menu,
+árvore), mesmo os que não se aplicam à tela atual — só ficavam "apagados"
+(`dimColor`), mas ainda ocupavam linhas; (2) o modal tinha altura fixa
+(`lines.slice(0, contentHeight)`) e nenhuma forma de rolar — `↑`/`↓` eram
+tratados como tentativas de executar o atalho `tree-nav-vertical` (que usa
+essas mesmas teclas), fechando a ajuda e movendo o cursor da árvore por trás
+dela, em vez de navegar dentro do próprio modal. Corrigido: `buildLines` só
+inclui grupos com pelo menos um atalho aplicável ao contexto atual, e
+`↑`/`↓`/`PgUp`/`PgDn` agora rolam a lista (mesmo padrão de
+`scrollOffset`/`maxOffset` já usado em `ParametersModal.tsx`) antes de
+qualquer tentativa de re-executar o atalho. Teste de regressão em
+`tests/tui_help_modal_context_test.ts`.
+
+---
+
+### BUG-15 — `Key.home`/`Key.end` nunca são verdadeiros nesta versão do Ink — atalhos "Home/End" são código morto
+**Severidade: BAIXO** | **Status: ABERTO**
+
+Descoberto ao investigar BUG-14: `ink@5.2.1`'s `useInput` (`node_modules/ink/build/hooks/use-input.js`)
+constrói o objeto `key` só com `upArrow`, `downArrow`, `leftArrow`, `rightArrow`,
+`pageUp`, `pageDown`, `return`, `escape`, `ctrl`, `shift`, `tab`, `backspace`,
+`delete`, `meta` — nunca `home`/`end`, mesmo quando `parse-keypress.js` já
+reconhece as sequências ANSI correspondentes (`keypress.name === "home"/"end"`).
+Qualquer código que checa `(key as Key & { home?: boolean; end?: boolean }).home`/`.end`
+nunca é executado. Afeta pelo menos: `tui.app.tsx` (atalho "Home/End — ir ao
+início/fim" da árvore, documentado em `docs/requisitos-tui-git-sync.md` RF-05
+e no próprio `HelpModal`) e `resolveShortcutKey` em `HelpModal.tsx` (nunca
+resolve "Home"/"End" para re-executar como atalho). Não corrigido agora por
+estar fora do escopo da tarefa que o encontrou — precisa de uma forma
+alternativa de detectar essas teclas (ex.: reconhecer a sequência bruta antes
+do parse do Ink, ou atualizar o Ink) antes de poder corrigir.
+
+---
+
 ## 2. INCONSISTÊNCIAS ENTRE ARQUIVOS
 
 ### ~~INC-01~~ — Separador de branch em `syncRepos`: `#` no CLI vs `@` na TUI

@@ -92,6 +92,7 @@ Carrega a árvore de grupos/projetos de todos os servidores configurados (GitLab
 | `--no-public-repos` | `noPublicRepos` | `false` | Ocultar repos públicos |
 | `--no-archived-repos` | `noArchivedRepos` | `false` | Ocultar repos arquivados |
 | `--filter <padrão>` | `filter` | `""` | Filtro Ant/Glob de `path_with_namespace` (`;` separa múltiplos) |
+| `--exclude-filter <padrão>` | `excludeFilter` | `""` | Filtro Ant/Glob de **exclusão** — repositórios/pastas nunca sincronizados nem exibidos na árvore, mesmo com acesso (mesma sintaxe do `filter`; excluir uma pasta exclui tudo dentro dela) |
 | `--sync-repos <lista>` | `syncRepos` | `""` | Repos/branches a sincronizar (`grupo/repo#branch;...`) |
 | `--parallels <n>` | `parallels` | `auto` | Paralelismo (`AUTO` \| `0` \| `1..N`) |
 | `--dry-run` | `dryRun` | `false` | Simular sem persistir |
@@ -109,6 +110,7 @@ Carrega a árvore de grupos/projetos de todos os servidores configurados (GitLab
 - Grupos com o mesmo `full_path` em servidores diferentes são consolidados em um único nó.
 - Em colisão de caminho local (mesmo `path_with_namespace` em servidores diferentes), o diretório recebe sufixo `-<Servidor>`.
 - Filtros Ant/Glob suportam `?`, `*`, `**`; múltiplos padrões separados por `;`.
+- **Excluir da árvore (Ctrl+D)**: na TUI, `Ctrl+D` no item destacado abre um modal de confirmação e adiciona o repositório (ou, se for uma pasta, ela e tudo dentro dela) ao `excludeFilter`, gravando em `env.yaml` — a partir daí, nunca mais aparece na árvore nem é sincronizado, mesmo com acesso. Repita em outros itens para excluir mais de um.
 - Em servidores GitHub, organizações são exibidas como grupos e o login do usuário aparece como grupo pessoal.
 - O log usa `LoggerBroker` (motor pino) com transports para console (`info`), painel TUI (`info`; `debug` com `--verbose`) e arquivo diário `~/.paje/logs` via pino-pretty.
 

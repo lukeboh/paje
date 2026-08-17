@@ -12,6 +12,7 @@ import { PanelFrame } from "./components/PanelFrame.js";
 import { ParametersModal } from "./components/ParametersModal.js";
 import { EditParamsModal } from "./components/EditParamsModal.js";
 import { BranchModal, type BranchChoice } from "./components/BranchModal.js";
+import { ExcludeModal } from "./components/ExcludeModal.js";
 import { HelpModal, type HelpContext } from "./components/HelpModal.js";
 import { t } from "../../../i18n/index.js";
 import { PajeLogger } from "../logger.js";
@@ -33,6 +34,12 @@ export type LayoutProps = {
     branches: string[];
     currentBranch?: string;
     onConfirm: (choice: BranchChoice) => void;
+    onCancel: () => void;
+  };
+  excludeModal?: {
+    label: string;
+    pattern: string;
+    onConfirm: () => void;
     onCancel: () => void;
   };
   helpContext?: HelpContext;
@@ -63,6 +70,7 @@ export const Layout: React.FC<LayoutProps> = ({
   onCtrlC,
   escapeEnabled = true,
   branchModal,
+  excludeModal,
   helpContext,
   onHelpShortcut,
   envFilePath,
@@ -321,6 +329,16 @@ export const Layout: React.FC<LayoutProps> = ({
                       currentBranch={branchModal.currentBranch}
                       onConfirm={branchModal.onConfirm}
                       onCancel={branchModal.onCancel}
+                    />
+                  ) : modalState.modalType === "exclude" && excludeModal ? (
+                    <ExcludeModal
+                      isOpen={modalState.modalOpen}
+                      width={modalWidth}
+                      height={modalHeight}
+                      label={excludeModal.label}
+                      pattern={excludeModal.pattern}
+                      onConfirm={excludeModal.onConfirm}
+                      onCancel={excludeModal.onCancel}
                     />
                   ) : modalState.modalType === "help" ? (
                     <HelpModal
