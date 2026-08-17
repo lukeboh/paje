@@ -173,6 +173,7 @@ const buildGroups = (options: { logMaximized: boolean; workspaceMaximized: boole
         { id: "tree-search", key: "Ctrl+F", description: t("helpModal.shortcuts.tree.search"), contexts: ["tree"] },
         { id: "tree-filter", key: "Ctrl+X", description: t("helpModal.shortcuts.tree.filter"), contexts: ["tree"] },
         { id: "tree-branch", key: "Ctrl+B", description: t("helpModal.shortcuts.tree.branch"), contexts: ["tree"] },
+        { id: "tree-exclude", key: "Ctrl+D", description: t("helpModal.shortcuts.tree.exclude"), contexts: ["tree"] },
       ],
     },
   ];

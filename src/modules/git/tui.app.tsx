@@ -7,9 +7,11 @@ import { useLayoutMetrics, useModalStateController } from "./tui/layoutContext.j
 import { appendLogEntry } from "./tui/logStore.js";
 import type { GitLabTreeNode, RepoSyncStatus, RepoSyncState } from "./types.js";
 import type { TuiSession } from "./tuiSession.js";
-import { filterTreeBySelection, filterTreeByText } from "./treeBuilder.js";
+import { filterTreeBySelection, filterTreeByText, recomputeTreeSelection, removeTreeNodes } from "./treeBuilder.js";
 import { t } from "../../i18n/index.js";
 import { checkoutBranch, createBranchAndPush, listLocalBranches, resolveRepoStatus } from "./core/gitBranchService.js";
+import { splitFilterPatterns } from "./patternFilter.js";
+import { writeEnvYamlUpdates } from "./persistence.js";
 
 export type TuiSelectionMode = "all" | "single";
 
@@ -77,6 +79,16 @@ const resolveServerColorMap = (nodes: GitLabTreeNode[]): Map<string, string> => 
     map.set(name, SERVER_COLOR_PALETTE[index % SERVER_COLOR_PALETTE.length]);
   });
   return map;
+};
+
+const findParamValue = (groups: CommandParameters[] | undefined, name: string): string => {
+  for (const group of groups ?? []) {
+    const found = group.parameters.find((param) => param.name === name);
+    if (found) {
+      return found.value;
+    }
+  }
+  return "";
 };
 
 const BRANCH_COLOR: Record<string, string> = {
@@ -324,7 +336,6 @@ export const renderRepositoryTree = async (
     const screenKeyRef: { current?: number } = {};
 
     const App: React.FC = () => {
-      const parametersSnapshot = options?.parameters ?? [];
       const modalState = useModalStateController();
       const debugLogger = useMemo(() => new PajeLogger(), []);
       const [orientation, setOrientation] = useState(options?.footer ?? t("tui.tree.orientationDefault"));
@@ -354,8 +365,30 @@ export const renderRepositoryTree = async (
       const [branchModalNodeId, setBranchModalNodeId] = useState<string | null>(null);
       const [branchModalTargetPath, setBranchModalTargetPath] = useState<string | null>(null);
       const [branchModalDefaultBranch, setBranchModalDefaultBranch] = useState<string | undefined>(undefined);
+      const [excludeModalLabel, setExcludeModalLabel] = useState("");
+      const [excludeModalPattern, setExcludeModalPattern] = useState("");
+      const [excludeModalNodeId, setExcludeModalNodeId] = useState<string | null>(null);
+      // Not persisted in state via options.parameters (a one-time snapshot
+      // taken before this screen mounted) — this override is what makes
+      // Ctrl+P/Ctrl+E show the new excludeFilter value right after Ctrl+D,
+      // without needing to reload the whole screen. Mirrors the
+      // envOverrides map Layout already keeps for EditParamsModal's saves.
+      const [excludeFilterOverride, setExcludeFilterOverride] = useState<string | undefined>(undefined);
       const resolvedRef = useRef(false);
       const syncInProgressRef = useRef(false);
+
+      const parametersSnapshot = useMemo(() => {
+        const base = options?.parameters ?? [];
+        if (excludeFilterOverride === undefined) {
+          return base;
+        }
+        return base.map((group) => ({
+          ...group,
+          parameters: group.parameters.map((param) =>
+            param.name === "excludeFilter" ? { ...param, value: excludeFilterOverride, source: "env" as const } : param
+          ),
+        }));
+      }, [options?.parameters, excludeFilterOverride]);
 
       const serverColorMap = useMemo(() => resolveServerColorMap(nodes), [nodes]);
 
@@ -481,6 +514,73 @@ export const renderRepositoryTree = async (
         modalState.openModal("branch");
       }, [items, selectedIndex, nodes, modalState]);
 
+      const openExcludeModal = useCallback(() => {
+        const item = items[selectedIndex];
+        if (!item) {
+          return;
+        }
+        const resolveNode = (nodeList: GitLabTreeNode[]): GitLabTreeNode | undefined => {
+          for (const node of nodeList) {
+            if (node.id === item.id) {
+              return node;
+            }
+            const found = node.children ? resolveNode(node.children) : undefined;
+            if (found) {
+              return found;
+            }
+          }
+          return undefined;
+        };
+        const node = resolveNode(nodes);
+        if (!node || !node.excludePattern) {
+          return;
+        }
+        setExcludeModalLabel(node.label);
+        setExcludeModalPattern(node.excludePattern);
+        setExcludeModalNodeId(node.id);
+        modalState.openModal("exclude");
+      }, [items, selectedIndex, nodes, modalState]);
+
+      const cancelExclude = useCallback(() => {
+        modalState.closeModal();
+      }, [modalState]);
+
+      // Persists the new pattern to env.yaml (writeEnvYamlUpdates — same
+      // presentation→persistence.ts precedent EditParamsModal already uses),
+      // then prunes the node from the in-memory tree right away so the
+      // screen reflects it instantly instead of waiting for a reload. The
+      // persisted config is what guarantees it stays gone on future loads.
+      const confirmExclude = useCallback(() => {
+        const nodeId = excludeModalNodeId;
+        const pattern = excludeModalPattern;
+        const label = excludeModalLabel;
+        modalState.closeModal();
+        if (!nodeId || !pattern) {
+          return;
+        }
+        const currentValue = excludeFilterOverride ?? findParamValue(options?.parameters, "excludeFilter");
+        const existingPatterns = splitFilterPatterns(currentValue);
+        const mergedValue = existingPatterns.includes(pattern)
+          ? existingPatterns.join(";")
+          : [...existingPatterns, pattern].join(";");
+        try {
+          writeEnvYamlUpdates({ excludeFilter: mergedValue }, options?.envFilePath);
+        } catch (error) {
+          appendLogEntry(
+            t("tui.tree.excludeSaveError", { message: error instanceof Error ? error.message : String(error) }),
+            "error"
+          );
+          return;
+        }
+        setExcludeFilterOverride(mergedValue);
+        const pruned = removeTreeNodes(nodes, new Set([nodeId]));
+        nodes.length = 0;
+        nodes.push(...pruned);
+        nodes.forEach((root) => recomputeTreeSelection(root));
+        setVersion((value: number) => value + 1);
+        appendLogEntry(t("tui.tree.excluded", { label, pattern }), "info");
+      }, [excludeModalNodeId, excludeModalPattern, excludeModalLabel, excludeFilterOverride, options?.parameters, options?.envFilePath, nodes, modalState]);
+
       const toggleSelectionFilter = useCallback(() => {
         setShowOnlySelected((value) => !value);
         setSelectedIndex(0);
@@ -495,6 +595,10 @@ export const renderRepositoryTree = async (
           const lower = input.toLowerCase();
           if (key.ctrl && lower === "b") {
             openBranchModal();
+            return;
+          }
+          if (key.ctrl && lower === "d") {
+            openExcludeModal();
             return;
           }
           if (key.return) {
@@ -629,6 +733,10 @@ export const renderRepositoryTree = async (
               openBranchModal();
               return;
             }
+            if (key.ctrl && lower === "d") {
+              openExcludeModal();
+              return;
+            }
             if (key.ctrl && lower === "x") {
               toggleSelectionFilter();
               return;
@@ -715,6 +823,12 @@ export const renderRepositoryTree = async (
             onCancel: () => {
               modalState.closeModal();
             },
+          }}
+          excludeModal={{
+            label: excludeModalLabel,
+            pattern: excludeModalPattern,
+            onConfirm: confirmExclude,
+            onCancel: cancelExclude,
           }}
           onEscape={() => {
             debugLogger.info("[TUI][TREE] onEscape -> commitResolve(false)");

@@ -50,6 +50,7 @@ const testFiles = [
   "./tui_edit_params_modal_test.js",
   "./git_sync_cache_refresh_test.js",
   "./tui_tree_text_filter_test.js",
+  "./tui_tree_exclude_test.js",
   "./tui_no_flicker_test.js",
   "./tui_screen_transition_test.js",
   "./tui_orientation_bar_truncate_test.js",

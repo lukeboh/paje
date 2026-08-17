@@ -13,6 +13,7 @@ export type FakeTTY = {
 export const KEYS = {
   ctrlB: "\u0002",
   ctrlC: "\u0003",
+  ctrlD: "\u0004",
   ctrlE: "\u0005",
   ctrlF: "\u0006",
   ctrlH: "\u0008", // terminals send the backspace byte for Ctrl+H
