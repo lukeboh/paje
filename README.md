@@ -32,9 +32,9 @@ curl -fsSL https://raw.githubusercontent.com/lukeboh/paje/main/install-paje.sh -
   && chmod +x install-paje.sh && ./install-paje.sh
 ```
 
-O instalador verifica o Git, clona o repositório, executa health-check, cria o link `paje`, opcionalmente adiciona ao `PATH` e registra uma função `paje()` no `.bashrc`/`.zshrc`/`.profile` (necessária para o "cd persistente" do `Ctrl+Q` — ver "Sair no diretório do repositório destacado" abaixo). **Quem já tinha o PAJÉ instalado antes dessa função existir** precisa rodar o instalador de novo (ele detecta o que já está feito e só acrescenta o que falta) ou reabrir o terminal/rodar `source ~/.bashrc` (ou equivalente) depois — sem isso, `Ctrl+Q` continua encerrando o PAJÉ normalmente, só que o terminal não muda de diretório.
+O instalador verifica o Git, clona o repositório, executa health-check, garante Node.js 24.x (chamando `config-paje.sh` — ver abaixo), roda `npm install`, cria o link `paje`, opcionalmente adiciona ao `PATH` e registra uma função `paje()` no `.bashrc`/`.zshrc`/`.profile` (necessária para o "cd persistente" do `Ctrl+Q` — ver "Sair no diretório do repositório destacado" abaixo). Ao final, o PAJÉ está pronto pra rodar — não é preciso executar mais nada manualmente. **Quem já tinha o PAJÉ instalado antes dessas etapas existirem** pode rodar o instalador de novo a qualquer momento: ele detecta o que já está feito (repositório clonado, PATH, função de shell) e só completa o que falta, incluindo reinstalar dependências que ficaram desatualizadas.
 
-Para garantir Node.js 24.x correto:
+`config-paje.sh` continua existindo como script separado, standalone, pra quem só quer atualizar a versão do Node.js depois — sem precisar rodar o instalador inteiro de novo:
 
 ```bash
 ./config-paje.sh
@@ -47,7 +47,7 @@ Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/lukeb
 .\install-paje.ps1
 ```
 
-Mesmo comportamento do instalador Linux (checa o Git — instalando via `winget` se necessário —, clona o repositório, executa health-check e oferece adicionar o PAJÉ ao `PATH` do usuário), adaptado às ferramentas nativas do PowerShell 5.1+/7+. Se o PowerShell bloquear a execução do script baixado, rode `Unblock-File install-paje.ps1` antes, ou ajuste a política de execução da sessão atual com `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`.
+Mesmo comportamento do instalador Linux (checa o Git e o Node.js — instalando via `winget` se necessário —, clona o repositório, executa health-check, roda `npm install` e oferece adicionar o PAJÉ ao `PATH` do usuário), adaptado às ferramentas nativas do PowerShell 5.1+/7+. Se o PowerShell bloquear a execução do script baixado, rode `Unblock-File install-paje.ps1` antes, ou ajuste a política de execução da sessão atual com `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`.
 
 O instalador também cria `paje.cmd` junto do `paje.ps1` — um shim que permite chamar `paje` (sem digitar a extensão) tanto no `cmd.exe` quanto dentro do próprio PowerShell, exatamente como no Linux. Isso é necessário porque `.ps1` não faz parte do `PATHEXT` padrão do Windows, e o PowerShell recusa por segurança rodar um script pelo nome nu mesmo com o diretório no `PATH` — só `.cmd`/`.bat`/`.exe` resolvem dessa forma.
 

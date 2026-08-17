@@ -129,6 +129,64 @@ function Confirm-HealthCheck([string]$DestDir) {
     Write-Info "Health check OK."
 }
 
+# Garante Node.js/npm disponiveis antes de instalar dependencias — sem isso
+# "npm install" roda com qualquer runtime que estiver no PATH (ou falha
+# direto se nao houver nenhum) e o PAJE pode falhar de formas obscuras ao
+# iniciar. So avisa (nao aborta) se a versao major for diferente da
+# recomendada — mesmo comportamento "recomendado, nao obrigatorio" que
+# config-paje.sh ja tem no lado Linux; este projeto ainda nao tem um
+# config-paje.ps1 equivalente para reuso, entao a checagem fica inline aqui.
+$PajeNodeTargetMajor = 24
+
+function Get-NodeMajorVersion {
+    if (-not (Test-CommandExists "node")) {
+        return $null
+    }
+    $version = (& node --version).TrimStart("v")
+    return [int]($version.Split(".")[0])
+}
+
+function Confirm-NodeRuntime {
+    if (-not (Test-CommandExists "node") -or -not (Test-CommandExists "npm")) {
+        Write-WarnMsg "Node.js e/ou npm nao encontrados. Iniciando instalacao..."
+        if (Test-CommandExists "winget") {
+            Write-Info "Usando winget para instalar Node.js $PajeNodeTargetMajor.x (LTS)."
+            winget install --id OpenJS.NodeJS.LTS -e --source winget --accept-source-agreements --accept-package-agreements
+            $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+            if (-not (Test-CommandExists "node") -or -not (Test-CommandExists "npm")) {
+                Exit-WithError "Node.js instalado, mas nao encontrado nesta sessao. Feche e reabra o PowerShell e rode o instalador de novo, ou instale manualmente: https://nodejs.org/"
+            }
+        } else {
+            Exit-WithError "Node.js nao encontrado e winget indisponivel. Instale manualmente (versao $PajeNodeTargetMajor.x LTS): https://nodejs.org/"
+        }
+    }
+
+    $major = Get-NodeMajorVersion
+    if ($null -ne $major -and $major -ne $PajeNodeTargetMajor) {
+        Write-WarnMsg "Node.js ($(node --version)) diferente da versao recomendada: $PajeNodeTargetMajor.x (LTS ativo)."
+    } else {
+        Write-Info "Node.js detectado: $(node --version)"
+    }
+}
+
+# Roda "npm install" sempre, incondicionalmente — paje.ps1 so instala se
+# node_modules nem existir, o que deixa passar um node_modules
+# antigo/incompleto (de antes de uma dependencia nova ser adicionada, por
+# exemplo). Aqui, ao final da instalacao, garantimos que as dependencias
+# realmente batem com o package.json atual.
+function Install-PajeDependencies([string]$DestDir) {
+    Write-Info "Instalando dependencias do PAJE (npm install)..."
+    Push-Location $DestDir
+    try {
+        npm install
+        if ($LASTEXITCODE -ne 0) {
+            Exit-WithError "Falha ao instalar dependencias via npm install em $DestDir."
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
 function Confirm-PajeOnPath([string]$DestDir) {
     $currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
     if ($null -ne $currentPath -and ";$currentPath;".Contains(";$DestDir;")) {
@@ -215,6 +273,9 @@ function Invoke-Main {
         Write-Host "- Repositorio: $repoUrl"
         Write-Host "- Diretorio:   $destDir"
     }
+
+    Confirm-NodeRuntime
+    Install-PajeDependencies $destDir
 
     Confirm-PajeOnPath $destDir
     Confirm-PajeShellFunction $destDir

@@ -310,6 +310,38 @@ ensure_paje_on_path() {
   fi
 }
 
+# Reaproveita config-paje.sh (já clonado dentro de dest_dir nesse ponto) pra
+# garantir Node.js na versão-alvo antes de instalar dependências — sem isso,
+# "npm install" roda com qualquer Node que estiver no PATH e o PAJÉ pode
+# falhar de formas obscuras em tempo de execução. Não aborta a instalação se
+# o usuário optar por não atualizar (mesmo comportamento "recomendado, não
+# obrigatório" que config-paje.sh já tem sozinho) — só aborta se Node/npm
+# continuarem ausentes depois de uma tentativa de instalação.
+ensure_node_runtime() {
+  local dest_dir="$1"
+  local config_script="$dest_dir/config-paje.sh"
+
+  if [[ ! -f "$config_script" ]]; then
+    log_warn "config-paje.sh não encontrado em $dest_dir — pulando verificação da versão do Node.js."
+    return 0
+  fi
+
+  log_info "Verificando ambiente Node.js..."
+  bash "$config_script" || abort "Falha ao configurar o ambiente Node.js. Rode manualmente: $config_script"
+}
+
+# Roda "npm install" sempre, incondicionalmente — ao contrário do check de
+# paje.sh (que só instala se node_modules nem existir), aqui é o único ponto
+# que garante, ao final da instalação, que as dependências realmente batem
+# com o package.json atual. Sem isso, um node_modules antigo/incompleto (de
+# antes de uma dependência nova ser adicionada, por exemplo) passa batido e
+# só quebra depois, ao iniciar o PAJÉ.
+ensure_dependencies_installed() {
+  local dest_dir="$1"
+  log_info "Instalando dependências do PAJÉ (npm install)..."
+  (cd "$dest_dir" && npm install) || abort "Falha ao instalar dependências via npm install em $dest_dir."
+}
+
 # Registra uma função paje() que envolve o binário real (o symlink criado por
 # ensure_cli_symlink) para permitir "cd persistente" ao sair via Ctrl+Q na
 # árvore git-sync. Um processo filho (paje.sh, e o "npm run dev" que ele
@@ -436,6 +468,9 @@ main() {
     health_check "$dest_dir"
     summary "$repo_url" "$dest_dir"
   fi
+
+  ensure_node_runtime "$dest_dir"
+  ensure_dependencies_installed "$dest_dir"
 
   ensure_cli_symlink "$dest_dir"
   ensure_paje_on_path "$dest_dir"
