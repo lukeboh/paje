@@ -111,6 +111,9 @@ Carrega a árvore de grupos/projetos de todos os servidores configurados (GitLab
 - Em colisão de caminho local (mesmo `path_with_namespace` em servidores diferentes), o diretório recebe sufixo `-<Servidor>`.
 - Filtros Ant/Glob suportam `?`, `*`, `**`; múltiplos padrões separados por `;`.
 - **Excluir da árvore (Ctrl+D)**: na TUI, `Ctrl+D` no item destacado abre um modal de confirmação e adiciona o repositório (ou, se for uma pasta, ela e tudo dentro dela) ao `excludeFilter`, gravando em `env.yaml` — a partir daí, nunca mais aparece na árvore nem é sincronizado, mesmo com acesso. Repita em outros itens para excluir mais de um.
+- **Checkout em massa (Ctrl+K)**: na TUI, com um ou mais itens marcados por checkbox, pede o nome de uma branch e faz checkout dela em todos os repositórios marcados. Se a branch não existir em algum deles, avisa quais faltam e oferece a opção de criá-la (e enviá-la ao remoto) ali também. Sem nenhum item marcado, apenas avisa — não há fallback para o item destacado.
+- **Voltar em massa à branch padrão (Ctrl+R)**: mesma exigência de seleção do Ctrl+K; volta cada repositório marcado à sua própria branch padrão, pulando (sem travar o lote) os que não têm branch padrão conhecida.
+- **Renomear branch (dentro do Ctrl+B)**: a modal de branch já existente ganhou a opção "✎ Renomear branch atual" — renomeia localmente (`git branch -m`) e, se houver remoto configurado, envia o novo nome e remove o antigo do remoto (nessa ordem, para nunca deixar a branch sem nenhuma cópia remota). Opera sobre um único repositório (o destacado), não em massa.
 - Em servidores GitHub, organizações são exibidas como grupos e o login do usuário aparece como grupo pessoal.
 - O log usa `LoggerBroker` (motor pino) com transports para console (`info`), painel TUI (`info`; `debug` com `--verbose`) e arquivo diário `~/.paje/logs` via pino-pretty.
 

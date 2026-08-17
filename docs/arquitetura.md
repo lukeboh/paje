@@ -359,6 +359,49 @@ toda a subárvore, se for grupo) é removido da árvore em memória via
 recarregar — quem garante que o item não volta nas próximas sincronizações é o
 valor já persistido em `env.yaml`.
 
+### Operações de branch em massa e renomear (`gitBranchService.ts`)
+
+Além do fluxo por repositório já existente (`Ctrl+B`: trocar/criar branch),
+`core/gitBranchService.ts` expõe operações que atuam sobre **todos os
+repositórios marcados com checkbox** de uma vez (nunca com fallback implícito
+para o item destacado se nada estiver marcado — mutar várias working trees a
+partir de "0 marcados" viraria "1 alvo arbitrário" silenciosamente, então
+`Ctrl+K`/`Ctrl+R` só avisam e não abrem nada nesse caso):
+
+- **`Ctrl+K` — checkout em massa, com opção de criar.** Pede o nome da branch
+  (`TextInputModal`), faz uma checagem só de leitura (`checkBranchAvailability`,
+  via `hasRef` — nunca dispara um checkout sozinho) pra saber em quais
+  repositórios a branch já existe. Se existir em todos, troca direto. Se faltar
+  em algum, um `ConfirmModal` nomeia os que faltam e explica os dois caminhos
+  antes de perguntar — `Enter` cria e envia ao remoto nesses também,
+  `Esc` troca só onde já existe e pula o resto — antes de rodar
+  `checkoutOrCreateBranchBulk`.
+- **`Ctrl+R` — voltar em massa para a branch padrão** de cada repositório
+  marcado (`project.default_branch`, que é opcional — `checkoutDefaultBranchBulk`
+  pula, sem travar o lote, quem não tiver essa informação). Confirmação direta,
+  sem passo de nome.
+- **Renomear** (dentro do `Ctrl+B` já existente, opção "✎ Renomear branch
+  atual" — não é operação em massa, atua só no repositório destacado):
+  `renameBranch()` faz `git branch -m` local sempre, e só mexe no remoto se o
+  clone tiver um (`readLocalRepoInfo(targetPath).remoteUrl` — o mesmo sinal que
+  `resolveRepoStatus` já usa, não metadado da API). Empurra o nome novo com
+  `git push -u origin <novo>` (fixa o tracking em um passo, já que `git branch -m`
+  preserva o upstream antigo apontando pro remoto que está prestes a sumir)
+  **antes** de apagar o antigo do remoto, pra nunca deixar a branch com zero
+  cópias no remoto se algo falhar no meio. Se só o `--delete` falhar, a
+  renomeação em si já terminou — vira aviso, não erro.
+
+As operações em massa rodam sequencialmente (nunca em paralelo — mexem em
+working tree, então paralelizar arriscaria colidir com uma sincronização em
+andamento) e capturam erro por item: um repositório falhando (ex.: mudanças
+não commitadas que o próprio git recusa sobrescrever) não derruba o lote
+inteiro, só aparece como `"failed"` no resultado daquele item. Nenhuma dessas
+funções constrói texto pro usuário — devolvem só dados estruturados
+(status/motivo em código, texto bruto do erro do git), a apresentação
+(`tui.app.tsx`) que monta a mensagem certa por `t()`. Um novo
+`branchOpInProgressRef` (irmão do `syncInProgressRef` já existente) impede
+essas operações de rodar ao mesmo tempo entre si ou junto de uma sincronização.
+
 ### Fluxo de autenticação por tipo de servidor
 
 Modelo *token-first*: todo servidor registrado termina com um token (único
@@ -478,12 +521,24 @@ Modais sobrepostos ao layout (`layout.tsx`):
 - `ParametersModal` (`Ctrl+P`) — parâmetros carregados, somente leitura.
 - `EditParamsModal` (`Ctrl+E`) — edição do `env.yaml` com pendências e `Ctrl+S` para gravar.
 - `HelpModal` (`Ctrl+H`) — atalhos por contexto, executáveis a partir do modal.
-- `BranchModal` (`Ctrl+B`, na árvore) — seleção/criação de branch.
+- `BranchModal` (`Ctrl+B`, na árvore) — seleção/criação/renomeação de branch.
+- `ExcludeModal` (`Ctrl+D`, na árvore) — confirmação de exclusão da árvore (ver
+  seção `excludeFilter` acima).
+- `ConfirmModal` (`modalType: "confirm"`) — confirmação genérica (título + mensagem
+  + detalhe opcional), reaproveitada por qualquer fluxo que só precise de um
+  Enter/Esc simples — hoje usada pelos dois passos de confirmação do checkout
+  em massa e voltar ao padrão (`Ctrl+K`/`Ctrl+R`, ver seção de branch abaixo).
+- `TextInputModal` (`modalType: "text-input"`) — campo de texto único genérico
+  (mesmo input caractere-a-caractere que o `BranchModal` já usava para criar
+  branch, isolado como modal próprio); hoje usado só pelo nome da branch do
+  checkout em massa.
 
 **Regra de posse do teclado:** modais de workflow (`edit-params` e `branch`) são donos
 do teclado enquanto abertos — o `Layout` não processa `Esc`/`Ctrl+P`/`Ctrl+H`/`Ctrl+E`
-nesses estados (trocar de modal descartaria estado pendente). `Ctrl+C` funciona sempre,
-inclusive com modal aberto.
+nesses estados (trocar de modal descartaria estado pendente). Os demais modais
+(`exclude`, `confirm`, `text-input`) não precisam dessa regra: não têm sub-estado
+que valha a pena preservar contra um `Esc` genérico do `Layout` — fechar e cancelar
+dão no mesmo. `Ctrl+C` funciona sempre, inclusive com modal aberto.
 
 **Atalhos e bytes de terminal:** o terminal envia o mesmo byte para `Ctrl+M` e `Enter`
 (`0x0d`) e o byte de backspace para `Ctrl+H` (`0x08`; a tecla Backspace física envia
