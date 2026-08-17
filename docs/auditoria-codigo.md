@@ -155,6 +155,24 @@ do parse do Ink, ou atualizar o Ink) antes de poder corrigir.
 
 ---
 
+### ~~BUG-16~~ — `loadTree()` pulava a checagem de `known_hosts` no caminho de cache-hit, travando sincronizações em paralelo
+**Severidade: ALTO** | **Status: RESOLVIDO**
+
+`ensureKnownHost`/`hasValidSshAssociation` só rodavam dentro do laço de
+busca por servidor na API (via `ensureSshKey`) — pulado inteiramente quando
+`loadTree()` responde a partir de `~/.paje/git-tree-cache.json`. Numa
+máquina onde `~/.paje` existe mas `~/.ssh/known_hosts` está incompleto para
+algum host, a primeira operação SSH real só acontecia dentro do
+`syncSelected()`, com N clones/fetches em paralelo cada um preso numa
+pergunta interativa do SSH que nenhum processo em segundo plano consegue
+responder — travando a sincronização inteira sem nenhuma mensagem de erro.
+Corrigido com `ensureKnownHostsForServers()`, chamada incondicionalmente
+logo após `listServers()` em `loadTree()` (antes até da checagem de cache) —
+ver "Garantia de `known_hosts` antes de qualquer operação git" em
+`arquitetura.md`. Coberto por `tests/git_sync_known_hosts_test.ts`.
+
+---
+
 ## 2. INCONSISTÊNCIAS ENTRE ARQUIVOS
 
 ### ~~INC-01~~ — Separador de branch em `syncRepos`: `#` no CLI vs `@` na TUI
