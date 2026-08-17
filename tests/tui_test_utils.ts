@@ -20,6 +20,7 @@ export const KEYS = {
   ctrlK: "\u000b",
   ctrlL: "\u000c",
   ctrlP: "\u0010",
+  ctrlQ: "\u0011",
   ctrlR: "\u0012",
   ctrlS: "\u0013",
   ctrlW: "\u0017",

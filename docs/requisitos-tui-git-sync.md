@@ -144,6 +144,20 @@ Quando um repositório está **divergido** (`ahead > 0` e `behind > 0`), o siste
 - Se o repositório não tiver remoto configurado, a renomeação fica só local.
 - Se o envio do novo nome falhar, a renomeação é revertida por erro (mesmo tratamento de falha do fluxo de branch já existente). Se apenas a remoção do nome antigo no remoto falhar (o novo nome já foi enviado com sucesso), o sistema avisa no log, mas não trata como falha — a renomeação em si foi concluída.
 
+### RF-15 — Sair no diretório do repositório destacado (`Ctrl+Q`)
+
+- Diferente dos RF-12/RF-13, esta é uma operação de **um repositório só** — o destacado pelo cursor, não os marcados com checkbox.
+- Exige que o item destacado seja um projeto com um clone git real já existente localmente; num grupo, ou num projeto sem clone local, `Ctrl+Q` apenas registra um aviso no log e não abre nenhum modal.
+- Com um projeto válido destacado, um modal de confirmação mostra o caminho absoluto de destino antes de agir.
+- `Enter` no modal: o sistema grava esse caminho num arquivo (`~/.paje/cd-target`) e encerra o PAJÉ inteiro (não volta ao menu, mesmo quando iniciado sem argumentos).
+- `Esc` no modal cancela: a tela da árvore continua aberta, nada é gravado.
+- Depois que o processo do PAJÉ encerra, uma função registrada no shell do usuário (instalada pelo instalador — ver README) lê esse arquivo e efetivamente muda o diretório do terminal para lá. Sem essa função instalada, `Ctrl+Q` ainda encerra o PAJÉ normalmente, mas o terminal não muda de diretório.
+
+### RF-16 — Tag ARQUIVADO
+
+- Repositórios com `archived: true` na API de origem (GitLab/GitHub) devem exibir uma tag "ARQUIVADO" na árvore, junto das demais informações da linha (servidor, branch, status de sincronização), sempre que não estiverem ocultos por `noArchivedRepos`.
+- A tag deve aparecer mesmo antes do status de sincronização local terminar de ser calculado em segundo plano.
+
 ## Requisitos de usabilidade
 
 ### RU-01 — Estrutura da TUI
@@ -164,6 +178,7 @@ Quando um repositório está **divergido** (`ahead > 0` e `behind > 0`), o siste
 - Deve exibir os atalhos `Ctrl+W` para maximizar/restaurar a área de trabalho e `Ctrl+L` para maximizar/restaurar o log.
 - Deve exibir `Ctrl+B` para a modal de branch, `Ctrl+D` para excluir da árvore e `Ctrl+H` para a modal de ajuda.
 - Deve exibir `Ctrl+K` para checkout em massa (com opção de criar) e `Ctrl+R` para voltar em massa à branch padrão, nos itens marcados.
+- Deve exibir `Ctrl+Q` para sair no diretório do repositório destacado.
 
 ### RU-03 — Log de operações
 

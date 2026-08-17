@@ -112,6 +112,7 @@ const ptBR = {
         exclude: "excluir da árvore (nunca sincronizar nem exibir)",
         bulkCheckout: "checkout em massa nos repositórios marcados (com opção de criar)",
         bulkReturnDefault: "voltar os repositórios marcados para a branch padrão de cada um",
+        exitAtDirectory: "sair e mudar para o diretório do repositório destacado",
       },
     },
   },
@@ -119,9 +120,9 @@ const ptBR = {
     tree: {
       empty: "(Nenhum repositório encontrado)",
       orientationDefault:
-        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | Ctrl+S para sincronizar tudo | Enter para sincronizar apenas o escopo destacado | Esc para cancelar | Ctrl+F para pesquisar por nome | Ctrl+X para filtrar selecionados | Ctrl+B para branch | Ctrl+D para excluir da árvore | Ctrl+K para checkout em massa | Ctrl+R para voltar ao padrão em massa | Ctrl+W para ampliar área de trabalho | Ctrl+L para ampliar log | Ctrl+H para ajuda",
+        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | Ctrl+S para sincronizar tudo | Enter para sincronizar apenas o escopo destacado | Esc para cancelar | Ctrl+F para pesquisar por nome | Ctrl+X para filtrar selecionados | Ctrl+B para branch | Ctrl+D para excluir da árvore | Ctrl+K para checkout em massa | Ctrl+R para voltar ao padrão em massa | Ctrl+Q para sair no diretório destacado | Ctrl+W para ampliar área de trabalho | Ctrl+L para ampliar log | Ctrl+H para ajuda",
       orientationConfirm:
-        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | Ctrl+S para confirmar seleção (tudo) | Enter para confirmar seleção (escopo) | Esc para cancelar | Ctrl+F para pesquisar por nome | Ctrl+X para filtrar selecionados | Ctrl+B para branch | Ctrl+D para excluir da árvore | Ctrl+K para checkout em massa | Ctrl+R para voltar ao padrão em massa | Ctrl+W para ampliar área de trabalho | Ctrl+L para ampliar log | Ctrl+H para ajuda",
+        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | Ctrl+S para confirmar seleção (tudo) | Enter para confirmar seleção (escopo) | Esc para cancelar | Ctrl+F para pesquisar por nome | Ctrl+X para filtrar selecionados | Ctrl+B para branch | Ctrl+D para excluir da árvore | Ctrl+K para checkout em massa | Ctrl+R para voltar ao padrão em massa | Ctrl+Q para sair no diretório destacado | Ctrl+W para ampliar área de trabalho | Ctrl+L para ampliar log | Ctrl+H para ajuda",
       textFilterIndicator: 'Filtro: "{{query}}" — {{count}} item(ns) | Esc limpa | Backspace apaga',
       filterAll: "[DEBUG] Exibindo todos os repositórios.",
       filterSelected: "[DEBUG] Exibindo apenas repositórios marcados.",
@@ -141,6 +142,10 @@ const ptBR = {
       bulkSkippedBranchMissing: "{{label}}: pulado (branch não existe e a criação não foi solicitada).",
       bulkSkippedNoDefaultBranch: "{{label}}: pulado (branch padrão desconhecida).",
       bulkFailed: "{{label}}: falhou — {{error}}",
+      archivedTag: "ARQUIVADO",
+      exitAtDirectoryInvalid: "Selecione um repositório clonado válido para sair no diretório dele.",
+      exitAtDirectoryConfirmTitle: "Sair e mudar de diretório",
+      exitAtDirectoryConfirmMessage: "O PAJÉ será encerrado e o terminal será posicionado em: {{path}}",
     },
     loading: {
       repositories: "Carregando repositórios...",

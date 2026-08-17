@@ -55,6 +55,7 @@ const testFiles = [
   "./tui_tree_exclude_test.js",
   "./tui_branch_rename_test.js",
   "./tui_bulk_branch_ops_test.js",
+  "./tui_exit_at_directory_test.js",
   "./tui_no_flicker_test.js",
   "./tui_screen_transition_test.js",
   "./tui_orientation_bar_truncate_test.js",

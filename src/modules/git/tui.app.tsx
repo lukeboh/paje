@@ -20,9 +20,9 @@ import {
   resolveRepoStatus,
   type BulkBranchResult,
 } from "./core/gitBranchService.js";
-import { readLocalRepoInfo } from "./gitRepoScanner.js";
+import { hasGitDir, readLocalRepoInfo } from "./gitRepoScanner.js";
 import { splitFilterPatterns } from "./patternFilter.js";
-import { writeEnvYamlUpdates } from "./persistence.js";
+import { writeCdTarget, writeEnvYamlUpdates } from "./persistence.js";
 
 export type TuiSelectionMode = "all" | "single";
 
@@ -31,6 +31,11 @@ export type TuiSelectionResult = {
   mode?: TuiSelectionMode;
   selectedNodeId?: string;
   nodes: GitLabTreeNode[];
+  // Absolute path of the highlighted repo, set only when the user exited
+  // via Ctrl+Q — the caller (gitCommand.ts) reads this to terminate the
+  // whole process; the shell that invoked PAJÉ then does the actual cd
+  // (see writeCdTarget in persistence.ts).
+  exitToDirectory?: string;
 };
 
 type FlatTreeItem = {
@@ -40,6 +45,7 @@ type FlatTreeItem = {
   serverName?: string;
   serverColor?: string;
   status?: RepoSyncStatus;
+  archived?: boolean;
   progress?: string;
   selected: boolean;
   partiallySelected: boolean;
@@ -163,6 +169,7 @@ const flattenTree = (
       serverName,
       serverColor: serverName ? serverColorMap?.get(serverName) : undefined,
       status: node.status,
+      archived: node.project?.archived,
       progress: progressMap.get(node.id)?.text,
       selected: node.selected ?? false,
       partiallySelected: node.partiallySelected ?? false,
@@ -184,7 +191,7 @@ const TreeRowComponent: React.FC<{ item: FlatTreeItem; selected: boolean }> = (
   const progressLabel = item.progress ? item.progress : "";
   const textColor = selected ? "white" : undefined;
   const backgroundColor = selected ? "blue" : undefined;
-  const hasInfo = Boolean(item.serverName || statusLabel);
+  const hasInfo = Boolean(item.serverName || statusLabel || item.archived);
 
   return (
     <Box flexDirection="row" width="100%">
@@ -196,6 +203,12 @@ const TreeRowComponent: React.FC<{ item: FlatTreeItem; selected: boolean }> = (
         {hasInfo && (
           <Text color={textColor} backgroundColor={backgroundColor}>
             {" "}[
+            {item.archived && (
+              <Text color="gray">{t("tui.tree.archivedTag")}</Text>
+            )}
+            {item.archived && (item.serverName || statusLabel) && (
+              <Text color={textColor}>{", "}</Text>
+            )}
             {item.serverName && (
               <Text color={item.serverColor ?? textColor}>{item.serverName}</Text>
             )}
@@ -233,6 +246,7 @@ const TreeRow = React.memo(
     prev.item.progress === next.item.progress &&
     prev.item.serverName === next.item.serverName &&
     prev.item.serverColor === next.item.serverColor &&
+    prev.item.archived === next.item.archived &&
     prev.item.status?.branch === next.item.status?.branch &&
     prev.item.status?.state === next.item.status?.state &&
     prev.item.status?.delta === next.item.status?.delta
@@ -494,6 +508,24 @@ export const renderRepositoryTree = async (
         [nodes, debugLogger, items, selectedIndex, options]
       );
 
+      // Mirrors commitResolve's teardown exactly (same resolvedRef guard,
+      // same session.releaseScreen, a single resolve() call) rather than
+      // inventing a second cleanup path — this is the plain Esc/cancel exit
+      // with one extra field set, not a different kind of exit.
+      const commitExitToDirectory = useCallback(
+        (targetPath: string) => {
+          if (resolvedRef.current) {
+            return;
+          }
+          resolvedRef.current = true;
+          if (screenKeyRef.current !== undefined) {
+            session.releaseScreen(screenKeyRef.current);
+          }
+          resolve({ confirmed: true, nodes, exitToDirectory: targetPath });
+        },
+        [nodes]
+      );
+
       const toggleSelected = useCallback(() => {
         const item = items[selectedIndex];
         if (!item) {
@@ -539,6 +571,45 @@ export const renderRepositoryTree = async (
         setBranchModalDefaultBranch(node.project.default_branch);
         modalState.openModal("branch");
       }, [items, selectedIndex, nodes, modalState]);
+
+      const openExitAtDirectory = useCallback(async () => {
+        if (syncInProgressRef.current || branchOpInProgressRef.current) {
+          return;
+        }
+        const item = items[selectedIndex];
+        if (!item) {
+          return;
+        }
+        const resolveNode = (nodeList: GitLabTreeNode[]): GitLabTreeNode | undefined => {
+          for (const node of nodeList) {
+            if (node.id === item.id) {
+              return node;
+            }
+            const found = node.children ? resolveNode(node.children) : undefined;
+            if (found) {
+              return found;
+            }
+          }
+          return undefined;
+        };
+        const node = resolveNode(nodes);
+        if (!node || node.type !== "project" || !node.localPath || !(await hasGitDir(node.localPath))) {
+          appendLogEntry(t("tui.tree.exitAtDirectoryInvalid"), "warn");
+          return;
+        }
+        const targetPath = node.localPath;
+        setConfirmModalConfig({
+          title: t("tui.tree.exitAtDirectoryConfirmTitle"),
+          message: t("tui.tree.exitAtDirectoryConfirmMessage", { path: targetPath }),
+          onConfirm: () => {
+            modalState.closeModal();
+            writeCdTarget(targetPath);
+            commitExitToDirectory(targetPath);
+          },
+          onCancel: () => modalState.closeModal(),
+        });
+        modalState.openModal("confirm");
+      }, [items, selectedIndex, nodes, modalState, commitExitToDirectory]);
 
       const openExcludeModal = useCallback(() => {
         const item = items[selectedIndex];
@@ -802,6 +873,10 @@ export const renderRepositoryTree = async (
             openBulkReturnToDefault();
             return;
           }
+          if (key.ctrl && lower === "q") {
+            void openExitAtDirectory();
+            return;
+          }
           if (key.return) {
             commitResolve(true, "single");
             return;
@@ -944,6 +1019,10 @@ export const renderRepositoryTree = async (
             }
             if (key.ctrl && lower === "r") {
               openBulkReturnToDefault();
+              return;
+            }
+            if (key.ctrl && lower === "q") {
+              void openExitAtDirectory();
               return;
             }
             if (key.ctrl && lower === "x") {

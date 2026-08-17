@@ -402,6 +402,75 @@ funções constrói texto pro usuário — devolvem só dados estruturados
 `branchOpInProgressRef` (irmão do `syncInProgressRef` já existente) impede
 essas operações de rodar ao mesmo tempo entre si ou junto de uma sincronização.
 
+### Tag ARQUIVADO na árvore
+
+`GitLabProject.archived?: boolean` já era populado de ponta a ponta pelas
+APIs do GitLab/GitHub e usado para filtrar (`noArchivedRepos` em
+`gitSyncService.ts`), mas nunca era exibido. `tui.app.tsx` passa esse campo
+adiante em `FlatTreeItem`/`flattenTree` e `TreeRowComponent` renderiza uma
+tag `ARQUIVADO`/`ARCHIVED` (cor cinza, distinta de toda cor já usada pra
+servidor/branch/estado de sync) dentro do mesmo grupo de colchetes já usado
+pra servidor/branch/status, antes desses — qualifica a linha inteira, não
+compete por um segundo espaço à direita. `hasInfo` (o que decide se o grupo
+de colchetes aparece) passa a considerar `item.archived` também, senão um
+projeto arquivado ainda sem `status` resolvido não mostraria nada.
+
+### Sair no diretório do repositório destacado (`Ctrl+Q`)
+
+Como o `Ctrl+B` de renomear, esta é uma operação de **um repositório só**
+(o destacado pelo cursor, não os marcados com checkbox) — o pedido original
+não foi "em massa". Exige um nó `type: "project"` com `localPath` que já
+seja um clone git real em disco (`hasGitDir`, o mesmo já usado por
+`resolveRepoStatus`); nó de grupo, sem clone, ou path inexistente só loga um
+aviso e não abre nada — mesma regra de "sem fallback pro item destacado"
+que rege `Ctrl+K`/`Ctrl+R`, agora ao contrário (aqui o destacado É o alvo,
+mas ainda precisa ser válido antes de mexer em qualquer coisa). Como é uma
+ação surpreendente e não reversível no meio da sessão (encerra o app
+inteiro), passa por um `ConfirmModal` antes.
+
+**Por que isso precisa de mais que `cd`:** um processo filho nunca consegue
+mudar o diretório do shell que o chamou — limitação do sistema operacional,
+não do PAJÉ. `paje` (Linux/macOS/WSL) é um symlink pra `paje.sh`; rodar
+qualquer script por nome sempre cria um processo bash/zsh novo. No Windows,
+`paje` resolve pra `paje.cmd`, que sempre chama
+`powershell -File paje.ps1` como processo novo — e mesmo um `.cmd` rodando
+direto no cmd.exe não escapa disso (cmd.exe executa um `.cmd` como processo
+filho igual a qualquer executável; só comando digitado direto no prompt
+persiste `cd`). Ou seja, não existe solução "de graça" em nenhuma das
+plataformas.
+
+A solução adotada — **cd persistente via função de shell**, escolhida
+explicitamente pelo usuário ao ser perguntado sobre as opções — é: `Ctrl+Q`
+grava o path absoluto em `~/.paje/cd-target` (`writeCdTarget`, texto puro,
+em `persistence.ts`, mesmo padrão de `writeGitServers`/`writeGitTreeCache`)
+e resolve a tela da árvore com `TuiSelectionResult.exitToDirectory` setado
+(reaproveitando exatamente a limpeza de `commitResolve` — mesmo
+`resolvedRef`, mesmo `session.releaseScreen`, só resolvendo com um campo a
+mais). `gitCommand.ts` (o único lugar que chama `renderRepositoryTree` e,
+até aqui, descartava o retorno) captura esse resultado e, se
+`exitToDirectory` estiver setado, chama `process.exit(0)` — a única exceção
+deliberada a "sem `process.exit` neste código", e por isso só existe ali:
+não em `tui.app.tsx` (que continua sendo um componente Ink puro, sem
+controlar o ciclo de vida do processo) nem em `cli.ts` (cujo `while(true)`
+genérico também atende `git-server-store`, que não tem nada a ver com isso).
+
+O `~/.paje/cd-target` só é escrito pelo Node; quem lê e apaga é sempre uma
+**função de shell**, instalada pelo instalador: `ensure_paje_shell_function`
+em `install-paje.sh` acrescenta uma função `paje()` ao `.bashrc`/`.zshrc`/
+`.profile` (mesmo padrão idempotente — marcador exato via `grep -Fxq` — de
+`ensure_paje_on_path`), e `Confirm-PajeShellFunction` em `install-paje.ps1`
+faz o equivalente no `$PROFILE` do PowerShell. Em ambos os casos, a função
+sombreia o comando `paje` do PATH (`command paje "$@"` no bash/zsh; a
+resolução de comando do PowerShell já prioriza função sobre executável
+externo), chama o binário de verdade, e só depois lê+apaga o arquivo
+incondicionalmente (tolerante a arquivo ausente — sem erro, sem `cd`).
+Único leitor, único momento de apagar — não há dois consumidores disputando
+o mesmo arquivo. **cmd.exe puro (sem a função do PowerShell) não ganha essa
+funcionalidade** — decisão deliberada, já que este projeto trata PowerShell
+como shell principal no Windows e uma solução via `doskey`/registro
+`AutoRun` seria superfície nova desproporcional ao tamanho desta evolução;
+`paje.cmd` não é tocado.
+
 ### Fluxo de autenticação por tipo de servidor
 
 Modelo *token-first*: todo servidor registrado termina com um token (único
