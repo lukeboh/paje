@@ -5,6 +5,8 @@ import { t } from "../../../../i18n/index.js";
 export type BranchChoice = {
   name: string;
   isNew?: boolean;
+  isRename?: boolean;
+  oldName?: string;
 };
 
 export type BranchModalProps = {
@@ -22,7 +24,10 @@ type ModalLine = {
   content: React.ReactNode;
   selectable: boolean;
   choice?: BranchChoice;
+  startsRename?: boolean;
 };
+
+type InputMode = "list" | "create" | "rename";
 
 const normalizeBranch = (value?: string): string => (value ?? "").trim();
 
@@ -60,6 +65,14 @@ const buildLines = (branches: string[], currentBranch?: string): ModalLine[] => 
     selectable: true,
     choice: { name: "", isNew: true },
   });
+  if (normalized.length > 0) {
+    lines.push({
+      key: "rename",
+      content: <Text>{t("branchModal.renameOption")}</Text>,
+      selectable: true,
+      startsRename: true,
+    });
+  }
 
   return lines;
 };
@@ -76,8 +89,8 @@ export const BranchModal: React.FC<BranchModalProps> = ({
   const backgroundColor = "#2C2C2C";
   const [scrollOffset, setScrollOffset] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [creating, setCreating] = useState(false);
-  const [newBranchName, setNewBranchName] = useState("");
+  const [mode, setMode] = useState<InputMode>("list");
+  const [inputValue, setInputValue] = useState("");
   const headerHeight = 2;
   const contentHeight = Math.max(1, height - headerHeight - 2);
   const lines = useMemo(() => buildLines(branches, currentBranch), [branches, currentBranch]);
@@ -112,8 +125,8 @@ export const BranchModal: React.FC<BranchModalProps> = ({
   useEffect(() => {
     setScrollOffset(0);
     setSelectedIndex(clampSelectedIndex(0));
-    setCreating(false);
-    setNewBranchName("");
+    setMode("list");
+    setInputValue("");
   }, [isOpen, branches, currentBranch]);
 
   useInput(
@@ -121,28 +134,33 @@ export const BranchModal: React.FC<BranchModalProps> = ({
       if (!isOpen) {
         return;
       }
-      if (creating) {
+      if (mode !== "list") {
         if (key.escape) {
-          setCreating(false);
-          setNewBranchName("");
+          setMode("list");
+          setInputValue("");
           return;
         }
         if (key.return) {
-          const trimmed = newBranchName.trim();
-          if (trimmed.length > 0) {
+          const trimmed = inputValue.trim();
+          if (trimmed.length === 0) {
+            return;
+          }
+          if (mode === "rename") {
+            onConfirm({ name: trimmed, isRename: true, oldName: normalizeBranch(currentBranch) });
+          } else {
             onConfirm({ name: trimmed, isNew: true });
           }
           return;
         }
         if (key.backspace || key.delete) {
-          setNewBranchName((current) => current.slice(0, -1));
+          setInputValue((current) => current.slice(0, -1));
           return;
         }
         if (key.ctrl || key.meta) {
           return;
         }
         if (input) {
-          setNewBranchName((current) => `${current}${input}`);
+          setInputValue((current) => `${current}${input}`);
         }
         return;
       }
@@ -183,13 +201,18 @@ export const BranchModal: React.FC<BranchModalProps> = ({
       }
       if (key.return) {
         const line = lines[selectedIndex];
+        if (line?.startsRename) {
+          setMode("rename");
+          setInputValue(normalizeBranch(currentBranch));
+          return;
+        }
         const choice = line?.choice;
         if (!choice) {
           return;
         }
         if (choice.isNew) {
-          setCreating(true);
-          setNewBranchName("");
+          setMode("create");
+          setInputValue("");
           return;
         }
         onConfirm(choice);
@@ -199,6 +222,9 @@ export const BranchModal: React.FC<BranchModalProps> = ({
   );
 
   const visibleLines = lines.slice(scrollOffset, scrollOffset + contentHeight);
+  const inputHint =
+    mode === "rename" ? t("branchModal.hintRename") : mode === "create" ? t("branchModal.hintCreate") : t("branchModal.hint");
+  const inputLabel = mode === "rename" ? t("branchModal.newNameLabel") : t("branchModal.newBranchLabel");
 
   return (
     <Box
@@ -214,15 +240,15 @@ export const BranchModal: React.FC<BranchModalProps> = ({
           {t("branchModal.title")}
         </Text>
         <Text dimColor backgroundColor={backgroundColor}>
-          {creating ? t("branchModal.hintCreate") : t("branchModal.hint")}
+          {inputHint}
         </Text>
       </Box>
       <Box flexDirection="column" marginTop={1} height={contentHeight}>
-        {creating ? (
+        {mode !== "list" ? (
           <Box flexDirection="column">
-            <Text>{t("branchModal.newBranchLabel")}</Text>
+            <Text>{inputLabel}</Text>
             <Box marginTop={1} borderStyle="round" borderColor="cyan">
-              <Text> {newBranchName}</Text>
+              <Text> {inputValue}</Text>
             </Box>
           </Box>
         ) : (

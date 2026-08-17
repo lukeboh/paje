@@ -9,7 +9,8 @@ import type { GitLabTreeNode, RepoSyncStatus, RepoSyncState } from "./types.js";
 import type { TuiSession } from "./tuiSession.js";
 import { filterTreeBySelection, filterTreeByText, recomputeTreeSelection, removeTreeNodes } from "./treeBuilder.js";
 import { t } from "../../i18n/index.js";
-import { checkoutBranch, createBranchAndPush, listLocalBranches, resolveRepoStatus } from "./core/gitBranchService.js";
+import { checkoutBranch, createBranchAndPush, listLocalBranches, renameBranch, resolveRepoStatus } from "./core/gitBranchService.js";
+import { readLocalRepoInfo } from "./gitRepoScanner.js";
 import { splitFilterPatterns } from "./patternFilter.js";
 import { writeEnvYamlUpdates } from "./persistence.js";
 
@@ -793,7 +794,23 @@ export const renderRepositoryTree = async (
                 return;
               }
               try {
-                if (choice.isNew) {
+                if (choice.isRename && choice.oldName) {
+                  const repoInfo = await readLocalRepoInfo(branchModalTargetPath);
+                  const renameResult = await renameBranch(branchModalTargetPath, choice.oldName, choice.name, {
+                    hasRemote: Boolean(repoInfo.remoteUrl),
+                  });
+                  if (renameResult.remoteDeleteFailed) {
+                    appendLogEntry(
+                      t("branchModal.renameRemoteDeleteWarning", { oldName: choice.oldName, newName: choice.name }),
+                      "warn"
+                    );
+                  } else {
+                    appendLogEntry(
+                      t("branchModal.renameSuccess", { oldName: choice.oldName, newName: choice.name }),
+                      "info"
+                    );
+                  }
+                } else if (choice.isNew) {
                   await createBranchAndPush(branchModalTargetPath, choice.name);
                 } else {
                   const checkoutCommand = await checkoutBranch(branchModalTargetPath, choice.name);
