@@ -13,7 +13,7 @@ export type PanelState = {
   resetPanels: () => void;
 };
 
-export type ModalType = "parameters" | "branch" | "help" | "edit-params" | "exclude";
+export type ModalType = "parameters" | "branch" | "help" | "edit-params" | "exclude" | "confirm" | "text-input";
 
 export type ModalState = {
   modalOpen: boolean;

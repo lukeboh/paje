@@ -152,6 +152,12 @@ const enUS: PtBrTranslations = {
     hint: "Enter confirms | Esc cancels",
     message: "Add to excludeFilter (never synced or shown again, even with access): {{label}}",
   },
+  confirmModal: {
+    hint: "Enter confirms | Esc cancels",
+  },
+  textInputModal: {
+    hint: "Type the value | Enter confirms | Esc cancels",
+  },
   session: {
     orientation: {
       input: "Type the value and press Enter to confirm | Esc to cancel",

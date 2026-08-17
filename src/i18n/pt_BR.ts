@@ -150,6 +150,12 @@ const ptBR = {
     hint: "Enter confirma | Esc cancela",
     message: "Adicionar a excludeFilter (não sincroniza nem exibe de novo, mesmo com acesso): {{label}}",
   },
+  confirmModal: {
+    hint: "Enter confirma | Esc cancela",
+  },
+  textInputModal: {
+    hint: "Digite o valor | Enter confirma | Esc cancela",
+  },
   session: {
     orientation: {
       input: "Digite o valor e pressione Enter para confirmar | Esc para cancelar",
