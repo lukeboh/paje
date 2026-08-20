@@ -130,7 +130,7 @@ await tty.press(" ");
 await tty.press(KEYS.arrowDown);
 await tty.press(" ");
 
-// --- Ctrl+K: nome da branch, confirma criação onde falta, verifica local+remoto ---
+// --- Ctrl+K: nome da branch, confirma criação onde falta (só local, sem push) ---
 await tty.press(KEYS.ctrlK);
 await new Promise((resolve) => setTimeout(resolve, 100));
 assert.ok(
@@ -172,8 +172,18 @@ const repoABranch = (await runGit(["-C", repoA, "branch", "--show-current"])).tr
 assert.equal(repoABranch, "feature-x", "repoA deve estar em feature-x");
 const repoBBranch = (await runGit(["-C", repoB, "branch", "--show-current"])).trim();
 assert.equal(repoBBranch, "feature-x", "repoB deve estar em feature-x (criada)");
-const remoteHasFeatureX = await runGit(["-C", bareRemotePath, "branch", "--list", "feature-x"]);
-assert.ok(remoteHasFeatureX.includes("feature-x"), "feature-x deve ter sido enviada ao remoto a partir de repoB");
+// feature-x já estava no remoto por causa do push feito na configuração
+// (linha 47, a partir de repoA) — a criação em massa em repoB não deve ter
+// mandado nada pro remoto: sem upstream configurado ali é a prova direta de
+// que nenhum "git push" rodou a partir de repoB.
+const repoBUpstream = await runGit(["-C", repoB, "rev-parse", "--abbrev-ref", "feature-x@{upstream}"]).catch(
+  () => ""
+);
+assert.equal(
+  repoBUpstream.trim(),
+  "",
+  "checkout em massa com criação não deve configurar upstream nem enviar nada ao remoto a partir de repoB"
+);
 
 // --- Ctrl+R: volta os dois (ainda marcados) para a branch padrão (main) ---
 await tty.press(KEYS.ctrlR);

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { renderRepositoryTree } from "../src/modules/git/tui.app.js";
 import { createTuiSession } from "../src/modules/git/tuiSession.js";
-import { filterTreeByText } from "../src/modules/git/treeBuilder.js";
+import { filterTreeByText, recomputeTreeSelection, toggleTreeNode } from "../src/modules/git/treeBuilder.js";
 import type { GitLabTreeNode } from "../src/modules/git/types.js";
 import { createFakeTTY, KEYS, stripAnsi, waitNextTick } from "./tui_test_utils.js";
 
@@ -83,7 +83,33 @@ const session = createTuiSession("test", {
   },
 });
 
-const treePromise = renderRepositoryTree(buildNodes(), () => undefined, session, {}).then((result) => {
+const treeNodes = buildNodes();
+
+const findNodeById = (list: GitLabTreeNode[], id: string): GitLabTreeNode | undefined => {
+  for (const node of list) {
+    if (node.id === id) {
+      return node;
+    }
+    const found = node.children ? findNodeById(node.children, id) : undefined;
+    if (found) {
+      return found;
+    }
+  }
+  return undefined;
+};
+
+// Mirrors gitCommand.ts's toggleById — renderRepositoryTree only reports
+// which node id was toggled, the caller owns actually flipping .selected.
+const onToggle = (id: string): void => {
+  const node = findNodeById(treeNodes, id);
+  if (!node) {
+    return;
+  }
+  toggleTreeNode(node, !(node.selected ?? false));
+  treeNodes.forEach((root) => recomputeTreeSelection(root));
+};
+
+const treePromise = renderRepositoryTree(treeNodes, onToggle, session, {}).then((result) => {
   resolvedResult = result;
   return result;
 });
@@ -117,6 +143,26 @@ assert.ok(!filtered.includes("cadastro-eleitor"), "Projetos não correspondentes
 assert.ok(
   filtered.includes('"urna"') && (filtered.includes("Filtro:") || filtered.includes("Filter:")),
   "Indicador do filtro deve exibir a consulta digitada"
+);
+
+// RU-08: seleção por checkbox (Espaço) continua funcionando sobre a lista
+// filtrada — regressão coberta: o handler de Espaço não pode ficar restrito
+// a "fora do modo de pesquisa".
+assert.ok(filtered.includes("[ ] urna-digital"), "Item filtrado deve iniciar desmarcado");
+await tty.press(" ");
+const afterSpaceSelect = lastFrame();
+assert.ok(
+  afterSpaceSelect.includes("[x] urna-digital"),
+  "Espaço deve marcar o item mesmo com o filtro de pesquisa ativo"
+);
+assert.ok(
+  afterSpaceSelect.includes('"urna"'),
+  "Espaço não pode ser interpretado como caractere da consulta (a busca continua 'urna')"
+);
+await tty.press(" ");
+assert.ok(
+  lastFrame().includes("[ ] urna-digital"),
+  "Espaço de novo deve desmarcar o item (toggle), ainda em modo de pesquisa"
 );
 
 // Backspace apaga o último caractere → "urn" ainda casa com urna-digital

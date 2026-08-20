@@ -73,6 +73,14 @@ export const createBranchAndPush = async (targetPath: string, branch: string): P
   await runGit(["-C", targetPath, "push", "-u", "origin", branch]);
 };
 
+// Local-only: no push. Used by the bulk checkout/create flow (Ctrl+K) —
+// creating a branch across every marked repo and pushing all of them
+// straight to the remote in one shot is too heavy-handed for a bulk
+// action; the user pushes explicitly (per repo) once they're ready.
+export const createBranchLocalOnly = async (targetPath: string, branch: string): Promise<void> => {
+  await runGit(["-C", targetPath, "checkout", "-b", branch]);
+};
+
 export type BulkBranchTarget = { targetPath: string; label: string };
 
 export type BulkBranchResult = {
@@ -81,7 +89,7 @@ export type BulkBranchResult = {
   // Only set when status is "skipped" — a code, not a message, so the
   // presentation layer builds the actual (i18n'd) text; core never embeds
   // user-facing strings.
-  reason?: "no-default-branch" | "branch-missing";
+  reason?: "no-default-branch" | "branch-missing" | "not-cloned";
   // Only set when status is "failed" — the raw error text from the
   // underlying git command, passed through as-is (same as every other
   // git-failure surface in this file: the caller wraps it in its own
@@ -90,9 +98,10 @@ export type BulkBranchResult = {
 };
 
 // Single-repo: checks out the branch if it exists (local or remote-tracking,
-// via checkoutBranch), otherwise creates+pushes it when createIfMissing is
-// set, otherwise reports "skipped" without throwing — the bulk variant below
-// relies on that to keep going instead of aborting the whole batch.
+// via checkoutBranch), otherwise creates it locally (no push — see
+// createBranchLocalOnly) when createIfMissing is set, otherwise reports
+// "skipped" without throwing — the bulk variant below relies on that to
+// keep going instead of aborting the whole batch.
 export const checkoutOrCreateBranch = async (
   targetPath: string,
   branch: string,
@@ -105,7 +114,7 @@ export const checkoutOrCreateBranch = async (
   if (!options.createIfMissing) {
     return { action: "skipped" };
   }
-  await createBranchAndPush(targetPath, branch);
+  await createBranchLocalOnly(targetPath, branch);
   return { action: "created" };
 };
 
@@ -138,6 +147,13 @@ export const checkoutOrCreateBranchBulk = async (
 ): Promise<BulkBranchResult[]> => {
   const results: BulkBranchResult[] = [];
   for (const target of targets) {
+    // Without this, a marked-but-never-cloned repo reaches `git -C
+    // <targetPath> ...` directly and fails with a raw "cannot change to
+    // directory" — a confusing generic "failed" instead of a clear skip.
+    if (!(await hasGitDir(target.targetPath))) {
+      results.push({ target, status: "skipped", reason: "not-cloned" });
+      continue;
+    }
     try {
       const { action } = await checkoutOrCreateBranch(target.targetPath, branch, { createIfMissing });
       if (action === "skipped") {

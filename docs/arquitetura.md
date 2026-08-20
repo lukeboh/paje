@@ -373,8 +373,10 @@ partir de "0 marcados" viraria "1 alvo arbitrário" silenciosamente, então
   via `hasRef` — nunca dispara um checkout sozinho) pra saber em quais
   repositórios a branch já existe. Se existir em todos, troca direto. Se faltar
   em algum, um `ConfirmModal` nomeia os que faltam e explica os dois caminhos
-  antes de perguntar — `Enter` cria e envia ao remoto nesses também,
-  `Esc` troca só onde já existe e pula o resto — antes de rodar
+  antes de perguntar — `Enter` cria localmente nesses também (`createBranchLocalOnly`
+  — nunca envia ao remoto; criar/enviar N branches em N repositórios de uma vez é
+  pesado demais pra uma ação em massa, o usuário decide se e quando envia cada
+  uma), `Esc` troca só onde já existe e pula o resto — antes de rodar
   `checkoutOrCreateBranchBulk`.
 - **`Ctrl+R` — voltar em massa para a branch padrão** de cada repositório
   marcado (`project.default_branch`, que é opcional — `checkoutDefaultBranchBulk`

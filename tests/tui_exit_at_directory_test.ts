@@ -44,6 +44,14 @@ await runGit(["clone", bareRemotePath, repoValido]);
 const repoSemClone = path.join(tmpDir, "repo-sem-clone");
 fs.mkdirSync(repoSemClone, { recursive: true });
 
+// Repositório clonado de verdade DENTRO de uma pasta de grupo — usado pra
+// testar Ctrl+Q num nó de grupo (pasta que só contém subpastas/repos, sem
+// ser ela mesma um repositório): o grupo não tem localPath próprio, então a
+// resolução precisa derivar a pasta a partir deste descendente.
+const grupoComRepoDir = path.join(tmpDir, "grupo-com-repo");
+const repoAninhado = path.join(grupoComRepoDir, "repo-aninhado");
+await runGit(["clone", bareRemotePath, repoAninhado]);
+
 const nodes = [
   {
     id: "group-1",
@@ -82,6 +90,30 @@ const nodes = [
       default_branch: "main",
     },
   },
+  {
+    id: "group-2",
+    type: "group" as const,
+    label: "grupo-com-repo",
+    selected: false,
+    excludePattern: "grupo-com-repo/**",
+    children: [
+      {
+        id: "project-3",
+        type: "project" as const,
+        label: "repo-aninhado",
+        selected: false,
+        localPath: repoAninhado,
+        project: {
+          id: 3,
+          name: "repo-aninhado",
+          path_with_namespace: "grupo-com-repo/repo-aninhado",
+          ssh_url_to_repo: `file://${bareRemotePath}`,
+          http_url_to_repo: `file://${bareRemotePath}`,
+          default_branch: "main",
+        },
+      },
+    ],
+  },
 ];
 
 const tty = createFakeTTY();
@@ -111,8 +143,8 @@ await tty.press(KEYS.ctrlQ);
 await new Promise((resolve) => setTimeout(resolve, 100));
 const afterGroupAttempt = lastFrame();
 assert.ok(
-  afterGroupAttempt.includes("Selecione um repositório clonado válido") ||
-    afterGroupAttempt.includes("Select a valid cloned repository"),
+  afterGroupAttempt.includes("Selecione um repositório já clonado ou uma pasta existente") ||
+    afterGroupAttempt.includes("Select an already cloned repository"),
   "Ctrl+Q num grupo deve avisar, não abrir modal"
 );
 assert.ok(
@@ -127,8 +159,8 @@ await tty.press(KEYS.ctrlQ);
 await new Promise((resolve) => setTimeout(resolve, 100));
 const afterNoCloneAttempt = lastFrame();
 assert.ok(
-  afterNoCloneAttempt.includes("Selecione um repositório clonado válido") ||
-    afterNoCloneAttempt.includes("Select a valid cloned repository"),
+  afterNoCloneAttempt.includes("Selecione um repositório já clonado ou uma pasta existente") ||
+    afterNoCloneAttempt.includes("Select an already cloned repository"),
   "Ctrl+Q num projeto sem .git real deve avisar, não abrir modal"
 );
 assert.ok(!fs.existsSync(paths.cdTargetFile), "cd-target ainda não deve existir");
@@ -149,6 +181,29 @@ await tty.press(KEYS.escape);
 await new Promise((resolve) => setTimeout(resolve, 100));
 assert.equal(resolvedResult, null, "Esc no modal de confirmação não deve resolver a tela");
 assert.ok(!fs.existsSync(paths.cdTargetFile), "Esc não deve gravar cd-target");
+
+// --- Cursor no grupo com repositório aninhado (índice 3): também abre
+// confirmação, mesmo sem ser ele mesmo um clone git — deriva a pasta a
+// partir do descendente ---
+await tty.press(KEYS.arrowDown);
+await tty.press(KEYS.ctrlQ);
+await new Promise((resolve) => setTimeout(resolve, 100));
+const groupConfirmFrame = lastFrame();
+assert.ok(
+  groupConfirmFrame.includes("Sair e mudar de diretório") || groupConfirmFrame.includes("Exit and change directory"),
+  "Ctrl+Q num grupo com repositório aninhado deve pedir confirmação, não avisar"
+);
+assert.ok(
+  groupConfirmFrame.includes(grupoComRepoDir),
+  "Confirmação deve citar a pasta do grupo derivada do repositório aninhado"
+);
+await tty.press(KEYS.escape);
+await new Promise((resolve) => setTimeout(resolve, 100));
+assert.equal(resolvedResult, null, "Esc no modal do grupo também não deve resolver a tela");
+assert.ok(!fs.existsSync(paths.cdTargetFile), "Esc no grupo não deve gravar cd-target");
+
+// Volta o cursor pro repositório válido (índice 2) pra continuar o fluxo de confirmação abaixo.
+await tty.press(KEYS.arrowUp);
 
 // --- Reabre e confirma: grava cd-target e resolve com exitToDirectory ---
 await tty.press(KEYS.ctrlQ);
