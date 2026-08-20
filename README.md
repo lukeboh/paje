@@ -21,7 +21,7 @@ O PAJÉ automatiza tarefas repetitivas de ambiente de desenvolvimento com servid
 
 - **Trocar/criar branch (`Ctrl+B`)**: lista as branches locais do repositório destacado, permite trocar ou criar uma nova a partir dali.
 - **Renomear branch (`Ctrl+B`)**: renomeia local e — se houver remoto configurado — remotamente também (envia o novo nome e remove o antigo do remoto, nessa ordem, para nunca deixar a branch sem nenhuma cópia lá).
-- **Checkout em massa, com opção de criar (`Ctrl+K`)**: troca de branch em todos os repositórios marcados de uma vez; se a branch não existir em algum deles, oferece criá-la e enviá-la ao remoto ali também.
+- **Checkout em massa, com opção de criar (`Ctrl+K`)**: troca de branch em todos os repositórios marcados de uma vez; se a branch não existir em algum deles, oferece criá-la **localmente** ali também — nunca envia ao remoto sozinho; o envio fica a critério do usuário, repositório por repositório.
 - **Voltar em massa à branch padrão (`Ctrl+R`)**: volta cada repositório marcado para sua própria branch padrão, pulando sem travar o lote os que não têm essa informação.
 
 ### Autenticação e segurança
@@ -392,10 +392,21 @@ npm test        # suite completa (runner tolerante a falhas + resumo final)
 
 ## Roadmap
 
+### Novas funcionalidades planejadas
+
 Ideias registradas para o futuro — **ainda não implementadas**, sem previsão:
 
 - **Sincronizar todas as branches dos repositórios locais** (não só a que está em checkout no momento): um comando novo (`Ctrl+Alt+S` na árvore), tanto individual (repositório destacado) quanto em massa (todos os marcados), que atualiza cada branch local a partir do remoto sem precisar fazer checkout nela primeiro.
 - **Purge de branches locais que não existem mais no servidor**: individual ou em massa. O purge já apaga a branch local — exceto quando ela ainda não foi mergeada, caso em que pergunta ao usuário se quer fazer checkout para essa branch não mergeada, ignorá-la (deixar como está), ou apagá-la mesmo assim.
+
+### Bugs conhecidos
+
+Relatados, ainda **não reproduzidos/diagnosticados** neste ambiente de desenvolvimento:
+
+- **TUI trava sem responder a nenhuma tecla no Windows, depois que a árvore carrega** — relatado com 3 servidores já cadastrados (ainda não confirmado se é a causa). Depois que a árvore do `git-sync` termina de carregar, nenhuma tecla tem efeito; a única forma de sair é fechar o terminal à força, e o problema se repete em execuções seguintes. Sem um ambiente Windows disponível para reproduzir diretamente — hipótese a investigar: alguma camada da cadeia `paje.cmd` → `powershell.exe` → `npm run dev` → `tsx`/`node` pode não estar entregando ao processo um `stdin` em modo raw de verdade, que é o que o Ink precisa para capturar teclado.
+- **Cadastro de servidor incompleto ainda assim persiste e pode deixar sincronizar** — numa instalação nova, ao tentar sincronizar sem nenhum servidor configurado, o `git-sync` abre o formulário de cadastro do GitLab; mas `gitCommand.ts` já grava a entrada em `~/.paje/git-servers.json` (`writeGitServers`) assim que nome/URL são informados, **antes** do processo de bootstrap de credencial (`ensureServerHasCredentials` — gerar/validar chave SSH ou token) terminar de verdade. Se esse bootstrap for cancelado, falhar, ou for interrompido no meio, a entrada incompleta (sem token nem chave SSH válida) permanece salva, e o fluxo não garante um bloqueio explícito de "não sincronize nada enquanto este servidor não tiver credencial confirmada" — o esperado é barrar a sincronização até o cadastro ser concluído com sucesso, em vez de deixar um servidor fantasma persistido e possivelmente seguir adiante. Ainda não reproduzido passo a passo neste ambiente (exige um GitLab real pra validar a interação completa).
+- **Ao sair do PAJÉ no Windows, fica numa tela vazia até `Ctrl+C`** — depois de sair da TUI, o terminal fica com a tela em branco, sem devolver o prompt; só depois de apertar `Ctrl+C` aparece o prompt nativo do `cmd.exe` "Deseja finalizar o arquivo em lotes (S/N)?" — sinal de que o processo Node, por baixo da cadeia `paje.cmd` → `powershell.exe` → `npm run dev` → `tsx`, não está terminando sozinho ao final da execução (nenhum `process.exit()` é chamado hoje em nenhum caminho de saída "normal", fora do `Ctrl+Q`; o processo deveria encerrar pelo esvaziamento natural do event loop, mas algo na cadeia do Windows parece não deixar isso acontecer). Possivelmente relacionado ao bug anterior (travamento de teclado) — mesma cadeia de processos sob suspeita. Não reproduzido neste ambiente (sem Windows disponível).
+- **Desselecionar um repositório sincronizado não remove a cópia local ao sincronizar** — o código em `gitCommand.ts` (`removalCandidates`/`confirmRemoval`/`shouldConfirmRemoval`) parece desenhado exatamente para isso: repositórios desmarcados com status diferente de `EMPTY` deveriam ser removidos automaticamente, só pedindo confirmação quando o estado for `UNCOMMITTED`/`AHEAD`/`DIVERGED` (mudanças locais não commitadas ou não enviadas — a única coisa que deve impedir a remoção). Relatado como não acontecendo na prática. Hipóteses ainda não verificadas: (1) escopo — sincronizar com `Enter` (escopo único) só considera desmarcados dentro da subárvore destacada, nunca fora dela, diferente de `Ctrl+S` (árvore inteira); (2) um `localPath` resolvido incorretamente faz `fs.existsSync` retornar falso e pular a remoção **em silêncio**, sem nenhuma linha de log explicando por quê.
 
 ---
 

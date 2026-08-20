@@ -125,7 +125,7 @@ Quando um repositório está **divergido** (`ahead > 0` e `behind > 0`), o siste
 - Com itens marcados, um modal de texto pede o nome da branch de destino.
 - O sistema verifica, somente em modo leitura, em quais repositórios marcados a branch já existe (local ou remotamente), sem alterar nada.
 - Se a branch já existir em todos os repositórios marcados, o checkout é feito diretamente, sem confirmação adicional.
-- Se faltar em algum, um modal de confirmação lista quantos/quais repositórios não têm a branch e explica os dois desfechos possíveis: `Enter` cria a branch e a envia ao remoto também nesses repositórios; `Esc` troca apenas onde a branch já existe e pula o restante.
+- Se faltar em algum, um modal de confirmação lista quantos/quais repositórios não têm a branch e explica os dois desfechos possíveis: `Enter` cria a branch **localmente** (sem enviar ao remoto) também nesses repositórios; `Esc` troca apenas onde a branch já existe e pula o restante.
 - Cada repositório processado gera uma linha de log com o resultado (`trocado`, `criado`, `pulado`, `falhou`) e a árvore atualiza a coluna de branch/status do respectivo nó imediatamente.
 - Uma falha em um repositório (ex.: alterações não commitadas que o git recusa sobrescrever) não interrompe o processamento dos demais.
 

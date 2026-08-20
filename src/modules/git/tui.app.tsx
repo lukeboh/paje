@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, Text, useInput, type Key } from "ink";
 import { PajeLogger } from "./logger.js";
@@ -151,6 +153,46 @@ const renderStatusLabel = (status: RepoSyncStatus): { branch: string; branchColo
     state: `${state}${delta}`,
     stateColor,
   };
+};
+
+// Groups have no localPath of their own (only project nodes do) — derive
+// one from any descendant project's already-resolved localPath, walking up
+// as many directory levels as the segments separating that project from
+// this group. Reuses whatever baseDir/conflict-suffix resolution already
+// produced for that specific project instead of recomputing it (a group
+// can contain projects from servers with different pajeBaseDir).
+const resolveGroupLocalPath = (groupNode: GitLabTreeNode): string | null => {
+  const fullPath = groupNode.excludePattern?.replace(/\/\*\*$/, "");
+  if (!fullPath) {
+    return null;
+  }
+  const findProjectWithPath = (node: GitLabTreeNode): GitLabTreeNode | undefined => {
+    if (node.type === "project" && node.localPath && node.project) {
+      return node;
+    }
+    for (const child of node.children ?? []) {
+      const found = findProjectWithPath(child);
+      if (found) {
+        return found;
+      }
+    }
+    return undefined;
+  };
+  const projectNode = findProjectWithPath(groupNode);
+  if (!projectNode?.localPath || !projectNode.project) {
+    return null;
+  }
+  const groupSegments = fullPath.split("/").filter(Boolean).length;
+  const projectSegments = projectNode.project.path_with_namespace.split("/").filter(Boolean).length;
+  const stepsUp = projectSegments - groupSegments;
+  if (stepsUp <= 0) {
+    return null;
+  }
+  let result = projectNode.localPath;
+  for (let i = 0; i < stepsUp; i += 1) {
+    result = path.dirname(result);
+  }
+  return result;
 };
 
 const flattenTree = (
@@ -593,11 +635,20 @@ export const renderRepositoryTree = async (
           return undefined;
         };
         const node = resolveNode(nodes);
-        if (!node || node.type !== "project" || !node.localPath || !(await hasGitDir(node.localPath))) {
+        let resolvedTargetPath: string | null = null;
+        if (node?.type === "project" && node.localPath && (await hasGitDir(node.localPath))) {
+          resolvedTargetPath = node.localPath;
+        } else if (node?.type === "group") {
+          const groupPath = resolveGroupLocalPath(node);
+          if (groupPath && fs.existsSync(groupPath)) {
+            resolvedTargetPath = groupPath;
+          }
+        }
+        if (!resolvedTargetPath) {
           appendLogEntry(t("tui.tree.exitAtDirectoryInvalid"), "warn");
           return;
         }
-        const targetPath = node.localPath;
+        const targetPath = resolvedTargetPath;
         setConfirmModalConfig({
           title: t("tui.tree.exitAtDirectoryConfirmTitle"),
           message: t("tui.tree.exitAtDirectoryConfirmMessage", { path: targetPath }),
@@ -711,17 +762,16 @@ export const renderRepositoryTree = async (
               case "created":
                 appendLogEntry(t("tui.tree.bulkCreated", { label: result.target.label }), "info");
                 break;
-              case "skipped":
-                appendLogEntry(
-                  t(
-                    result.reason === "no-default-branch"
-                      ? "tui.tree.bulkSkippedNoDefaultBranch"
-                      : "tui.tree.bulkSkippedBranchMissing",
-                    { label: result.target.label }
-                  ),
-                  "warn"
-                );
+              case "skipped": {
+                const skipKey =
+                  result.reason === "no-default-branch"
+                    ? "tui.tree.bulkSkippedNoDefaultBranch"
+                    : result.reason === "not-cloned"
+                      ? "tui.tree.bulkSkippedNotCloned"
+                      : "tui.tree.bulkSkippedBranchMissing";
+                appendLogEntry(t(skipKey, { label: result.target.label }), "warn");
                 break;
+              }
               case "failed":
                 appendLogEntry(
                   t("tui.tree.bulkFailed", { label: result.target.label, error: result.message ?? "" }),
@@ -920,7 +970,10 @@ export const renderRepositoryTree = async (
             setScrollOffset(Math.max(0, lastIndex - visibleCount + 1));
             return;
           }
-          if (input === " " && !searchActive) {
+          // Checked before the search-query append below (RU-08: checkbox
+          // selection must keep working over a filtered list) — Space always
+          // toggles, even while searching, so it never reaches that branch.
+          if (input === " ") {
             toggleSelected();
             return;
           }
@@ -1066,7 +1119,7 @@ export const renderRepositoryTree = async (
               setSelectedIndex(lastIndex);
               setScrollOffset(Math.max(0, lastIndex - visibleCount + 1));
             }
-            if (input === " " && !searchActive) {
+            if (input === " ") {
               toggleSelected();
             }
             if (key.ctrl && lower === "s") {

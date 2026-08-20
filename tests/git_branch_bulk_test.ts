@@ -65,7 +65,10 @@ assert.equal(await branchExistsRemoteOrLocal(repoA, "does-not-exist"), false, "b
   const branchOutput = await runGit(["-C", repoA, "branch", "--show-current"]);
   assert.equal(branchOutput.trim(), "feature-created", "deve estar na branch recém-criada");
   const remoteRefs = await runGit(["-C", bareRemotePath, "branch", "--list", "feature-created"]);
-  assert.ok(remoteRefs.includes("feature-created"), "criar deve empurrar a branch para o remoto (createBranchAndPush)");
+  assert.ok(
+    !remoteRefs.includes("feature-created"),
+    "criar em massa não deve empurrar a branch pro remoto (createBranchLocalOnly) — o usuário envia manualmente se quiser"
+  );
 }
 
 {
@@ -107,8 +110,17 @@ assert.equal(await branchExistsRemoteOrLocal(repoA, "does-not-exist"), false, "b
   const byLabel = new Map(results.map((r) => [r.target.label, r]));
   assert.equal(byLabel.get("repoA")?.status, "checked-out", "repoA já tinha a branch: só troca");
   assert.equal(byLabel.get("repoB")?.status, "created", "repoB não tinha: cria (createIfMissing=true)");
-  assert.equal(byLabel.get("repo-inexistente")?.status, "failed", "diretório inexistente deve falhar, não travar o lote");
-  assert.ok(byLabel.get("repo-inexistente")?.message, "falha deve carregar a mensagem bruta do erro");
+  const repoBBranch = await runGit(["-C", repoB, "branch", "--show-current"]);
+  assert.equal(repoBBranch.trim(), "feature-created", "repoB deve estar na branch recém-criada");
+  const remoteRefsAfterBulk = await runGit(["-C", bareRemotePath, "branch", "--list", "feature-created"]);
+  assert.ok(
+    !remoteRefsAfterBulk.includes("feature-created"),
+    "checkout em massa com criação não deve empurrar nada pro remoto"
+  );
+  // Diretório nunca clonado: deve ser pulado com um motivo claro, não falhar
+  // com o erro cru do git ("cannot change to directory") nem travar o lote.
+  assert.equal(byLabel.get("repo-inexistente")?.status, "skipped", "repositório não clonado deve ser pulado, não reportado como falha genérica");
+  assert.equal(byLabel.get("repo-inexistente")?.reason, "not-cloned");
 }
 
 {
