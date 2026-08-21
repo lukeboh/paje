@@ -148,6 +148,7 @@ Carrega a árvore de grupos/projetos de todos os servidores configurados (GitLab
 - **Cache da árvore**: após a primeira carga completa, a árvore é gravada em `~/.paje/git-tree-cache.json`. Nas execuções seguintes ela abre instantaneamente a partir do cache, e o status local de cada repositório é recalculado em segundo plano (até 4 repositórios por vez), atualizando a TUI linha a linha. O cache não tem TTL — é invalidado apenas quando a configuração de servidores muda (nome, URL, filtros). Tokens nunca são gravados no cache.
 - **Cursor no contexto**: se o comando é executado de dentro de um clone git, a TUI abre com o cursor posicionado no repositório correspondente.
 - A TUI pré-seleciona repositórios com clone local (`[x]`); grupos propagam seleção parcial (`[~]`).
+- **`sync-repos` ignora a seleção por checkbox**: se `sync-repos`/`--sync-repos` estiver preenchido (não vazio), `Ctrl+S` sincroniza todos os repositórios que casarem com essa lista, **independentemente do que estiver marcado com `[x]` na árvore** — os checkboxes continuam navegáveis, mas deixam de decidir o que é sincronizado. Deixe `sync-repos: ""` (o padrão) para que apenas os itens marcados sejam sincronizados.
 - Grupos com o mesmo `full_path` em servidores diferentes são consolidados em um único nó.
 - Em colisão de caminho local (mesmo `path_with_namespace` em servidores diferentes), o diretório recebe sufixo `-<Servidor>`.
 - Filtros Ant/Glob suportam `?`, `*`, `**`; múltiplos padrões separados por `;`.
@@ -300,7 +301,7 @@ use-basic-auth: false
 verbose: false
 key-label: "paje"
 filter: ""
-sync-repos: "grupo/projeto#main;grupo/outro"
+sync-repos: ""
 parallels: "auto"
 dry-run: false
 token-name: "paje-token"
