@@ -142,7 +142,10 @@ for (const char of "feature-x") {
   await tty.press(char);
 }
 await tty.press(KEYS.enter);
-await new Promise((resolve) => setTimeout(resolve, 200));
+await tty.waitForOutput(
+  (frame) => frame.includes("ausente") || frame.includes("missing"),
+  5000
+);
 
 const confirmFrame = lastFrame();
 assert.ok(

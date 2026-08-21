@@ -7,7 +7,9 @@ import * as cheerio from "cheerio";
 import { CookieJar } from "tough-cookie";
 import { ensureEnvYamlExists, resolveDefaultEnvYamlPath } from "./persistence.js";
 
-const execFileAsync = promisify(execFile);
+const execFilePromisified = promisify(execFile);
+const execFileAsync = (file: string, args: string[]) =>
+  execFilePromisified(file, args, { windowsHide: true, maxBuffer: 10 * 1024 * 1024 });
 
 export type SshKeyInfo = {
   publicKeyPath: string;
