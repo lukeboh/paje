@@ -746,6 +746,22 @@ const hasValidSshAssociation = (host: string): boolean => {
   return fs.existsSync(resolveSshIdentityPath(identityPath));
 };
 
+// Same signal loadTree()'s own per-server check uses (token, or a real SSH
+// key associated with the host) — used right after a fresh registration to
+// decide whether it's safe to move on to syncing, instead of letting a
+// cancelled/failed bootstrap fall through silently into a sync attempt that
+// would just warn "no auth configured" deep in the log for that server.
+const hasUsableServerCredentials = (server: GitServerEntry): boolean => {
+  if (server.token) {
+    return true;
+  }
+  try {
+    return hasValidSshAssociation(new URL(server.baseUrl).hostname);
+  } catch {
+    return false;
+  }
+};
+
 const reportSshPersistenceStatus = async (server: string, session?: TuiSession): Promise<void> => {
   const sshDir = path.join(os.homedir(), ".ssh");
   const configPath = getSshConfigPath();
@@ -1789,6 +1805,16 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
             serverName: savedEntry.name,
           });
           servers = mergeServerList(readGitServers<GitServerEntry[]>([]));
+          const confirmedEntry = servers.find((item) => normalizeBaseUrl(item.baseUrl) === normalizedBaseUrl);
+          if (!confirmedEntry || !hasUsableServerCredentials(confirmedEntry)) {
+            const message = t("cli.prompt.gitlab.registrationIncomplete", { server: savedEntry.name });
+            if (session) {
+              await session.showMessage({ title: t("cli.prompt.gitlab.title"), message });
+            } else {
+              console.log(message);
+            }
+            return;
+          }
         }
       }
 
@@ -1809,6 +1835,22 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
             serverName: savedEntry.name,
           });
           servers = mergeServerList(readGitServers<GitServerEntry[]>([]));
+          // A server just registered from scratch must leave here with real
+          // credentials before we let it anywhere near a sync — otherwise
+          // this falls straight through to loadTree(), which would silently
+          // skip it with a generic "no auth configured" warning instead of
+          // making clear, right here, that registration never finished.
+          const normalizedNewBaseUrl = normalizeBaseUrl(savedEntry.baseUrl);
+          const confirmedEntry = servers.find((item) => normalizeBaseUrl(item.baseUrl) === normalizedNewBaseUrl);
+          if (!confirmedEntry || !hasUsableServerCredentials(confirmedEntry)) {
+            const message = t("cli.prompt.gitlab.registrationIncomplete", { server: savedEntry.name });
+            if (session) {
+              await session.showMessage({ title: t("cli.prompt.gitlab.title"), message });
+            } else {
+              console.log(message);
+            }
+            return;
+          }
         }
       }
 
@@ -2297,15 +2339,23 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
             .filter((project): project is GitLabProject => Boolean(project));
 
           const selectedIds = new Set(selected.map((project) => project.id));
-          const removalCandidates = selectionNodes
-            .filter((node) => node.type === "project" && node.project)
-            .map((node) => node.project)
-            .filter((project): project is GitLabProject => Boolean(project))
-            .filter((project) => !selectedIds.has(project.id));
+          // Keeps the node itself (not just its project) so the loop below
+          // can read node.status — the value onStatusRefreshed/deliverStatus
+          // actually keeps current. `statusMap` here is a one-time snapshot
+          // from when loadTree() returned; on a cache hit it's the *previous*
+          // run's statusMap, refreshed only in the background afterward
+          // (gitSyncService.ts's setImmediate worker) into a *different*
+          // object that never flows back into this closure — reading it here
+          // meant a repo whose real status changed since the last cache write
+          // (e.g. cloned since then) silently never qualified for removal.
+          const removalCandidates = selectionNodes.filter(
+            (node) => node.type === "project" && node.project && !selectedIds.has(node.project.id)
+          );
 
           let hasRemovalCandidate = false;
-          for (const project of removalCandidates) {
-            const status = statusMap[project.id];
+          for (const node of removalCandidates) {
+            const project = node.project as GitLabProject;
+            const status = node.status;
             if (!status || status.state === "EMPTY") {
               continue;
             }

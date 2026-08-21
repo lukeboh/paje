@@ -173,6 +173,56 @@ ver "Garantia de `known_hosts` antes de qualquer operação git" em
 
 ---
 
+### ~~BUG-17~~ — Cadastro de servidor incompleto (sem token/chave SSH) não bloqueava a sincronização
+**Severidade: ALTO** | **Status: RESOLVIDO**
+
+Nos dois pontos de `gitCommand.ts` que registram um servidor na hora
+(`--server-name`/`--base-url` via CLI, e o cadastro interativo quando
+nenhum servidor existe ainda), o código já gravava a entrada em
+`~/.paje/git-servers.json` assim que nome/URL eram informados e rodava
+`ensureServerHasCredentials` — mas nunca verificava se esse bootstrap
+realmente terminou com uma credencial usável antes de seguir adiante. Se o
+bootstrap fosse cancelado/falhasse (ex.: senha vazia), o fluxo caía direto
+em `core.loadTree()`, que tentava o MESMO bootstrap de novo por dentro do
+`onMissingCredentials` (pedindo a senha uma segunda vez) e, se também
+falhasse ali, só avisava de forma genérica (`cli.sync.noAuthConfigured`) e
+pulava o servidor — em vez de deixar claro, logo no cadastro, que ele não
+ficou pronto pra sincronizar. Corrigido com `hasUsableServerCredentials()`
+(token ou chave SSH válida), verificada logo após cada um dos dois
+bootstraps; se ainda faltar credencial, avisa com uma mensagem específica
+(`cli.prompt.gitlab.registrationIncomplete`) e retorna sem chegar a
+`loadTree()`. O servidor incompleto continua persistido (pro bootstrap
+automático de sempre tentar de novo na próxima execução), só a
+sincronização desta execução é que é barrada. Coberto por
+`tests/git_sync_registration_incomplete_test.ts` (prova a diferença via
+contagem de prompts de senha: 1 com a correção, 2 sem ela).
+
+---
+
+### ~~BUG-18~~ — Remoção de repositório desmarcado usava um `statusMap` desatualizado no caminho de cache-hit
+**Severidade: ALTO** | **Status: RESOLVIDO**
+
+`gitCommand.ts`'s `onConfirm` decidia se removia a cópia local de um
+repositório desmarcado lendo `statusMap[project.id]` — um retrato tirado
+uma única vez, no exato momento em que `loadTree()` respondeu. No caminho
+de cache-hit (`core/gitSyncService.ts`), esse retrato É o `statusMap` da
+execução ANTERIOR (`cached.statusMap`); o status de verdade só é
+recalculado depois, em segundo plano (`setImmediate`), e entregue
+incrementalmente via `onStatusRefreshed` — que atualiza `node.status` de
+cada nó da própria árvore (o mesmo objeto que `loadTree()` devolveu), não
+esse `statusMap` separado, que nunca mais é tocado no resto da sessão. Um
+repositório que estava `EMPTY` no cache anterior mas foi clonado
+manualmente desde então continuava aparecendo como `EMPTY` no `statusMap`
+indefinidamente — e a remoção era pulada em silêncio, mesmo com a árvore
+mostrando o status correto na tela. Corrigido lendo `node.status` (o valor
+ao vivo) em vez de `statusMap[project.id]` (o retrato antigo) — a
+divergência entre os dois é coberta isoladamente por
+`tests/git_sync_stale_statusmap_test.ts`, provando que `statusMap` fica
+estagnado enquanto `node.status` reflete o estado real assim que o refresh
+em segundo plano termina.
+
+---
+
 ## 2. INCONSISTÊNCIAS ENTRE ARQUIVOS
 
 ### ~~INC-01~~ — Separador de branch em `syncRepos`: `#` no CLI vs `@` na TUI

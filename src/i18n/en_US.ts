@@ -442,6 +442,8 @@ const enUS: PtBrTranslations = {
       gitlab: {
         title: "GitLab",
         noServerConfigured: "No GitLab server configured.",
+        registrationIncomplete:
+          "Registration for {{server}} wasn't completed (no token or valid SSH key) — sync will not continue. Run 'paje git-server-store' to finish registering it before trying again.",
         noAuthConfigured: "No authentication configured for {{server}}. Configure a token or basic authentication to continue.",
         userMissingBasicAuth: "Basic auth username missing for {{server}}. Register the server again with a username.",
         noValidServer: "No server with valid authentication found.",

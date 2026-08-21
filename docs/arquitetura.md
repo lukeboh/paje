@@ -584,6 +584,43 @@ concedê-la de novo). `ensureKnownHost` loga em `warn` quando detecta o host
 ausente e em `info` quando adiciona com sucesso — sempre visível no log,
 não só em modo `--verbose`.
 
+### Cadastro rápido não deixa sincronizar sem credencial confirmada
+
+Os dois pontos de `gitCommand.ts` que registram um servidor na hora do
+próprio `git-sync` (via `--server-name`/`--base-url`, ou o cadastro
+interativo quando nenhum servidor existe ainda) gravam a entrada em
+`~/.paje/git-servers.json` assim que nome/URL são informados, e então rodam
+o mesmo bootstrap de credencial (`ensureServerHasCredentials`) que o fluxo
+completo de "Gerenciar Servidores Git" usa. Depois desse bootstrap, ambos
+verificam com `hasUsableServerCredentials()` (token ou chave SSH válida —
+mesmo sinal de `hasSshAssociation`/`api.hasAuth()` que `loadTree()` já usa
+por servidor) se a credencial realmente ficou pronta; se não, avisa com
+`cli.prompt.gitlab.registrationIncomplete` e retorna **antes** de chegar em
+`loadTree()` — em vez de deixar o bootstrap malsucedido cair
+silenciosamente no aviso genérico (`cli.sync.noAuthConfigured`) que
+`loadTree()` já produz por dentro do laço de busca por servidor. O servidor
+incompleto continua persistido (o bootstrap automático de
+`onMissingCredentials` ainda tenta de novo na próxima execução — não é um
+rollback), só a sincronização *desta* execução é que fica bloqueada.
+
+### `node.status` (ao vivo) em vez de `statusMap` (retrato antigo) para decidir remoção
+
+`gitCommand.ts`'s `onConfirm` decide quais repositórios desmarcados devem
+ter a cópia local removida olhando o status de cada um. Antes, isso lia
+`statusMap[project.id]` — o objeto devolvido por `loadTree()`, um retrato
+de uma única vez. No caminho de cache-hit (`core/gitSyncService.ts`), esse
+retrato é o `statusMap` da execução **anterior** (`cached.statusMap`); o
+status de verdade só é recalculado depois, em segundo plano
+(`setImmediate`), e entregue incrementalmente via `onStatusRefreshed` —
+que atualiza `node.status` de cada nó da própria árvore (o mesmo array que
+`loadTree()` devolveu), não esse `statusMap` separado, que nunca mais é
+tocado pelo resto da sessão. Um repositório clonado manualmente depois da
+última gravação do cache continuava aparecendo como `EMPTY` no `statusMap`
+indefinidamente, e a remoção era pulada em silêncio mesmo com a árvore
+mostrando o status correto na tela. `removalCandidates` agora lê
+`node.status` (o valor ao vivo, mantido atualizado pelo mesmo mecanismo que
+já pinta a árvore) em vez de consultar `statusMap`.
+
 ### Detecção reativa de token inválido/expirado
 
 Um token salvo pode parar de funcionar a qualquer momento (expiração, revogação
