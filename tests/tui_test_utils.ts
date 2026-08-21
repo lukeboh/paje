@@ -55,7 +55,20 @@ export const createFakeTTY = (columns = 80, rows = 24): FakeTTY => {
     const data = Buffer.from(keyValue, "utf8");
     (stdin as unknown as PassThrough).write(data);
     stdin.emit("data", data);
-    stdin.emit("keypress", keyValue, { name: keyValue, sequence: keyValue });
+    const isBackspace = keyValue === "\u0008" || keyValue === "\u007f";
+    const isReturn = keyValue === "\r" || keyValue === "\n";
+    const isEscape = keyValue === "\u001b";
+    const keyObj = {
+      name: isBackspace ? "backspace" : isReturn ? "return" : isEscape ? "escape" : keyValue,
+      sequence: keyValue,
+      backspace: isBackspace,
+      return: isReturn,
+      escape: isEscape,
+      ctrl: false,
+      meta: false,
+      shift: false,
+    };
+    stdin.emit("keypress", keyValue, keyObj);
   };
 
   // Ink applies key-triggered state updates on the next render; pressing keys
@@ -104,4 +117,15 @@ export const stripAnsi = (value: string): string => value.replace(/\u001b\[[0-9;
 
 export const waitNextTick = async (): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, 0));
+};
+
+export const mockHomeEnv = (targetDir: string): (() => void) => {
+  const origHome = process.env.HOME;
+  const origUserProfile = process.env.USERPROFILE;
+  process.env.HOME = targetDir;
+  process.env.USERPROFILE = targetDir;
+  return () => {
+    process.env.HOME = origHome;
+    process.env.USERPROFILE = origUserProfile;
+  };
 };

@@ -401,10 +401,7 @@ Ideias registradas para o futuro — **ainda não implementadas**, sem previsão
 
 ### Bugs conhecidos
 
-Relatados, ainda **não reproduzidos/diagnosticados** neste ambiente de desenvolvimento:
-
-- **TUI trava sem responder a nenhuma tecla no Windows, depois que a árvore carrega** — relatado com 3 servidores já cadastrados (ainda não confirmado se é a causa). Depois que a árvore do `git-sync` termina de carregar, nenhuma tecla tem efeito; a única forma de sair é fechar o terminal à força, e o problema se repete em execuções seguintes. Sem um ambiente Windows disponível para reproduzir diretamente — hipótese a investigar: alguma camada da cadeia `paje.cmd` → `powershell.exe` → `npm run dev` → `tsx`/`node` pode não estar entregando ao processo um `stdin` em modo raw de verdade, que é o que o Ink precisa para capturar teclado.
-- **Ao sair do PAJÉ no Windows, fica numa tela vazia até `Ctrl+C`** — depois de sair da TUI, o terminal fica com a tela em branco, sem devolver o prompt; só depois de apertar `Ctrl+C` aparece o prompt nativo do `cmd.exe` "Deseja finalizar o arquivo em lotes (S/N)?" — sinal de que o processo Node, por baixo da cadeia `paje.cmd` → `powershell.exe` → `npm run dev` → `tsx`, não está terminando sozinho ao final da execução (nenhum `process.exit()` é chamado hoje em nenhum caminho de saída "normal", fora do `Ctrl+Q`; o processo deveria encerrar pelo esvaziamento natural do event loop, mas algo na cadeia do Windows parece não deixar isso acontecer). Possivelmente relacionado ao bug anterior (travamento de teclado) — mesma cadeia de processos sob suspeita. Não reproduzido neste ambiente (sem Windows disponível).
+Nenhum bug conhecido aberto momento. Todos os problemas relatados no Windows foram reproduzidos e resolvidos (ver [`docs/auditoria-codigo.md`](docs/auditoria-codigo.md) — BUG-19 e BUG-20).
 
 ---
 

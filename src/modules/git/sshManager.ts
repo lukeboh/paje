@@ -166,10 +166,12 @@ export const getIdentityFileForHostFromContents = (contents: string, host: strin
 
 const formatIdentityFilePath = (identityFilePath: string): string => {
   const homeDir = os.homedir();
-  if (identityFilePath.startsWith(homeDir)) {
-    return `~${identityFilePath.slice(homeDir.length)}`;
+  const normalizedPath = identityFilePath.replace(/\\/g, "/");
+  const normalizedHome = homeDir.replace(/\\/g, "/");
+  if (normalizedPath.startsWith(normalizedHome)) {
+    return `~${normalizedPath.slice(normalizedHome.length)}`;
   }
-  return identityFilePath;
+  return normalizedPath;
 };
 
 export const resolveSshIdentityPath = (identityFile: string): string => {

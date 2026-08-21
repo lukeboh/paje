@@ -223,6 +223,20 @@ em segundo plano termina.
 
 ---
 
+### ~~BUG-19~~ — TUI do PAJÉ no Windows travava sem responder a nenhuma tecla após carregar a árvore
+**Severidade: CRÍTICO** | **Status: RESOLVIDO**
+
+No Windows, o executável `paje.cmd` invocava o script via `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0paje.ps1" %*`. A execução de `powershell -File` a partir do `cmd.exe` ou PowerShell iniciava um processo PowerShell não-interativo que encapsulava os streams de `stdio` (`stdin`/`stdout`), impedindo que o Node.js e a biblioteca `Ink` assumissem o modo bruto TTY (`setRawMode(true)`). Com isso, os eventos de teclado via `useInput` não eram recebidos pela TUI e a tela ficava congelada. Corrigido reescrevendo `paje.cmd` como um script em lote batch nativo (`call npm run dev -- %*`) e atualizando `install-paje.ps1` para executar `paje.ps1` diretamente no `$PROFILE` do PowerShell.
+
+---
+
+### ~~BUG-20~~ — Ao sair do PAJÉ no Windows, permanecia em uma tela em branco exigindo `Ctrl+C` e prompt "Deseja finalizar o arquivo em lotes (S/N)?"
+**Severidade: ALTO** | **Status: RESOLVIDO**
+
+Consequência direta da estrutura de processos intermediária descrita no BUG-19: o processo `cmd.exe` executava `paje.cmd` aguardando os handles do processo filho `powershell.exe -File`. Quando o Node.js finalizava a execução da TUI, o processo intermediário do PowerShell permanecia preso aguardando a finalização dos handles de stream, deixando a janela em branco até que o usuário pressionasse `Ctrl+C` — o que acionava a interrupção nativa do `cmd.exe` perguntando `Deseja finalizar o arquivo em lotes (S/N)?`. Eliminado ao remover a camada intermediária do `powershell -File` em `paje.cmd` e `install-paje.ps1`.
+
+---
+
 ## 2. INCONSISTÊNCIAS ENTRE ARQUIVOS
 
 ### ~~INC-01~~ — Separador de branch em `syncRepos`: `#` no CLI vs `@` na TUI

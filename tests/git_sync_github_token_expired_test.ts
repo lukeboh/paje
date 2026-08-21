@@ -13,11 +13,13 @@ import { Command } from "commander";
 
 const originalFetch = globalThis.fetch;
 const originalHome = process.env.HOME;
+const originalUserProfile = process.env.USERPROFILE;
 const originalArgv = process.argv;
 const originalLog = console.log;
 
 const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "paje-github-expired-"));
 process.env.HOME = tempHome;
+process.env.USERPROFILE = tempHome;
 const pajeDir = path.join(tempHome, ".paje");
 fs.mkdirSync(pajeDir, { recursive: true });
 const serversPath = path.join(pajeDir, "git-servers.json");
@@ -71,6 +73,7 @@ assert.strictEqual(serverData[0].token, "ghp-expired", "Não deve tentar (nem co
 console.log = originalLog;
 globalThis.fetch = originalFetch as typeof fetch;
 process.env.HOME = originalHome;
+process.env.USERPROFILE = originalUserProfile;
 process.argv = originalArgv;
 
 console.log("git_sync_github_token_expired_test: OK");

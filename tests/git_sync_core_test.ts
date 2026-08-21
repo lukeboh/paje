@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import {
   filterProjects,
   filterGroups,
@@ -373,7 +374,7 @@ const runCoreTests = async (): Promise<void> => {
     ];
     const result = prepareTargets(ps, "/base");
     assert.equal(result.length, 1);
-    assert.equal(result[0].localPath, "/base/grupo/repo", "localPath construído com baseDir");
+    assert.equal(result[0].localPath, path.join("/base", "grupo", "repo"), "localPath construído com baseDir");
     assert.equal(result[0].httpUrl, "https://oauth2:token@gitlab.example.com/grupo/repo.git", "httpUrl vem de pajeHttpUrl");
   }
 
@@ -384,8 +385,8 @@ const runCoreTests = async (): Promise<void> => {
     ];
     const result = prepareTargets(ps, "/base");
     const paths = result.map((t) => t.localPath).sort();
-    assert.ok(paths.includes("/base/grupo/repo-S1"), "conflito: sufixo S1");
-    assert.ok(paths.includes("/base/grupo/repo-S2"), "conflito: sufixo S2");
+    assert.ok(paths.includes(path.join("/base", "grupo", "repo-S1")), "conflito: sufixo S1");
+    assert.ok(paths.includes(path.join("/base", "grupo", "repo-S2")), "conflito: sufixo S2");
   }
 
   {

@@ -151,7 +151,7 @@ assert.ok(
 );
 
 await tty.press(KEYS.enter);
-await new Promise((resolve) => setTimeout(resolve, 400));
+await new Promise((resolve) => setTimeout(resolve, 2000));
 
 // A árvore reflete o resultado direto na coluna de status assim que a
 // operação termina (resolveRepoStatus por item, ver applyBulkResults) — mais

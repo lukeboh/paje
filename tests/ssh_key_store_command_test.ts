@@ -7,12 +7,14 @@ import { Command } from "commander";
 
 const originalFetch = globalThis.fetch;
 const originalHome = process.env.HOME;
+const originalUserProfile = process.env.USERPROFILE;
 const originalSkip = process.env.PAJE_SKIP_SSH_STORE;
 const originalPrompt = inquirer.prompt;
 const originalConsoleLog = console.log;
 
 const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "paje-home-"));
 process.env.HOME = tempHome;
+process.env.USERPROFILE = tempHome;
 process.env.PAJE_SKIP_SSH_STORE = "1";
 
 const sshDir = path.join(tempHome, ".ssh");
@@ -225,6 +227,7 @@ assert.ok(serverData.some((item) => item.token === "glpat-existing"), "Deve mant
 
 globalThis.fetch = originalFetch as typeof fetch;
 process.env.HOME = originalHome;
+process.env.USERPROFILE = originalUserProfile;
 process.env.PAJE_SKIP_SSH_STORE = originalSkip;
 inquirer.prompt = originalPrompt;
 console.log = originalConsoleLog;

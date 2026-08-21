@@ -14,7 +14,9 @@ import type { LogEntry } from "../src/modules/git/core/loggerBroker.js";
 
 const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "paje-known-hosts-home-"));
 const originalHome = process.env.HOME;
+const originalUserProfile = process.env.USERPROFILE;
 process.env.HOME = tmpHome;
+process.env.USERPROFILE = tmpHome;
 
 try {
   const { createGitSyncCore, computeConfigHash } = await import("../src/modules/git/core/gitSyncService.js");
@@ -111,6 +113,7 @@ try {
   );
 } finally {
   process.env.HOME = originalHome;
+  process.env.USERPROFILE = originalUserProfile;
   fs.rmSync(tmpHome, { recursive: true, force: true });
 }
 

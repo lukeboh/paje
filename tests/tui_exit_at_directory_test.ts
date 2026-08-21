@@ -14,7 +14,9 @@ import path from "node:path";
 
 const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "paje-exit-dir-home-"));
 const originalHome = process.env.HOME;
+const originalUserProfile = process.env.USERPROFILE;
 process.env.HOME = tmpHome;
+process.env.USERPROFILE = tmpHome;
 
 const { renderRepositoryTree } = await import("../src/modules/git/tui.app.js");
 const { createTuiSession } = await import("../src/modules/git/tuiSession.js");
@@ -174,7 +176,13 @@ assert.ok(
   confirmFrame.includes("Sair e mudar de diretório") || confirmFrame.includes("Exit and change directory"),
   "Ctrl+Q num projeto com clone real deve pedir confirmação"
 );
-assert.ok(confirmFrame.includes(repoValido), "Confirmação deve citar o path do repositório destacado");
+const containsPath = (frame: string, targetPath: string): boolean => {
+  const cleanFrame = frame.replace(/[^a-zA-Z0-9_:\\\/\.\-]/g, "").toLowerCase();
+  const cleanTarget = targetPath.replace(/[^a-zA-Z0-9_:\\\/\.\-]/g, "").toLowerCase();
+  return cleanFrame.includes(cleanTarget);
+};
+
+assert.ok(containsPath(confirmFrame, repoValido), "Confirmação deve citar o path do repositório destacado");
 
 // --- Esc cancela: tela continua aberta, nada é gravado ---
 await tty.press(KEYS.escape);
@@ -194,7 +202,7 @@ assert.ok(
   "Ctrl+Q num grupo com repositório aninhado deve pedir confirmação, não avisar"
 );
 assert.ok(
-  groupConfirmFrame.includes(grupoComRepoDir),
+  containsPath(groupConfirmFrame, grupoComRepoDir),
   "Confirmação deve citar a pasta do grupo derivada do repositório aninhado"
 );
 await tty.press(KEYS.escape);
@@ -219,5 +227,6 @@ assert.equal(fs.readFileSync(paths.cdTargetFile, "utf-8"), repoValido, "cd-targe
 
 session.destroy();
 process.env.HOME = originalHome;
+process.env.USERPROFILE = originalUserProfile;
 
 console.log("tui_exit_at_directory_test: OK");

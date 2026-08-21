@@ -17,7 +17,9 @@ if (!fs.existsSync(bundlePath)) {
   const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "paje-vscode-home-"));
   const tmpRepos = fs.mkdtempSync(path.join(os.tmpdir(), "paje-vscode-repos-"));
   const originalHome = process.env.HOME;
+  const originalUserProfile = process.env.USERPROFILE;
   process.env.HOME = tmpHome;
+  process.env.USERPROFILE = tmpHome;
 
   try {
     const pajeDir = path.join(tmpHome, ".paje");
@@ -196,6 +198,7 @@ if (!fs.existsSync(bundlePath)) {
     console.log("vscode_extension_smoke_test: OK");
   } finally {
     process.env.HOME = originalHome;
+    process.env.USERPROFILE = originalUserProfile;
     fs.rmSync(tmpHome, { recursive: true, force: true });
     fs.rmSync(tmpRepos, { recursive: true, force: true });
   }

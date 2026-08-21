@@ -15,7 +15,9 @@ import path from "node:path";
 
 const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "paje-env-first-run-"));
 const originalHome = process.env.HOME;
+const originalUserProfile = process.env.USERPROFILE;
 process.env.HOME = tmpHome;
+process.env.USERPROFILE = tmpHome;
 
 try {
   const { loadEnvConfig } = await import("../src/modules/git/sshManager.js");
@@ -29,7 +31,11 @@ try {
   const configFirstCall = loadEnvConfig();
   assert.ok(fs.existsSync(defaultEnvPath), "loadEnvConfig() sem envFile deve criar ~/.paje/env.yaml");
   const createdContent = fs.readFileSync(defaultEnvPath, "utf-8");
-  assert.equal(createdContent, ENV_TEMPLATE_CONTENT, "Conteúdo criado deve ser idêntico ao template");
+  assert.equal(
+    createdContent.replace(/\r\n/g, "\n"),
+    ENV_TEMPLATE_CONTENT.replace(/\r\n/g, "\n"),
+    "Conteúdo criado deve ser idêntico ao template"
+  );
   assert.equal(configFirstCall.baseDir, "repos", "Valores do template devem ser lidos corretamente após a criação");
   assert.equal(configFirstCall.parallels, "auto", "Template atualizado deve trazer parallels: auto");
 
@@ -51,6 +57,7 @@ try {
   assert.ok(!fs.existsSync(customPath), "Caminho customizado ausente NÃO deve ser criado automaticamente");
 } finally {
   process.env.HOME = originalHome;
+  process.env.USERPROFILE = originalUserProfile;
   fs.rmSync(tmpHome, { recursive: true, force: true });
 }
 

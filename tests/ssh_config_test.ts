@@ -38,7 +38,7 @@ assert.ok(appendedConfig.includes("Host gitlab.seuorgao.gov.br"), "Deve criar bl
 assert.ok(appendedConfig.includes("IdentitiesOnly yes"), "Deve manter IdentitiesOnly yes");
 
 const resolved = resolveSshIdentityPath("~/my_key");
-assert.ok(resolved.endsWith("/my_key"), "Deve resolver caminho com ~");
+assert.ok(resolved.endsWith(`${path.sep}my_key`), "Deve resolver caminho com ~");
 
 const knownHostsSample = "gitlab.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMockedKey\n";
 assert.ok(
