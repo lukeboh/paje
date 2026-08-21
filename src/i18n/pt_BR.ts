@@ -440,6 +440,8 @@ const ptBR = {
       gitlab: {
         title: "GitLab",
         noServerConfigured: "Nenhum servidor GitLab configurado.",
+        registrationIncomplete:
+          "O cadastro de {{server}} não foi concluído (sem token nem chave SSH válida) — a sincronização não vai continuar. Rode 'paje git-server-store' para terminar o cadastro antes de tentar de novo.",
         noAuthConfigured: "Não há autenticação configurada para {{server}}. Configure um token ou autenticação básica para continuar.",
         userMissingBasicAuth:
           "Usuário não informado para autenticação básica em {{server}}. Cadastre o servidor novamente informando o usuário.",
