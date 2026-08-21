@@ -118,6 +118,34 @@ export const applyInitialSelectionFromStatusMap = (
   nodes.forEach((node) => recomputeTreeSelection(node));
 };
 
+// Initial selection from the REAL local state, for callers whose statusMap is
+// a snapshot that may be stale (the cache-hit path: cached.statusMap is
+// written at load time of the PREVIOUS session, before that session's sync or
+// removals, and before any manual deletion the user did on disk since). The
+// checkbox contract is "cloned locally → pre-selected"; only the disk can
+// answer that. The caller injects the actual check (hasGitDir) so this stays
+// a pure tree helper.
+export const applyInitialSelectionFromLocalClones = async (
+  nodes: GitLabTreeNode[],
+  isCloned: (node: GitLabTreeNode) => Promise<boolean>
+): Promise<void> => {
+  const pending: Promise<void>[] = [];
+  const visit = (node: GitLabTreeNode): void => {
+    if (node.type === "project" && node.project) {
+      pending.push(
+        isCloned(node).then((cloned) => {
+          node.selected = cloned;
+          node.partiallySelected = false;
+        })
+      );
+    }
+    node.children?.forEach((child) => visit(child));
+  };
+  nodes.forEach((node) => visit(node));
+  await Promise.all(pending);
+  nodes.forEach((node) => recomputeTreeSelection(node));
+};
+
 export const filterTreeBySelection = (nodes: GitLabTreeNode[]): GitLabTreeNode[] => {
   const visit = (node: GitLabTreeNode): GitLabTreeNode | null => {
     const filteredChildren = node.children

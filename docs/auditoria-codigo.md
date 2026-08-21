@@ -260,6 +260,53 @@ são somente leitura.
 
 ---
 
+### ~~BUG-22~~ — Pré-seleção no cache-hit vinha do `statusMap` do cache (uma sessão atrasado), clonando repositórios nunca marcados e removendo clones recém-feitos
+**Severidade: CRÍTICO** | **Status: RESOLVIDO**
+
+No caminho de cache-hit de `loadTree()` (`core/gitSyncService.ts`), a
+pré-seleção dos checkboxes (`applyInitialSelectionFromStatusMap`) usava
+`cached.statusMap` — o retrato gravado no **load da sessão anterior**, ou
+seja, **antes** do sync/remoções daquela sessão e de qualquer exclusão manual
+feita no disco desde então. Duas consequências, relatadas pelo usuário como
+"o Ctrl+S sincroniza todos os repositórios, mesmo os não marcados com x":
+
+- **(a)** um repositório cujo clone local não existia mais (apagado
+  manualmente, ou removido pelo próprio PAJÉ na sessão anterior) constava
+  como `SYNCED` no cache → entrava **pré-selecionado `[x]`** → o `Ctrl+S` o
+  **clonava de volta** sem o usuário jamais tê-lo marcado — e depois era
+  preciso apagar tudo na mão;
+- **(b)** um repositório clonado durante a sessão anterior constava como
+  `EMPTY` no cache → entrava **desmarcado `[ ]`** apesar de clonado → virava
+  candidato a remoção no `Ctrl+S` e, para estados limpos
+  (`shouldConfirmRemoval` só pergunta em `UNCOMMITTED`/`AHEAD`/`DIVERGED`),
+  era **removido silenciosamente**; na sessão seguinte, o cache (já
+  atualizado pelo refresh) o pré-selecionava e o `Ctrl+S` o re-clonava —
+  oscilação remove/clona entre sessões.
+
+O item (b) ficou visível justamente após a correção do BUG-18 (`c346f36`):
+antes dela, o loop de remoção lia o mesmo `statusMap` velho (que dizia
+`EMPTY`) e pulava a remoção — dois retratos igualmente atrasados se
+cancelavam; ao corrigir a leitura para `node.status` (ao vivo), a
+pré-seleção atrasada ficou sozinha como fonte de divergência. A correção do
+BUG-18 permanece — o erro estava na pré-seleção, não nela.
+
+Regra confirmada com o usuário: para repositórios **desmarcados**, a única
+ação possível do `Ctrl+S` é a tentativa de remoção **se o clone local
+existir**; se não existir, nada deve ser feito — jamais cloná-los.
+
+Corrigido: no cache-hit, a seleção inicial agora vem do **disco real** —
+novo `applyInitialSelectionFromLocalClones` (`treeBuilder.ts`), que recebe o
+verificador (`hasGitDir(node.localPath)`) injetado pelo core e marca cada
+projeto conforme o clone de fato existe naquele momento. O caminho de carga
+completa (sem cache) continua com `applyInitialSelectionFromStatusMap`, pois
+ali o `statusMap` acabou de ser computado do disco. Regressão coberta por
+`tests/git_sync_stale_preselection_test.ts` (cache fabricado com as duas
+divergências: `SYNCED` sem clone → não pode selecionar; `EMPTY` com clone →
+deve selecionar), verificado também ponta-a-ponta com três execuções reais
+consecutivas (fresh → cache velho → cache atualizado) via TUI simulada.
+
+---
+
 ## 2. INCONSISTÊNCIAS ENTRE ARQUIVOS
 
 ### ~~INC-01~~ — Separador de branch em `syncRepos`: `#` no CLI vs `@` na TUI
