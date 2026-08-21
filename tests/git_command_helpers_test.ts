@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import {
   mergeServer,
   normalizeBaseUrl,
@@ -33,11 +34,15 @@ assert.strictEqual(resolveEnvStringArray(undefined, envConfig, "list"), "a,b");
 assert.strictEqual(resolveEnvStringArray("x,y", envConfig, "list"), "x,y");
 
 const originalHome = process.env.HOME;
-process.env.HOME = "/tmp/paje-tests-home";
-assert.strictEqual(resolveHomePath("~"), "/tmp/paje-tests-home");
-assert.strictEqual(resolveHomePath("~/repos"), "/tmp/paje-tests-home/repos");
+const originalUserProfile = process.env.USERPROFILE;
+const testHome = path.resolve("/tmp/paje-tests-home");
+process.env.HOME = testHome;
+process.env.USERPROFILE = testHome;
+assert.strictEqual(resolveHomePath("~"), testHome);
+assert.strictEqual(resolveHomePath("~/repos"), path.join(testHome, "repos"));
 assert.strictEqual(resolveHomePath("/var/repos"), "/var/repos");
 process.env.HOME = originalHome;
+process.env.USERPROFILE = originalUserProfile;
 
 const emptyEnv = {} as Record<string, string | number | boolean | string[]>;
 assert.strictEqual(resolveEnvString(undefined, emptyEnv, "missing"), undefined);

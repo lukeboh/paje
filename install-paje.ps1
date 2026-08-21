@@ -221,11 +221,11 @@ function Confirm-PajeShellFunction([string]$DestDir) {
         New-Item -ItemType File -Path $PROFILE -Force | Out-Null
     }
 
-    $pajeCmdPath = Join-Path $DestDir "paje.cmd"
+    $pajePs1Path = Join-Path $DestDir "paje.ps1"
     Add-Content -Path $PROFILE -Value @"
 $marker
 function paje {
-    & "$pajeCmdPath" @args
+    & "$pajePs1Path" @args
     `$cdTarget = Join-Path `$env:USERPROFILE ".paje\cd-target"
     if (Test-Path `$cdTarget) {
         `$dir = (Get-Content `$cdTarget -Raw).Trim()

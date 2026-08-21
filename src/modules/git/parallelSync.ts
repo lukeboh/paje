@@ -47,7 +47,7 @@ export const resolveConcurrency = (options?: ParallelSyncOptions): number => {
 };
 
 export const runGit = async (args: string[], cwd?: string): Promise<string> => {
-  const { stdout } = await execFileAsync("git", args, { cwd });
+  const { stdout } = await execFileAsync("git", args, { cwd, windowsHide: true, maxBuffer: 10 * 1024 * 1024 });
   return stdout;
 };
 
@@ -91,7 +91,7 @@ const runGitWithProgress = async (options: {
   const commandLabel = `git ${args.join(" ")}`;
   onLog?.(`Executando: ${commandLabel}`);
   await new Promise<void>((resolve, reject) => {
-    const child = spawn("git", args, { cwd });
+    const child = spawn("git", args, { cwd, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
     const handleChunk = (chunk: Buffer): void => {
       const text = chunk.toString("utf-8");
       text.split(/\r?\n/).forEach((line) => {

@@ -7,7 +7,9 @@ import * as cheerio from "cheerio";
 import { CookieJar } from "tough-cookie";
 import { ensureEnvYamlExists, resolveDefaultEnvYamlPath } from "./persistence.js";
 
-const execFileAsync = promisify(execFile);
+const execFilePromisified = promisify(execFile);
+const execFileAsync = (file: string, args: string[]) =>
+  execFilePromisified(file, args, { windowsHide: true, maxBuffer: 10 * 1024 * 1024 });
 
 export type SshKeyInfo = {
   publicKeyPath: string;
@@ -166,10 +168,12 @@ export const getIdentityFileForHostFromContents = (contents: string, host: strin
 
 const formatIdentityFilePath = (identityFilePath: string): string => {
   const homeDir = os.homedir();
-  if (identityFilePath.startsWith(homeDir)) {
-    return `~${identityFilePath.slice(homeDir.length)}`;
+  const normalizedPath = identityFilePath.replace(/\\/g, "/");
+  const normalizedHome = homeDir.replace(/\\/g, "/");
+  if (normalizedPath.startsWith(normalizedHome)) {
+    return `~${normalizedPath.slice(normalizedHome.length)}`;
   }
-  return identityFilePath;
+  return normalizedPath;
 };
 
 export const resolveSshIdentityPath = (identityFile: string): string => {

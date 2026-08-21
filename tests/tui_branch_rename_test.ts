@@ -14,6 +14,12 @@ import { createFakeTTY, KEYS, stripAnsi, waitNextTick } from "./tui_test_utils.j
 // que está sendo testado é a interação real local/remoto (git branch -m,
 // push -u, push --delete).
 
+const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "paje-branch-rename-home-"));
+const originalHome = process.env.HOME;
+const originalUserProfile = process.env.USERPROFILE;
+process.env.HOME = tmpHome;
+process.env.USERPROFILE = tmpHome;
+
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "paje-branch-rename-"));
 
 const bareRemotePath = path.join(tmpDir, "remote.git");
@@ -78,8 +84,10 @@ const lastFrame = (): string => stripAnsi(tty.getLastFrame());
 
 // Ctrl+B abre o modal de branch para o item destacado (o único da árvore).
 await tty.press(KEYS.ctrlB);
-await new Promise((resolve) => setTimeout(resolve, 200));
-assert.ok(lastFrame().includes("feature-old"), "Modal deve listar a branch atual (feature-old)");
+await tty.waitForOutput(
+  (out) => out.includes("feature-old") && (out.includes("Renomear branch atual") || out.includes("Rename current branch")),
+  3000
+);
 
 // Desce até a última opção selecionável — clampSelectedIndex garante que
 // pressionar para baixo mais vezes que existem itens só para no último
@@ -105,7 +113,10 @@ for (const char of "feature-new") {
   await tty.press(char);
 }
 await tty.press(KEYS.enter);
-await new Promise((resolve) => setTimeout(resolve, 300));
+await tty.waitForOutput(
+  (out) => out.includes("Branch renomeada") || out.includes("Branch renamed"),
+  5000
+);
 
 const afterRename = lastFrame();
 assert.ok(
@@ -115,6 +126,7 @@ assert.ok(
   "Log deve confirmar a renomeação"
 );
 
+const allLocal = await runGit(["-C", repoPath, "branch", "--list"]);
 const localBranches = await runGit(["-C", repoPath, "branch", "--list", "feature-old", "feature-new"]);
 assert.ok(!localBranches.includes("feature-old"), "feature-old não deve mais existir localmente");
 assert.ok(localBranches.includes("feature-new"), "feature-new deve existir localmente");
@@ -127,5 +139,7 @@ await tty.press(KEYS.escape);
 const result = await treePromise;
 assert.equal(result.confirmed, false, "Esc sem modal aberto deve cancelar a tela normalmente");
 session.destroy();
+process.env.HOME = originalHome;
+process.env.USERPROFILE = originalUserProfile;
 
 console.log("tui_branch_rename_test: OK");

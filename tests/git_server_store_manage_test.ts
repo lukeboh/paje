@@ -24,10 +24,12 @@ import { Command } from "commander";
 
 const originalFetch = globalThis.fetch;
 const originalHome = process.env.HOME;
+const originalUserProfile = process.env.USERPROFILE;
 const originalSkip = process.env.PAJE_SKIP_SSH_STORE;
 
 const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "paje-manage-home-"));
 process.env.HOME = tempHome;
+process.env.USERPROFILE = tempHome;
 process.env.PAJE_SKIP_SSH_STORE = "1";
 
 const pajeDir = path.join(tempHome, ".paje");
@@ -183,6 +185,7 @@ assert.strictEqual(saved.password, undefined, "A senha nunca deve ser persistida
 
 globalThis.fetch = originalFetch as typeof fetch;
 process.env.HOME = originalHome;
+process.env.USERPROFILE = originalUserProfile;
 process.env.PAJE_SKIP_SSH_STORE = originalSkip;
 
 console.log("git_server_store_manage_test: OK");

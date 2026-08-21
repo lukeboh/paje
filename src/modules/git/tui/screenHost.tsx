@@ -49,7 +49,16 @@ export const createScreenHost = (renderOptions?: RenderOptions): ScreenHost => {
     return <React.Fragment key={current.key}>{current.node}</React.Fragment>;
   };
 
+  const ensureRawMode = (): void => {
+    if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
+      try {
+        process.stdin.setRawMode(true);
+      } catch {}
+    }
+  };
+
   const ensureStarted = (): void => {
+    ensureRawMode();
     if (inkUnmount) {
       return;
     }
@@ -58,6 +67,7 @@ export const createScreenHost = (renderOptions?: RenderOptions): ScreenHost => {
   };
 
   const mount = (node: React.ReactNode): number => {
+    ensureRawMode();
     const key = nextKey++;
     entry = { key, node };
     // Set before the first render() call so Root's initial snapshot already

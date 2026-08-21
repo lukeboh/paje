@@ -148,6 +148,7 @@ Carrega a árvore de grupos/projetos de todos os servidores configurados (GitLab
 - **Cache da árvore**: após a primeira carga completa, a árvore é gravada em `~/.paje/git-tree-cache.json`. Nas execuções seguintes ela abre instantaneamente a partir do cache, e o status local de cada repositório é recalculado em segundo plano (até 4 repositórios por vez), atualizando a TUI linha a linha. O cache não tem TTL — é invalidado apenas quando a configuração de servidores muda (nome, URL, filtros). Tokens nunca são gravados no cache.
 - **Cursor no contexto**: se o comando é executado de dentro de um clone git, a TUI abre com o cursor posicionado no repositório correspondente.
 - A TUI pré-seleciona repositórios com clone local (`[x]`); grupos propagam seleção parcial (`[~]`).
+- **`sync-repos` ignora a seleção por checkbox**: se `sync-repos`/`--sync-repos` estiver preenchido (não vazio), `Ctrl+S` sincroniza todos os repositórios que casarem com essa lista, **independentemente do que estiver marcado com `[x]` na árvore** — os checkboxes continuam navegáveis, mas deixam de decidir o que é sincronizado. Deixe `sync-repos: ""` (o padrão) para que apenas os itens marcados sejam sincronizados.
 - Grupos com o mesmo `full_path` em servidores diferentes são consolidados em um único nó.
 - Em colisão de caminho local (mesmo `path_with_namespace` em servidores diferentes), o diretório recebe sufixo `-<Servidor>`.
 - Filtros Ant/Glob suportam `?`, `*`, `**`; múltiplos padrões separados por `;`.
@@ -300,7 +301,7 @@ use-basic-auth: false
 verbose: false
 key-label: "paje"
 filter: ""
-sync-repos: "grupo/projeto#main;grupo/outro"
+sync-repos: ""
 parallels: "auto"
 dry-run: false
 token-name: "paje-token"
@@ -401,10 +402,7 @@ Ideias registradas para o futuro — **ainda não implementadas**, sem previsão
 
 ### Bugs conhecidos
 
-Relatados, ainda **não reproduzidos/diagnosticados** neste ambiente de desenvolvimento:
-
-- **TUI trava sem responder a nenhuma tecla no Windows, depois que a árvore carrega** — relatado com 3 servidores já cadastrados (ainda não confirmado se é a causa). Depois que a árvore do `git-sync` termina de carregar, nenhuma tecla tem efeito; a única forma de sair é fechar o terminal à força, e o problema se repete em execuções seguintes. Sem um ambiente Windows disponível para reproduzir diretamente — hipótese a investigar: alguma camada da cadeia `paje.cmd` → `powershell.exe` → `npm run dev` → `tsx`/`node` pode não estar entregando ao processo um `stdin` em modo raw de verdade, que é o que o Ink precisa para capturar teclado.
-- **Ao sair do PAJÉ no Windows, fica numa tela vazia até `Ctrl+C`** — depois de sair da TUI, o terminal fica com a tela em branco, sem devolver o prompt; só depois de apertar `Ctrl+C` aparece o prompt nativo do `cmd.exe` "Deseja finalizar o arquivo em lotes (S/N)?" — sinal de que o processo Node, por baixo da cadeia `paje.cmd` → `powershell.exe` → `npm run dev` → `tsx`, não está terminando sozinho ao final da execução (nenhum `process.exit()` é chamado hoje em nenhum caminho de saída "normal", fora do `Ctrl+Q`; o processo deveria encerrar pelo esvaziamento natural do event loop, mas algo na cadeia do Windows parece não deixar isso acontecer). Possivelmente relacionado ao bug anterior (travamento de teclado) — mesma cadeia de processos sob suspeita. Não reproduzido neste ambiente (sem Windows disponível).
+- **Escopos padrão do token gerado automaticamente podem não incluir permissão de push** — os escopos padrão (`read_repository`, `read_api`, `read_virtual_registry`, `self_rotate`) são todos de leitura; nenhum inclui `write_repository`. Se o servidor usar `useBasicAuth` (HTTPS + PAT, sem chave SSH), um token gerado com esses escopos pode permitir `clone`/`pull` mas rejeitar `push`, sem aviso no cadastro. Ainda não confirmado experimentalmente — ver BUG-21 em [`docs/auditoria-codigo.md`](docs/auditoria-codigo.md).
 
 ---
 

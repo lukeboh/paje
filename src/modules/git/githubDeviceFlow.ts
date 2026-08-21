@@ -133,9 +133,9 @@ export const pollGitHubDeviceAccessToken = async (
 export const openInBrowser = (url: string): void => {
   const platform = process.platform;
   if (platform === "win32") {
-    execFile("cmd", ["/c", "start", "", url], () => undefined);
+    execFile("cmd", ["/c", "start", "", url], { windowsHide: true }, () => undefined);
     return;
   }
   const command = platform === "darwin" ? "open" : "xdg-open";
-  execFile(command, [url], () => undefined);
+  execFile(command, [url], { windowsHide: true }, () => undefined);
 };

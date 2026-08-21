@@ -14,8 +14,10 @@ import { ensurePajeKeyPair } from "../src/modules/git/sshManager.js";
 // de renomear, em vez de depender da semântica de rename do SO hospedeiro.
 
 const originalHome = process.env.HOME;
+const originalUserProfile = process.env.USERPROFILE;
 const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "paje-home-overwrite-repeat-"));
 process.env.HOME = tempHome;
+process.env.USERPROFILE = tempHome;
 
 const sshDir = path.join(tempHome, ".ssh");
 fs.mkdirSync(sshDir, { recursive: true });
@@ -53,6 +55,7 @@ try {
 } finally {
   fs.renameSync = originalRenameSync;
   process.env.HOME = originalHome;
+  process.env.USERPROFILE = originalUserProfile;
 }
 
 console.log("ssh_key_overwrite_repeated_test: OK");

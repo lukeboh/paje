@@ -5,8 +5,10 @@ import path from "node:path";
 import { ensurePajeKeyPair } from "../src/modules/git/sshManager.js";
 
 const originalHome = process.env.HOME;
+const originalUserProfile = process.env.USERPROFILE;
 const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "paje-home-overwrite-"));
 process.env.HOME = tempHome;
+process.env.USERPROFILE = tempHome;
 
 const sshDir = path.join(tempHome, ".ssh");
 fs.mkdirSync(sshDir, { recursive: true });
@@ -25,5 +27,6 @@ assert.ok(fs.existsSync(`${privateKeyPath}.bak`), "Deve mover chave privada para
 assert.ok(fs.existsSync(`${publicKeyPath}.pub.bak`), "Deve mover chave pública para .pub.bak");
 
 process.env.HOME = originalHome;
+process.env.USERPROFILE = originalUserProfile;
 
 console.log("ssh_key_overwrite_test: OK");

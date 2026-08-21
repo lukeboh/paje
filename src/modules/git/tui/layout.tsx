@@ -235,6 +235,14 @@ export const Layout: React.FC<LayoutProps> = ({
     };
   }, [terminalHeight, panelState.logMaximized, panelState.workspaceMaximized]);
 
+  React.useEffect(() => {
+    if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
+      try {
+        process.stdin.setRawMode(true);
+      } catch {}
+    }
+  }, []);
+
   useInput((input = "", key) => {
     const lower = typeof input === "string" ? input.toLowerCase() : "";
     // Ctrl+C must always work, even with a modal open.

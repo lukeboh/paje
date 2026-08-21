@@ -13,9 +13,9 @@ import { ENV_TEMPLATE_CONTENT } from "../src/modules/git/envTemplate.js";
 const rootTemplatePath = path.resolve(import.meta.dirname, "..", "env-template.yaml");
 const rootTemplateContent = fs.readFileSync(rootTemplatePath, "utf-8");
 assert.equal(
-  ENV_TEMPLATE_CONTENT,
-  rootTemplateContent,
-  "envTemplate.ts (ENV_TEMPLATE_CONTENT) deve ser idêntico, byte a byte, a env-template.yaml na raiz do repositório"
+  ENV_TEMPLATE_CONTENT.replace(/\r\n/g, "\n"),
+  rootTemplateContent.replace(/\r\n/g, "\n"),
+  "envTemplate.ts (ENV_TEMPLATE_CONTENT) deve ser idêntico a env-template.yaml na raiz do repositório"
 );
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "paje-env-write-"));
@@ -95,7 +95,11 @@ const fileF = path.join(tmpDir, "f.yaml");
 const createdFirstTime = ensureEnvYamlExists(fileF);
 assert.equal(createdFirstTime, true, "Deve reportar que criou o arquivo na primeira chamada");
 const contentF = fs.readFileSync(fileF, "utf-8");
-assert.equal(contentF, ENV_TEMPLATE_CONTENT, "Conteúdo criado deve ser idêntico ao template (todos os comentários)");
+assert.equal(
+  contentF.replace(/\r\n/g, "\n"),
+  ENV_TEMPLATE_CONTENT.replace(/\r\n/g, "\n"),
+  "Conteúdo criado deve ser idêntico ao template (todos os comentários)"
+);
 
 fs.writeFileSync(fileF, "base-dir: \"editado-pelo-usuario\"\n");
 const createdSecondTime = ensureEnvYamlExists(fileF);

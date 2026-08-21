@@ -24,10 +24,12 @@ import { Command } from "commander";
 
 const originalFetch = globalThis.fetch;
 const originalHome = process.env.HOME;
+const originalUserProfile = process.env.USERPROFILE;
 const originalSkip = process.env.PAJE_SKIP_SSH_STORE;
 
 const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "paje-edit-server-home-"));
 process.env.HOME = tempHome;
+process.env.USERPROFILE = tempHome;
 process.env.PAJE_SKIP_SSH_STORE = "1";
 
 const pajeDir = path.join(tempHome, ".paje");
@@ -145,6 +147,7 @@ assert.strictEqual(saved.tokenExpiresAt, "2030-01-01", "tokenExpiresAt (fora do 
 
 globalThis.fetch = originalFetch as typeof fetch;
 process.env.HOME = originalHome;
+process.env.USERPROFILE = originalUserProfile;
 process.env.PAJE_SKIP_SSH_STORE = originalSkip;
 
 console.log("git_server_store_edit_test: OK (parte 1/2)");
@@ -153,6 +156,7 @@ console.log("git_server_store_edit_test: OK (parte 1/2)");
 
 const tempHome2 = fs.mkdtempSync(path.join(os.tmpdir(), "paje-edit-server-rename-"));
 process.env.HOME = tempHome2;
+process.env.USERPROFILE = tempHome2;
 process.env.PAJE_SKIP_SSH_STORE = "1";
 const pajeDir2 = path.join(tempHome2, ".paje");
 fs.mkdirSync(pajeDir2, { recursive: true });
@@ -232,6 +236,7 @@ assert.strictEqual(
 
 globalThis.fetch = originalFetch as typeof fetch;
 process.env.HOME = originalHome;
+process.env.USERPROFILE = originalUserProfile;
 process.env.PAJE_SKIP_SSH_STORE = originalSkip;
 
 console.log("git_server_store_edit_test: OK");
