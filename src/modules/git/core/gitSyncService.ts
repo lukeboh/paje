@@ -22,6 +22,7 @@ import {
 import {
   buildGitLabTree,
   collectSelectedProjects,
+  applyInitialSelectionFromLocalClones,
   applyInitialSelectionFromStatusMap,
   recomputeTreeSelection,
   toggleTreeNode,
@@ -725,7 +726,16 @@ export const createGitSyncCore = (): GitSyncCore => {
             node.children?.forEach((child) => applyStatusToTree(child));
           };
           tree.forEach((node) => applyStatusToTree(node));
-          applyInitialSelectionFromStatusMap(tree, statusMap);
+          // NEVER pre-select from cached.statusMap here: it is the snapshot
+          // written at the PREVIOUS session's load — before that session's
+          // sync/removals, and before any manual deletion on disk since. A
+          // repo whose clone no longer exists would arrive pre-selected [x]
+          // (and Ctrl+S would clone it back, unasked), while a repo cloned
+          // last session would arrive unmarked [ ] (and become an undue
+          // removal candidate). Only the disk can answer "is it cloned now".
+          await applyInitialSelectionFromLocalClones(tree, (node) =>
+            node.localPath ? hasGitDir(node.localPath) : Promise.resolve(false)
+          );
 
           setImmediate(async () => {
             // Bounded worker pool: one git subprocess per repo, so spawning
