@@ -402,7 +402,7 @@ Ideias registradas para o futuro — **ainda não implementadas**, sem previsão
 
 ### Bugs conhecidos
 
-Nenhum bug conhecido aberto momento. Todos os problemas relatados no Windows foram reproduzidos e resolvidos (ver [`docs/auditoria-codigo.md`](docs/auditoria-codigo.md) — BUG-19 e BUG-20).
+- **Escopos padrão do token gerado automaticamente podem não incluir permissão de push** — os escopos padrão (`read_repository`, `read_api`, `read_virtual_registry`, `self_rotate`) são todos de leitura; nenhum inclui `write_repository`. Se o servidor usar `useBasicAuth` (HTTPS + PAT, sem chave SSH), um token gerado com esses escopos pode permitir `clone`/`pull` mas rejeitar `push`, sem aviso no cadastro. Ainda não confirmado experimentalmente — ver BUG-21 em [`docs/auditoria-codigo.md`](docs/auditoria-codigo.md).
 
 ---
 

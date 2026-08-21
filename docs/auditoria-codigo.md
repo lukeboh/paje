@@ -237,6 +237,29 @@ Consequência direta da estrutura de processos intermediária descrita no BUG-19
 
 ---
 
+### BUG-21 — Escopos padrão do token gerado automaticamente podem não incluir permissão de push
+**Severidade: A INVESTIGAR** | **Status: ABERTO** (registrado a partir de suspeita relatada pelo usuário — ainda não confirmado nem corrigido)
+
+`DEFAULT_TOKEN_SCOPES` (`sshManager.ts:365`, espelhado em `envTemplate.ts:79` e em
+três pontos de `gitCommand.ts`) é
+`["read_repository", "read_api", "read_virtual_registry", "self_rotate"]` — os
+quatro escopos são de **leitura**; nenhum inclui `write_repository` (o escopo
+do GitLab que autoriza `git push` sobre HTTPS usando o próprio PAT). Se um
+servidor estiver configurado com `useBasicAuth` (HTTPS + PAT, sem chave SSH), um
+token criado com esses escopos padrão permitiria `clone`/`pull` mas rejeitaria
+`push` — sem nenhum aviso no momento do cadastro, já que `hasUsableServerCredentials()`
+(ver BUG-17) só verifica se existe *algum* token/chave, não se os escopos
+persistidos são suficientes para escrita. Ainda não confirmado experimentalmente
+contra um GitLab real, nem se o fluxo recomendado (chave SSH, que não passa por
+escopo de token nenhum) mitiga isso na prática para quem não usa
+`useBasicAuth`. **Próximo passo, antes de qualquer correção**: reproduzir um
+`git push` num repositório clonado via token com os escopos padrão e confirmar
+se falha; se confirmado, avaliar se `write_repository` deveria entrar no
+default, ou se o cadastro deveria avisar explicitamente que os escopos padrão
+são somente leitura.
+
+---
+
 ## 2. INCONSISTÊNCIAS ENTRE ARQUIVOS
 
 ### ~~INC-01~~ — Separador de branch em `syncRepos`: `#` no CLI vs `@` na TUI
