@@ -6,6 +6,7 @@ import { createScreenHost, type ScreenHost } from "./modules/git/tui/screenHost.
 import { createSessionForCommand } from "./cliSession";
 import { setLocale, t } from "./i18n/index.js";
 import { PajeLogger } from "./modules/git/logger";
+import { APP_VERSION } from "./version.js";
 
 const buildMenuItems = (): MenuItem[] => [
   {
@@ -73,7 +74,7 @@ const main = async (): Promise<void> => {
   baseProgram
     .name("paje")
     .description(t("app.description"))
-    .version("0.1.0")
+    .version(APP_VERSION)
     .option("--locale <locale>", t("cli.command.gitSync.options.locale"))
     .option("-v, --verbose", t("cli.command.gitSync.options.verbose"), false);
 
@@ -118,7 +119,7 @@ const main = async (): Promise<void> => {
           program
             .name("paje")
             .description(t("app.description"))
-            .version("0.1.0")
+            .version(APP_VERSION)
             .option("--locale <locale>", t("cli.command.gitSync.options.locale"));
           const session = createSessionForCommand(selection.command, host);
           configureGitSyncCommand(program, session);

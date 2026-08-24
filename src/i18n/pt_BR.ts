@@ -27,7 +27,7 @@ const ptBR = {
     },
   },
   layout: {
-    rightTitle: "PAJÉ",
+    rightTitle: "PAJÉ v{{version}}",
     logTitle: "Log",
   },
   vscodeExt: {

@@ -134,11 +134,21 @@ npm test        # suite completa — nenhum teste existente pode quebrar
 
 ---
 
+## 7. Versionamento
+
+- Toda evolução do PAJÉ (nova funcionalidade, correção, refatoração visível) **deve**
+  incrementar `"version"` em `package.json` (SemVer: patch para correções, minor para
+  funcionalidades, major para breaking changes).
+- Essa versão é a única fonte de verdade — nunca hardcode a versão em outro arquivo.
+  CLI e TUI devem lê-la em runtime a partir de `package.json` (ver `src/version.ts`).
+
+---
+
 ## Referências
 
 | Documento | Conteúdo |
 |---|---|
 | `docs/arquitetura.md` | Visão geral e regras de camadas para desenvolvedores |
-| `docs/auditoria-arquitetura.md` | 16 problemas arquiteturais conhecidos com arquivo:linha |
+| `docs/auditoria-arquitetura.md` | 17 problemas arquiteturais conhecidos com arquivo:linha |
 | `docs/auditoria-codigo.md` | Bugs, inconsistências e itens de UX conhecidos (abertos e resolvidos) |
 | `docs/requisitos-tui-git-sync.md` | Requisitos funcionais e de usabilidade da TUI git-sync |

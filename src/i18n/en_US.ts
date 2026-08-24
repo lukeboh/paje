@@ -29,7 +29,7 @@ const enUS: PtBrTranslations = {
     },
   },
   layout: {
-    rightTitle: "PAJE",
+    rightTitle: "PAJE v{{version}}",
     logTitle: "Log",
   },
   vscodeExt: {

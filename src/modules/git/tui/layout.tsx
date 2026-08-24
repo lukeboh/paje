@@ -18,6 +18,7 @@ import { TextInputModal } from "./components/TextInputModal.js";
 import { HelpModal, type HelpContext } from "./components/HelpModal.js";
 import { t } from "../../../i18n/index.js";
 import { PajeLogger } from "../logger.js";
+import { APP_VERSION } from "../../../version.js";
 
 export type LayoutProps = {
   title: string;
@@ -324,7 +325,7 @@ export const Layout: React.FC<LayoutProps> = ({
           }}
         >
           <Box flexDirection="column" width="100%" height={terminalHeight}>
-            <TitleBar left={headerLeft} right={t("layout.rightTitle")} />
+            <TitleBar left={headerLeft} right={t("layout.rightTitle", { version: APP_VERSION })} />
             <Box flexDirection="column" width="100%" height={layoutMetrics.containerHeight}>
               <PanelFrame title={workspaceLegend} height={layoutMetrics.workspaceFrameHeight}>
                 <Workspace height={layoutMetrics.workspaceContentHeight}>{children}</Workspace>
