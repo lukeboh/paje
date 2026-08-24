@@ -68,6 +68,7 @@ gitCommand.ts
 | ARQ-14 | `parallelSync` importado diretamente pela CLI/TUI | ✅ EFETIVAMENTE RESOLVIDO — `parallelSync()` não é mais chamado diretamente. O import permanece para `runGit`, `resolveConcurrency`, `ProgressEvent` e `SyncResult` — tipos e utilitários de infra que a camada de apresentação ainda consome legitimamente. |
 | ARQ-15 | `ensureSshKey` divergente: core incompleto | ✅ RESOLVIDO — A versão local em `gitCommand.ts` era dead code (nunca chamada). Removida. O core mantém a versão canônica não-interativa chamada por `loadTree()`. |
 | ARQ-16 | `resolveProjectLocalPath` duplicada | ✅ RESOLVIDO — Fase 1: movida para `gitPathUtils.ts` |
+| ARQ-17 | Default `"repos"` de `--base-dir` duplicado 3× fora do core (`gitCommand.ts:1681,1981,2219`) em vez de importado de `DEFAULT_BASE_DIR` (`gitSyncConfig.ts:51`) | ⚠️ ABERTO |
 
 ---
 
@@ -84,4 +85,4 @@ gitCommand.ts
 | Lógica de sync centralizada no core | Não | Sim |
 | Testes cobrem código de produção | Parcialmente | Sim |
 
-**Todos os 16 itens ARQ originais estão resolvidos.**
+**Dos 17 itens ARQ, 16 estão resolvidos; ARQ-17 está aberto.**
