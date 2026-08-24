@@ -27,6 +27,7 @@ const testFiles = [
   "./log_store_level_test.js",
   "./log_store_throttle_test.js",
   "./screen_host_test.js",
+  "./screen_host_raw_mode_test.js",
   "./tui_render_test.js",
   "./tui_prompt_chain_test.js",
   "./tui_prompt_form_layout_test.js",

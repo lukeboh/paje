@@ -224,9 +224,14 @@ em segundo plano termina.
 ---
 
 ### ~~BUG-19~~ — TUI do PAJÉ no Windows travava sem responder a nenhuma tecla após carregar a árvore
-**Severidade: CRÍTICO** | **Status: RESOLVIDO**
+**Severidade: CRÍTICO** | **Status: RESOLVIDO** *(correção necessária, mas insuficiente — o sintoma persiste por causa distinta; ver BUG-23)*
 
 No Windows, o executável `paje.cmd` invocava o script via `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0paje.ps1" %*`. A execução de `powershell -File` a partir do `cmd.exe` ou PowerShell iniciava um processo PowerShell não-interativo que encapsulava os streams de `stdio` (`stdin`/`stdout`), impedindo que o Node.js e a biblioteca `Ink` assumissem o modo bruto TTY (`setRawMode(true)`). Com isso, os eventos de teclado via `useInput` não eram recebidos pela TUI e a tela ficava congelada. Corrigido reescrevendo `paje.cmd` como um script em lote batch nativo (`call npm run dev -- %*`) e atualizando `install-paje.ps1` para executar `paje.ps1` diretamente no `$PROFILE` do PowerShell.
+
+> **2026-08-24:** o usuário reporta que o sintoma (árvore carrega, nenhuma tecla responde,
+> nem Ctrl+C) continua ocorrendo no Windows mesmo com o `paje.cmd` corrigido. A causa do
+> wrapper `powershell -File` era real e foi de fato removida, mas há uma segunda causa,
+> independente, na troca de telas da própria TUI — registrada como **BUG-23**.
 
 ---
 
@@ -304,6 +309,81 @@ ali o `statusMap` acabou de ser computado do disco. Regressão coberta por
 divergências: `SYNCED` sem clone → não pode selecionar; `EMPTY` com clone →
 deve selecionar), verificado também ponta-a-ponta com três execuções reais
 consecutivas (fresh → cache velho → cache atualizado) via TUI simulada.
+
+---
+
+### ~~BUG-23~~ — TUI no Windows congela o teclado na transição loading → árvore: Ink desliga e religa o raw mode do console no gap sem tela
+**Severidade: CRÍTICO** | **Status: RESOLVIDO** (recorrência do sintoma do BUG-19 com causa distinta; análise e correção de 2026-08-24 — validação final pendente em terminal Windows real)
+
+**Sintoma reportado (Windows):** ao carregar a árvore de repositórios, a interface
+não reage a nenhuma tecla — nem navegação, nem Esc, nem Ctrl+C — obrigando a matar
+o terminal inteiro. Não ocorre no Linux.
+
+**Cadeia causal identificada (análise de código):**
+
+1. Ao final do `loadTree()`, `loadingHandle.stop()` roda no `.finally`
+   (`gitCommand.ts:1975`) → `screenHost.release()` zera `entry`
+   (`screenHost.tsx:80–86`) e o `Root` do host passa a renderizar `null`.
+2. Entre esse ponto e a montagem da árvore (`renderRepositoryTree`,
+   `gitCommand.ts:2292`) existem **awaits de I/O reais e demorados**:
+   `buildLocalStatusMap` (`gitCommand.ts:1990`/`2228`), que executa
+   `resolveRepoStatus` — incluindo `git fetch --quiet` por repositório local
+   fora da árvore (`core/gitSyncService.ts:355`) — e `runGit rev-parse`
+   (`gitCommand.ts:2251`). O React, portanto, **comita o frame nulo**: todos os
+   componentes com `useInput` desmontam.
+3. Com o último `useInput` desmontado, o `rawModeEnabledCount` interno do Ink
+   chega a 0 e o Ink executa `stdin.setRawMode(false)`,
+   `removeListener('readable')` e `stdin.unref()`
+   (`node_modules/ink/build/components/App.js:125–130`, ink@5.2.1). Quando a
+   árvore monta, ele refaz tudo: `ref()`, `setRawMode(true)`,
+   `addListener('readable')`.
+4. No POSIX esse liga-desliga é um `ioctl` termios sem estado — inofensivo. No
+   Windows, o TTY do libuv usa uma **thread leitora dedicada com chamadas
+   bloqueantes de leitura do console**, que precisa ser cancelada e reiniciada
+   a cada alternância de modo/parada de leitura. É exatamente esse caminho de
+   cancelar-e-reiniciar que é historicamente frágil: a leitura antiga não é
+   cancelada de forma confiável e a nova nunca recebe dados — teclado morto
+   para sempre no processo.
+5. O Ctrl+C morto é consistente com isso: a flag de raw mode **fica ligada**
+   (o processamento de Ctrl+C do console fica desabilitado, então não gera
+   sinal), mas o leitor do Ink nunca entrega os bytes — nenhum handler roda.
+   Só resta matar o terminal, como o usuário descreve.
+
+**Por que congela exatamente "quando a árvore carrega":** a transição
+menu → loading acontece dentro da mesma task (release e mount praticamente
+consecutivos, batched pelo React) — o frame nulo não chega a ser comitado e o
+raw mode não alterna; já a transição loading → árvore atravessa segundos de
+awaits (item 2), garantindo o commit do frame nulo e a alternância. Por isso o
+menu responde e a árvore não.
+
+**Por que as defesas atuais não bastam:** os `process.stdin.setRawMode(true)`
+diretos em `screenHost.tsx:53` e `layout.tsx:239` só religam a *flag* de raw
+mode — não restauram o listener `'readable'` do Ink nem destravam a thread
+leitora do libuv. E o BUG-19 (wrapper `powershell -File`) era uma causa real,
+porém independente — removê-la não afeta este mecanismo.
+
+**Validação (no Windows, terminal real):** rodar um script que ligue
+raw mode + listener, desligue/religue após um intervalo (simulando o gap) e
+imprima as teclas recebidas — se após o religamento nada chegar, a hipótese
+está confirmada. Alternativa de confirmação direta na TUI: manter pressionada
+qualquer tecla durante o loading e verificar que o congelamento coincide com o
+fim do loading. Após a correção, o teste definitivo é abrir o `paje git-sync`
+no Windows e verificar que a árvore responde ao teclado.
+
+**Correção aplicada:** `RawModeKeeper` em `screenHost.tsx` — componente
+keep-alive invisível renderizado permanentemente pelo `Root` (que fica montado
+a sessão inteira), chamando `useStdin().setRawMode(true)` na montagem (usando
+o contador interno do próprio Ink, não `process.stdin` direto) e liberando
+apenas quando o host é destruído. Com isso `rawModeEnabledCount` nunca chega a
+0 entre telas: o listener `'readable'` nunca é removido, o `stdin` nunca é
+`unref`'d e o modo raw nunca alterna — em todas as plataformas, eliminando o
+gatilho do congelamento no Windows. Regressão coberta por
+`tests/screen_host_raw_mode_test.ts` (stdin falso instrumentado: monta tela
+com `useInput`, `release()`, espera o commit do frame nulo e afirma que
+`setRawMode(false)` nunca acontece no gap, que o listener `'readable'`
+permanece instalado e que a tela seguinte continua recebendo input) —
+verificado que o teste falha sem a correção e passa com ela. Validação final
+em terminal Windows real (interativa) pendente com o usuário.
 
 ---
 
@@ -628,7 +708,7 @@ Entradas mais largas que o terminal quebravam em múltiplas linhas físicas, emp
 
 ### Itens resolvidos desde a auditoria inicial
 
-BUG-02, BUG-03, BUG-04, BUG-05, BUG-06, BUG-08, BUG-09, BUG-10, BUG-11, INC-01, INC-02, INC-03, INC-04, INC-07, INC-08, INC-09, DC-01, DC-02, DC-03, DC-04, DC-05, I18N-02, I18N-03, I18N-04, REQ-04, REQ-05, REQ-06, UX-01, UX-02, UX-05, UX-06, UX-07, UX-08, UX-09, UX-10, UX-11, UX-12, UX-13, UX-14, UX-15, UX-16, UX-17, REQ-01/UX-03 (43 itens)
+BUG-02, BUG-03, BUG-04, BUG-05, BUG-06, BUG-08, BUG-09, BUG-10, BUG-11, BUG-23, INC-01, INC-02, INC-03, INC-04, INC-07, INC-08, INC-09, DC-01, DC-02, DC-03, DC-04, DC-05, I18N-02, I18N-03, I18N-04, REQ-04, REQ-05, REQ-06, UX-01, UX-02, UX-05, UX-06, UX-07, UX-08, UX-09, UX-10, UX-11, UX-12, UX-13, UX-14, UX-15, UX-16, UX-17, REQ-01/UX-03 (44 itens)
 
 ---
 

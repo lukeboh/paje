@@ -1,5 +1,5 @@
-import React, { useSyncExternalStore } from "react";
-import { render, type RenderOptions } from "ink";
+import React, { useEffect, useSyncExternalStore } from "react";
+import { render, useStdin, type RenderOptions } from "ink";
 
 export type ScreenHost = {
   // Mounts `node` as the current screen, replacing whatever was there.
@@ -37,16 +37,40 @@ export const createScreenHost = (renderOptions?: RenderOptions): ScreenHost => {
     listeners.forEach((listener) => listener());
   };
 
+  // Pins Ink's internal raw-mode counter at ≥1 for the whole life of this
+  // host, through Ink's own useStdin().setRawMode (NOT process.stdin
+  // directly — the point is the counter). Without it, the gap between
+  // release() and the next mount() commits a null frame, every useInput
+  // unmounts, the counter hits 0 and Ink tears the whole input pipeline
+  // down (setRawMode(false), 'readable' listener removed, stdin.unref())
+  // only to rebuild it when the next screen mounts. On POSIX that toggle is
+  // a stateless ioctl; on Windows it forces libuv to cancel and restart its
+  // blocking console-reader thread, which is unreliable — keyboard input
+  // goes permanently dead after the loading→tree transition (BUG-23).
+  const RawModeKeeper: React.FC = () => {
+    const { setRawMode, isRawModeSupported } = useStdin();
+    useEffect(() => {
+      if (!isRawModeSupported) {
+        return;
+      }
+      setRawMode(true);
+      return () => setRawMode(false);
+    }, [setRawMode, isRawModeSupported]);
+    return null;
+  };
+
   // useSyncExternalStore (rather than a useState+useEffect callback bridge)
   // avoids a race where a second mount()/release() lands before the first
   // screen's effect has registered its listener — it re-checks the snapshot
   // right after subscribing and forces a re-render if it already changed.
   const Root: React.FC = () => {
     const current = useSyncExternalStore(subscribe, getSnapshot);
-    if (!current) {
-      return null;
-    }
-    return <React.Fragment key={current.key}>{current.node}</React.Fragment>;
+    return (
+      <>
+        <RawModeKeeper />
+        {current ? <React.Fragment key={current.key}>{current.node}</React.Fragment> : null}
+      </>
+    );
   };
 
   const ensureRawMode = (): void => {
