@@ -24,7 +24,9 @@ import path from "node:path";
 const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "paje-stale-presel-home-"));
 const tmpRepos = fs.mkdtempSync(path.join(os.tmpdir(), "paje-stale-presel-repos-"));
 const originalHome = process.env.HOME;
+const originalUserProfile = process.env.USERPROFILE;
 process.env.HOME = tmpHome;
+process.env.USERPROFILE = tmpHome;
 
 try {
   const { createGitSyncCore, computeConfigHash } = await import("../src/modules/git/core/gitSyncService.js");
@@ -97,10 +99,38 @@ try {
     verbose: false,
   } as unknown as import("../src/modules/git/core/gitSyncConfig.js").GitSyncConfig;
 
+  // O fixture de cache escrito acima (linhas 77-88) já grava statusMap com as
+  // chaves "101"/"102" preenchidas — não dá pra usar a presença delas como
+  // sinal de que o refresh em segundo plano rodou. O mtime de antes de
+  // loadTree() é a referência para saber quando a regravação real aconteceu.
+  const cacheMtimeBefore = fs.statSync(paths.treeCacheFile).mtimeMs;
+
   const core = createGitSyncCore();
   const view = await core.loadTree({ config, logger: new LoggerBroker() });
 
   assert.equal(view.fromCache, true, "Este teste cobre especificamente o caminho de cache-hit");
+
+  // loadTree() em cache-hit dispara um refresh de status em segundo plano via
+  // setImmediate (gitSyncService.ts) que ao final regrava paths.treeCacheFile
+  // — sem esperar por ele aqui, o finally abaixo restaura HOME/USERPROFILE
+  // para os valores reais ANTES desse writeGitTreeCache assíncrono rodar, e a
+  // escrita acaba pousando no ~/.paje real do usuário (ver BUG-01).
+  const waitFor = async (predicate: () => boolean, timeoutMs = 5000): Promise<boolean> => {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      if (predicate()) return true;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    return predicate();
+  };
+  const cacheRewritten = await waitFor(() => {
+    try {
+      return fs.statSync(paths.treeCacheFile).mtimeMs > cacheMtimeBefore;
+    } catch {
+      return false;
+    }
+  });
+  assert.ok(cacheRewritten, "Refresh em segundo plano deve regravar o cache antes do fim do teste");
 
   const projectNodes = view.tree.flatMap(function collect(node): typeof view.tree {
     return [node, ...(node.children ?? []).flatMap(collect)];
@@ -128,6 +158,7 @@ try {
   );
 } finally {
   process.env.HOME = originalHome;
+  process.env.USERPROFILE = originalUserProfile;
   fs.rmSync(tmpHome, { recursive: true, force: true });
   fs.rmSync(tmpRepos, { recursive: true, force: true });
 }

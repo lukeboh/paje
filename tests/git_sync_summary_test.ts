@@ -116,8 +116,10 @@ const runSummaryTests = async (): Promise<void> => {
   };
 
   const originalHome = process.env.HOME;
+  const originalUserProfile = process.env.USERPROFILE;
   const originalArgv = process.argv;
   process.env.HOME = fs.mkdtempSync(path.join(os.tmpdir(), "paje-summary-home-"));
+  process.env.USERPROFILE = process.env.HOME;
   const homeDir = process.env.HOME;
   const sshDir = path.join(homeDir, ".ssh");
   fs.mkdirSync(sshDir, { recursive: true });
@@ -230,6 +232,7 @@ const runSummaryTests = async (): Promise<void> => {
 
   console.log = originalLog;
   process.env.HOME = originalHome;
+  process.env.USERPROFILE = originalUserProfile;
   process.argv = originalArgv;
   globalThis.fetch = originalFetch as typeof fetch;
 

@@ -27,7 +27,9 @@ import path from "node:path";
 const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "paje-stale-statusmap-home-"));
 const tmpRepos = fs.mkdtempSync(path.join(os.tmpdir(), "paje-stale-statusmap-repos-"));
 const originalHome = process.env.HOME;
+const originalUserProfile = process.env.USERPROFILE;
 process.env.HOME = tmpHome;
+process.env.USERPROFILE = tmpHome;
 
 try {
   const { createGitSyncCore, computeConfigHash } = await import("../src/modules/git/core/gitSyncService.js");
@@ -138,6 +140,7 @@ try {
   );
 } finally {
   process.env.HOME = originalHome;
+  process.env.USERPROFILE = originalUserProfile;
   fs.rmSync(tmpHome, { recursive: true, force: true });
   fs.rmSync(tmpRepos, { recursive: true, force: true });
 }
