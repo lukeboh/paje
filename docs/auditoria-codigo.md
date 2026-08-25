@@ -15,7 +15,7 @@ documentos.
 
 | Tipo | Gravidade | Qtd |
 |---|---|---|
-| Bug | Bloqueante | 1 |
+| Bug | Bloqueante | 0 |
 | Bug | Crítico | 2 |
 | Bug | Normal | 2 |
 | Bug | Cosmético | 1 |
@@ -24,50 +24,6 @@ documentos.
 ---
 
 ## 1. Bugs
-
-### BUG-01 — Testes gravam dados fictícios em cima do `~/.paje` real no Windows (`git-servers.json`, cache, resumo)
-**Gravidade: BLOQUEANTE** | **Status: ABERTO**
-
-`resolvePajePaths()` (`persistence.ts:18-19`) resolve o diretório base com
-`os.homedir()`. No Windows, `os.homedir()` do Node lê a variável `USERPROFILE`
-— **nunca** `HOME` — para descobrir o diretório do usuário. Quatro arquivos de
-teste isolam o ambiente setando só `process.env.HOME` (sem tocar em
-`USERPROFILE` e sem sobrescrever `os.homedir` diretamente, ao contrário do
-padrão correto usado em outros testes, ex. `env_yaml_first_run_test.ts:17-20`
-ou `git_sync_auth_guard_test.ts:13-14`):
-
-- `tests/git_sync_cache_refresh_test.ts:16` seta só `HOME`; `:24` chama
-  `resolvePajePaths()`; `:35` grava `paths.serversFile` com um servidor fictício
-  (`git.exemplo.com`) e projetos `grupo/proj-a`/`grupo/proj-b`.
-- `tests/git_sync_stale_preselection_test.ts:27` (`HOME` só) → `:35`
-  `resolvePajePaths()` → `:41` grava `paths.serversFile`.
-- `tests/git_sync_stale_statusmap_test.ts:30` (`HOME` só) → `:37`
-  `resolvePajePaths()` → `:43` grava `paths.serversFile`.
-- `tests/git_sync_summary_test.ts:120` (`HOME` só) → `:148` chama
-  `writeGitServers([...])` diretamente.
-
-Em qualquer máquina Windows, rodar `npm test` — passo obrigatório do fluxo de
-todo desenvolvimento descrito na seção 3 deste `CLAUDE.md` do projeto, executado
-após toda alteração de código — sobrescreve silenciosamente o
-`%USERPROFILE%\.paje\git-servers.json` real do usuário com esses servidores e
-repositórios de teste, e sujeita `git-tree-cache.json`/outros arquivos do
-mesmo diretório à mesma contaminação. O ambiente de configuração real fica
-substituído por dados fictícios sem nenhum aviso.
-
-**Comportamento esperado:** a instalação/execução de testes nunca deve tocar
-na configuração real do usuário, a menos que ele peça explicitamente uma
-substituição. Se algum fluxo legítimo precisar substituir `env.yaml` e
-`git-servers.json`, o resultado não pode conter repositórios de exemplo ou de
-teste — os arquivos devem ficar vazios (`git-servers.json: []`) e os
-parâmetros de `env.yaml` devem vir com os valores default documentados no
-próprio template (`envTemplate.ts`), nunca com dados fabricados por teste.
-
-**Correção:** nos quatro arquivos listados, seguir o mesmo padrão já usado em
-`env_yaml_first_run_test.ts`/`git_sync_auth_guard_test.ts` — setar também
-`process.env.USERPROFILE` (ou sobrescrever `os.homedir` diretamente) para o
-diretório temporário, restaurando ambos no `finally`.
-
----
 
 ### BUG-02 — `docs/requisitos-tui-git-sync.md` RF-06: Remoção de repositórios desmarcados inconsistente
 **Gravidade: CRÍTICO** | **Status: ABERTO**
@@ -177,6 +133,56 @@ com que foi registrado (`BUG-NN`, `INC-NN`, `I18N-NN`, `REQ-NN`, `DC-NN`,
 `UX-NN`) para manter a rastreabilidade com commits e outros documentos. Os
 itens que estavam abertos nessas seções foram movidos para "Itens abertos"
 acima e aqui aparecem apenas como referência cruzada.
+
+### Itens resolvidos após a reorganização de 2026-08-25
+
+#### ~~BUG-01~~ — Testes gravam dados fictícios em cima do `~/.paje` real no Windows (`git-servers.json`, cache, resumo)
+**Status: RESOLVIDO**
+
+`resolvePajePaths()` (`persistence.ts:18-19`) resolve o diretório base com
+`os.homedir()`. No Windows, `os.homedir()` do Node lê a variável `USERPROFILE`
+— nunca `HOME` — para descobrir o diretório do usuário. Quatro arquivos de
+teste isolavam o ambiente setando só `process.env.HOME`, sem tocar em
+`USERPROFILE` e sem sobrescrever `os.homedir` diretamente (ao contrário do
+padrão correto já usado em `env_yaml_first_run_test.ts` e
+`git_sync_auth_guard_test.ts`): `git_sync_cache_refresh_test.ts`,
+`git_sync_stale_preselection_test.ts`, `git_sync_stale_statusmap_test.ts` e
+`git_sync_summary_test.ts`. Em qualquer máquina Windows, rodar `npm test`
+sobrescrevia silenciosamente o `%USERPROFILE%\.paje\git-servers.json` real do
+usuário (e o `git-tree-cache.json`) com servidores e repositórios fictícios de
+teste — exatamente o sintoma relatado de "instalação sobrescrevendo os
+arquivos de configuração com repositórios de exemplo/teste".
+
+Corrigido nos quatro arquivos setando também `process.env.USERPROFILE` para o
+diretório temporário, restaurado junto com `HOME` no `finally`.
+
+Uma segunda fonte de vazamento foi encontrada durante a verificação, específica
+de `git_sync_stale_preselection_test.ts`: em cache-hit, `loadTree()`
+(`gitSyncService.ts:740`) dispara um refresh de status em segundo plano via
+`setImmediate` que, ao final, regrava `git-tree-cache.json`
+(`gitSyncService.ts:770`) — sem esperar por esse job, o `finally` do teste
+restaurava `HOME`/`USERPROFILE` para os valores reais ANTES dele terminar, e a
+escrita assíncrona acabava pousando no `~/.paje` real. Corrigido fazendo o
+teste esperar (`waitFor` por mudança de `mtime` do arquivo de cache) o
+`writeGitTreeCache` do refresh terminar antes de restaurar o ambiente.
+
+Verificado manualmente rodando os quatro testes de forma isolada (`npx tsx`)
+com o `~/.paje` real monitorado antes/depois — nenhum arquivo real foi tocado,
+inclusive em execuções repetidas. `npm run build` e `npm test` não introduziram
+novas falhas (a suíte já tinha 11 arquivos falhando antes desta correção, por
+causas não relacionadas — ver observação abaixo).
+
+> **Observação:** a suíte de testes deste projeto, neste ambiente Windows,
+> já tinha 11 arquivos falhando antes desta correção (`tui_prompt_form_layout_test`,
+> `git_sync_auth_guard_test`, `git_sync_quick_register_bootstrap_test`,
+> `git_sync_registration_incomplete_test`, `git_sync_missing_credentials_bootstrap_test`,
+> `git_sync_token_rotate_healing_test`, `git_sync_token_invalid_bootstrap_test`,
+> `git_sync_github_token_expired_test`, `env_yaml_first_run_test`,
+> `git_sync_known_hosts_test`, `tui_exit_at_directory_test`) — confirmado
+> comparando com `git stash`. Essas falhas são pré-existentes e não relacionadas
+> a este bug; ainda não têm item próprio nesta auditoria.
+
+---
 
 ### 1. BUGS / COMPORTAMENTOS INCORRETOS
 
