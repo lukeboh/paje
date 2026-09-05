@@ -659,6 +659,83 @@ export const ensurePajeKeyPair = async (options: {
   return generatePajeKeyPair(options.passphrase, keyLabel);
 };
 
+// Windows-only gotcha: Git for Windows bundles its own OpenSSH build
+// (<gitRoot>\usr\bin\ssh.exe, MSYS2) instead of using whatever "ssh" is on
+// PATH — and that build is currently linked against an OpenSSL 3.x that
+// dropped default support for some legacy cipher/KDF combinations still
+// used by keys created with older ssh-keygen versions. When that happens,
+// every `git` operation over SSH for that key fails with "Load key ...:
+// error in libcrypto: unsupported", even though the key is perfectly
+// valid — Windows' own native OpenSSH client (%WINDIR%\System32\OpenSSH,
+// LibreSSL-based) still reads it fine. Detected once per identity file
+// (never assumed) and, only when confirmed, worked around by pointing
+// GIT_SSH_COMMAND at the native client for the rest of this PAJÉ run —
+// never touching the user's global git config, and never overriding a
+// GIT_SSH_COMMAND the user already set themselves.
+const WINDOWS_NATIVE_SSH_DIR = "C:\\Windows\\System32\\OpenSSH";
+
+let gitBundledSshDirCache: string | null | undefined;
+
+const resolveGitBundledSshDir = async (): Promise<string | null> => {
+  if (gitBundledSshDirCache !== undefined) {
+    return gitBundledSshDirCache;
+  }
+  try {
+    const { stdout } = await execFileAsync("where", ["git"]);
+    const gitPath = stdout.split(/\r?\n/)[0]?.trim();
+    // Git for Windows layouts: <root>\cmd\git.exe or <root>\bin\git.exe;
+    // the bundled MSYS2 ssh.exe always lives at <root>\usr\bin.
+    const candidate = gitPath ? path.join(path.dirname(path.dirname(gitPath)), "usr", "bin") : null;
+    gitBundledSshDirCache = candidate && fs.existsSync(path.join(candidate, "ssh.exe")) ? candidate : null;
+  } catch {
+    gitBundledSshDirCache = null;
+  }
+  return gitBundledSshDirCache;
+};
+
+const canSshKeygenReadIdentity = async (sshBinDir: string, identityPath: string): Promise<boolean> => {
+  try {
+    await execFileAsync(path.join(sshBinDir, "ssh-keygen.exe"), ["-y", "-f", identityPath]);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const gitSshCompatibilityCache = new Map<string, string | null>();
+
+// Returns the absolute path to an ssh.exe PAJÉ's own git subprocesses
+// should use instead of the default one, or null when no override is
+// needed (nothing wrong detected, or no confirmed-working alternative
+// found — this never guesses, only acts on a positive comparison).
+export const resolveGitSshCommandOverride = async (identityPath: string): Promise<string | null> => {
+  if (process.platform !== "win32") {
+    return null;
+  }
+  const cached = gitSshCompatibilityCache.get(identityPath);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const resolve = async (): Promise<string | null> => {
+    const bundledDir = await resolveGitBundledSshDir();
+    if (!bundledDir || !fs.existsSync(path.join(WINDOWS_NATIVE_SSH_DIR, "ssh.exe"))) {
+      return null;
+    }
+    if (await canSshKeygenReadIdentity(bundledDir, identityPath)) {
+      return null;
+    }
+    if (!(await canSshKeygenReadIdentity(WINDOWS_NATIVE_SSH_DIR, identityPath))) {
+      // Native can't read it either — not this specific incompatibility,
+      // nothing PAJÉ can safely do about it.
+      return null;
+    }
+    return path.join(WINDOWS_NATIVE_SSH_DIR, "ssh.exe");
+  };
+  const result = await resolve();
+  gitSshCompatibilityCache.set(identityPath, result);
+  return result;
+};
+
 const extractAuthenticityToken = (html: string): string | null => {
   const $ = cheerio.load(html);
   return $("input[name='authenticity_token']").attr("value") ?? $("meta[name='csrf-token']").attr("content") ?? null;

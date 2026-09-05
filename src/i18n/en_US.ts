@@ -274,6 +274,7 @@ const enUS: PtBrTranslations = {
       tokenExpiredPrompting: "The token for {{server}} expired or was revoked and couldn't be renewed on its own. Asking for the password to generate a new one...",
       skipRemoteToken: "Skipping remote token creation/validation (PAJE_SKIP_SSH_STORE=1).",
       skipRemoteStore: "Skipping remote SSH key registration (PAJE_SKIP_SSH_STORE=1).",
+      sshAlreadyConfigured: "Host {{host}} already has an SSH key associated in ~/.ssh/config — skipping key generation and registration.",
       notInformed: "not informed",
       tuiUnavailable: "TUI session unavailable.",
     },
@@ -538,6 +539,8 @@ const enUS: PtBrTranslations = {
       noAuthConfigured: "No authentication configured for {{server}}.",
       knownHostMissing: "SSH host {{host}} is not yet in ~/.ssh/known_hosts — adding it automatically via ssh-keyscan.",
       knownHostAdded: "SSH host {{host}} added to ~/.ssh/known_hosts.",
+      gitSshCompatibilityOverride:
+        "Key {{identityPath}} could not be read by Git's bundled SSH client (unsupported by its OpenSSL) — using Windows' native OpenSSH ({{sshPath}}) for this session instead.",
       tokenExpired: "The token for {{server}} expired or was revoked, and it could not be renewed automatically. Register the server again (git-server-store) to generate a new token.",
       githubTokenExpired: "The GitHub token for {{server}} expired or was revoked. Run 'paje git-server-store' and paste a new token (github.com/settings/tokens) to continue.",
       noValidServer: "No server with valid authentication.",

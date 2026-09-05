@@ -14,6 +14,7 @@ import {
   listSshPublicKeys,
   readPublicKey,
   registerKeyInGitLab,
+  resolveGitSshCommandOverride,
   resolveSshIdentityPath,
   rotatePersonalAccessToken,
   sanitizePublicKey,
@@ -482,24 +483,44 @@ const ensureKnownHost = async (server: string, logger: LoggerBroker, verbose?: b
 // ~/.ssh) só seria descoberto quando o clone/fetch em paralelo já estivesse
 // em andamento, cada um preso numa pergunta interativa do SSH que nenhum
 // deles tem como responder.
+// Windows only: git's own bundled ssh.exe can be unable to load an
+// otherwise perfectly valid identity file (older cipher/KDF than its
+// OpenSSL 3.x build supports) — see resolveGitSshCommandOverride
+// (sshManager.ts) for the full story. Checked once per process (the first
+// SSH-associated host found is enough; it's a property of the local git/ssh
+// installation, not of any particular server) and never overrides a
+// GIT_SSH_COMMAND the user already set themselves.
+const ensureGitSshCompatibility = async (identityPath: string, logger: LoggerBroker): Promise<void> => {
+  if (process.env.GIT_SSH_COMMAND) {
+    return;
+  }
+  const override = await resolveGitSshCommandOverride(identityPath);
+  if (override) {
+    process.env.GIT_SSH_COMMAND = `"${override}"`;
+    logger.warn(t("cli.sync.gitSshCompatibilityOverride", { identityPath, sshPath: override }));
+  }
+};
+
 const ensureKnownHostsForServers = async (
   servers: GitServerEntry[],
   logger: LoggerBroker,
   verbose: boolean
 ): Promise<void> => {
-  const hosts = new Set<string>();
+  const hostIdentities = new Map<string, string>();
   for (const server of servers) {
     try {
       const host = new URL(server.baseUrl).hostname;
-      if (hasValidSshAssociation(host)) {
-        hosts.add(host);
+      const identityFile = getIdentityFileForHost(host);
+      if (identityFile && hasValidSshAssociation(host)) {
+        hostIdentities.set(host, resolveSshIdentityPath(identityFile));
       }
     } catch {
       // URL inválida já é descartada em listServers(); ignora aqui.
     }
   }
-  for (const host of hosts) {
+  for (const [host, identityPath] of hostIdentities) {
     await ensureKnownHost(host, logger, verbose);
+    await ensureGitSshCompatibility(identityPath, logger);
   }
 };
 

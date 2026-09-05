@@ -272,6 +272,7 @@ const ptBR = {
       tokenExpiredPrompting: "O token de {{server}} expirou ou foi revogado e não pôde ser renovado sozinho. Pedindo a senha para gerar um novo...",
       skipRemoteToken: "Pulo de criação/validação de token remoto (PAJE_SKIP_SSH_STORE=1).",
       skipRemoteStore: "Pulo de registro remoto de chave SSH (PAJE_SKIP_SSH_STORE=1).",
+      sshAlreadyConfigured: "Host {{host}} já tem uma chave SSH associada em ~/.ssh/config — pulando geração e registro de chave.",
       notInformed: "não informado",
       tuiUnavailable: "Sessão TUI indisponível.",
     },
@@ -538,6 +539,8 @@ const ptBR = {
       noAuthConfigured: "Sem autenticação configurada para {{server}}.",
       knownHostMissing: "Host SSH {{host}} ainda não está em ~/.ssh/known_hosts — adicionando automaticamente via ssh-keyscan.",
       knownHostAdded: "Host SSH {{host}} adicionado a ~/.ssh/known_hosts.",
+      gitSshCompatibilityOverride:
+        "A chave {{identityPath}} não pôde ser lida pelo SSH embutido do Git (OpenSSL não suporta o formato) — usando o OpenSSH nativo do Windows ({{sshPath}}) para esta sessão.",
       tokenExpired: "O token de {{server}} expirou ou foi revogado, e não foi possível renová-lo automaticamente. Cadastre o servidor novamente (git-server-store) para gerar um novo token.",
       githubTokenExpired: "O token do GitHub para {{server}} expirou ou foi revogado. Rode 'paje git-server-store' e cole um token novo (github.com/settings/tokens) para continuar.",
       noValidServer: "Nenhum servidor com autenticação válida.",

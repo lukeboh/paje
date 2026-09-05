@@ -254,6 +254,188 @@ manualmente pelo usuário).
 
 ---
 
+#### ~~BUG-08~~ — `gitCommand.ts` — editar um servidor GitHub (ex.: só o nome) reescrevia `tokenOrigin` para `"personal-access-token"`, mesmo quando o token era de OAuth device flow
+**Status: RESOLVIDO**
+
+Relatado pelo usuário: editou o nome de um servidor GitHub já cadastrado via
+OAuth device flow (`tokenOrigin: "oauth-device-flow"`, token começando com
+`gho_`) e, após salvar, suspeitou que o `tokenOrigin` tinha mudado.
+Confirmado direto em `~/.paje/git-servers.json`: o token `gho_...` (formato
+de token OAuth, não de PAT) estava com `tokenOrigin: "personal-access-token"`.
+
+`promptAndPersistGitServer()` (fluxo de edição genérico, `gitCommand.ts`)
+monta um `GitServerEntry` novo sem copiar `token`/`tokenOrigin` do servidor
+existente, e chama `storeGitHubServer(server, session, cliOverrides)` — sem
+o 5º parâmetro `tokenOrigin`, que por isso cai no valor default da função,
+`"personal-access-token"`. Dentro de `storeGitHubServer`, o token em si é
+corretamente reidratado de `existingServer.token` (busca por `baseUrl` em
+`git-servers.json`) antes de validar contra a API do GitHub — por isso a
+edição "funcionava" (token continuava válido) — mas o `serverWithToken`
+gravado usava sempre o `tokenOrigin` do parâmetro da função, nunca o do
+servidor já persistido.
+
+**Impacto real:** nenhum na autenticação em si (o token salvo é o mesmo,
+válido) — só no campo informativo que `tokenOrigin` alimenta (ver
+`docs/arquitetura.md`, tabela de `GitServerEntry`): apontar o usuário para
+o lugar certo de revogar/regenerar o token (PAT vs. autorização OAuth).
+
+**Correção:** `storeGitHubServer` agora só usa o `tokenOrigin` do parâmetro
+quando não há um token explícito vindo da CLI (`cli.token`) e não há
+`existingServer.tokenOrigin` para herdar — ou seja, ao reaproveitar o token
+já em disco (edição de nome, sem `--token`), a origem original é preservada.
+
+---
+
+#### ~~BUG-09~~ — `gitCommand.ts` — `~/.ssh/config` era gravado antes de confirmar que o servidor aceitou a chave, deixando o host preso em "Permission denied" sem cair para o token
+**Status: RESOLVIDO**
+
+Relatado pelo usuário: cadastrou `git.tse.jus.br` com "Tenho acesso SSH",
+depois tentou clonar um repositório e recebeu `git@git.tse.jus.br:
+Permission denied (publickey,gssapi-keyex,gssapi-with-mic,password)` —
+mesmo com um token GitLab válido (confirmado por `HTTP: GIT-TSE - list
+groups/list user projects` bem-sucedidos no log) já salvo para o mesmo
+servidor.
+
+`storeSshKeyOnly()` chamava `upsertSshConfigHost(serverHost,
+keyInfo.privateKeyPath)` — a escrita em `~/.ssh/config` que
+`hasValidSshAssociation()` usa como única fonte de verdade — **antes** de
+`ensureGitLabSshKey(...)` (login web + registro da chave no GitLab), sem
+reverter nada se esse passo falhasse. Pior: `ensureGitLabSshKey` não estava
+nem envolvida em `try/catch` ali, então uma falha subia sem tratamento.
+Causa mais provável de falha nesse registro num servidor self-hosted como
+este: `runWebFlowOnce` (`sshManager.ts`) só sabe autenticar contra o
+formulário LDAP padrão do GitLab (`POST /users/auth/ldapmain/callback`) —
+uma instância atrás de SSO/SAML/CAS (comum em ambientes corporativos/
+governo) rejeita esse POST, e a validação final ("chave não encontrada")
+acaba lançando erro de qualquer forma — mas por essa altura `~/.ssh/config`
+já tinha sido escrito.
+
+Antes da correção de `~~BUG-07~~` acima, esse `~/.ssh/config` órfão não
+causava falha visível: `pajeHttpUrl` era montada de qualquer forma (sempre
+que havia token, independente de SSH), então a sincronização usava HTTPS e
+funcionava mesmo com a chave nunca aceita pelo servidor. Depois de
+`~~BUG-07~~` fazer o app confiar corretamente na associação SSH local, essa
+mesma situação virou uma falha dura: SSH configurado localmente, mas nunca
+aceito pelo servidor, sem fallback para o token que já funcionava.
+
+**Correção:** `ensureGitLabSshKey(...)` agora roda dentro de um `try/catch`
+que reporta a falha (`cli.errors.gitlab.registerKeyFail`, chave já
+existente) e retorna sem gravar nada; `upsertSshConfigHost` só é chamado
+depois que esse passo confirma sucesso (ou explicitamente quando
+`PAJE_SKIP_SSH_STORE=1`, que continua sendo tratado como "confie sem
+verificar", uso interno/testes). `docs/funcionalidades/git-server-store.md`
+atualizado para descrever a ordem correta.
+
+**Workaround imediato para quem já ficou nesse estado**: remover o bloco
+`Host <servidor>` de `~/.ssh/config` manualmente — a sincronização volta a
+usar HTTPS+token automaticamente na próxima carga da árvore.
+
+---
+
+#### ~~BUG-10~~ — `git-server-store` (cadastro/edição de servidor, geração de chave SSH, criação de token) nunca escrevia no arquivo de log
+**Status: RESOLVIDO**
+
+Relatado pelo usuário ao investigar o `~~BUG-09~~` acima: o log
+(`~/.paje/logs/git-sync-<data>.log`) mostrava a navegação do menu até
+"git-server-store" e, ~2h30 depois, a próxima linha já era o retorno ao
+menu — todo o cadastro do servidor (escolha do método de autenticação,
+geração/reaproveitamento de chave, login web, registro da chave, criação do
+token) não deixou nenhum rastro.
+
+Causa: `configureSshKeyStoreCommand()` (comando `git-server-store`) nunca
+criava um `LoggerBroker` com transport de arquivo — ao contrário de
+`configureGitSyncCommand()` (comando `git-sync`), que sempre cria um logo
+no início da action. `storeSshKeyOnly`/`storeGitHubServer` e todo o fluxo em
+volta (`promptAndPersistGitServer`, `ensureServerHasCredentials`,
+`registerNewGitServer`, `editGitServer`, `manageGitServersInteractively`,
+`runGitHubDeviceFlowRegistration`) só recebiam `session`/`cli`, e seu
+"logger" interno só chamava `session.showMessage(...)` (modal efêmero da
+TUI, nunca persistido) ou `console.log`.
+
+**Correção:** essas funções passaram a receber um `LoggerBroker` (criado em
+`configureSshKeyStoreCommand`, com transport de arquivo sempre e painel da
+TUI quando há sessão — mesmo padrão de `configureGitSyncCommand`; os dois
+pontos em que `git-sync` já chama `ensureServerHasCredentials` passam o
+`logBroker` que aquele comando já cria), encadeado por toda a cadeia de
+chamadas. O `logger` interno de `storeSshKeyOnly`/`storeGitHubServer` agora
+grava no `logBroker` além de mostrar o modal/console — nada mudou na
+interface com o usuário, só passou a ficar registrado.
+
+Cobertura adicionada: `tests/git_server_store_logs_to_file_test.ts`
+(confirma que o arquivo de log do dia recebe as mensagens do fluxo de
+`git-server-store`).
+
+---
+
+#### ~~BUG-11~~ — `storeSshKeyOnly()` tentava gerar/registrar chave SSH mesmo quando o host já tinha uma associação válida (chave já gerada e já cadastrada no servidor)
+**Status: RESOLVIDO**
+
+Correção de escopo apontada pelo usuário sobre o `~~BUG-09~~` acima: a
+correção original só evitava gravar `~/.ssh/config` sem confirmação — mas o
+fluxo inteiro (sondar porta 22, gerar/reaproveitar chave, pedir senha,
+logar na web e tentar registrar a chave) continuava rodando **mesmo quando
+o host já tinha uma associação SSH válida em `~/.ssh/config`**, isto é,
+mesmo quando a chave já estava gerada e já cadastrada no servidor de
+antemão (o cenário real do usuário: `git.tse.jus.br` já configurado por
+fora do PAJÉ). Rodar esse fluxo de novo nesse caso é redundante na melhor
+das hipóteses e, na pior, falha sempre — inclusive pedindo uma senha que
+talvez nem exista numa conta autenticada via SSO/SAML/CAS.
+
+**Correção:** `storeSshKeyOnly()` agora verifica `hasValidSshAssociation(host)`
+antes de qualquer coisa; se verdadeiro, pula a sondagem de porta, a
+geração/reaproveitamento de chave, o pedido de senha e o registro via login
+web inteiramente, indo direto para a validação/rotação/criação do token
+(a única credencial que ainda pode faltar, usada só pela API REST). O
+pedido de senha em si virou preguiçoso (`ensurePassword()`, chamado só onde
+ainda é necessário) em vez de incondicional no início do fluxo SSH, para
+que esse atalho realmente não peça nada ao usuário quando já existe um
+token válido reaproveitável.
+
+Cobertura adicionada: `tests/git_server_store_ssh_already_configured_test.ts`
+(host com `~/.ssh/config` pré-configurado e token já válido — confirma que
+nenhum prompt interativo acontece e nenhuma chamada ao fluxo de
+registro/login web é feita).
+
+---
+
+#### ~~BUG-12~~ — Windows: SSH embutido do Git podia rejeitar uma chave perfeitamente válida ("error in libcrypto: unsupported"), sem nenhum fallback
+**Status: RESOLVIDO**
+
+Relatado pelo usuário depois de resolver o `~~BUG-11~~` acima: mesmo com
+`~/.ssh/config` correto e a chave já cadastrada no servidor (confirmado
+rodando `ssh -T git@<servidor>` manualmente, com sucesso), o clone via PAJÉ
+continuava falhando com `Permission denied (publickey,...)`, e o log
+mostrava `Load key "...": error in libcrypto: unsupported`.
+
+Causa raiz, isolada comparando os dois clientes SSH da máquina: o `git.exe`
+do Git for Windows **não usa o SSH nativo do Windows** — ele sempre invoca
+seu próprio `ssh.exe` embutido (`<raiz do Git>\usr\bin\ssh.exe`, build
+MSYS2), que nesta versão está ligado a um OpenSSL 3.x que não suporta mais
+por padrão certas combinações antigas de cifra/KDF de senha de chave. A
+mesma chave, testada com o OpenSSH nativo do Windows
+(`%WINDIR%\System32\OpenSSH\ssh.exe`, baseado em LibreSSL), funciona sem
+nenhum problema. Ou seja: a chave nunca esteve errada — é uma incompatibilidade
+conhecida e específica do binário SSH que o Git for Windows embute, alheia
+ao PAJÉ, mas que o PAJÉ pode detectar e contornar sozinho.
+
+**Correção:** `resolveGitSshCommandOverride()` (`sshManager.ts`, Windows
+apenas) compara, sob demanda, se o `ssh-keygen` embutido do Git consegue ler
+a identidade de um host; se não conseguir e o `ssh-keygen` nativo do Windows
+conseguir, retorna o caminho do `ssh.exe` nativo. `ensureKnownHostsForServers`
+(`gitSyncService.ts` — já rodava uma vez por host SSH distinto, antes de
+qualquer operação git, cache-hit incluso) passou a chamar essa verificação e,
+só quando confirmada, define `GIT_SSH_COMMAND` para o resto da execução do
+PAJÉ — nunca mexe no `git config` global do usuário, e nunca sobrescreve um
+`GIT_SSH_COMMAND` que o usuário já tenha definido. Sem essa comparação
+positiva (chave falha no embutido **e** funciona no nativo), não faz nada —
+nunca palpita.
+
+Cobertura adicionada: `tests/ssh_manager_git_compat_test.ts` (nenhum
+contorno fora do Windows; nenhum contorno quando nenhum dos dois clientes
+consegue ler a identidade).
+
+---
+
 ### 1. BUGS / COMPORTAMENTOS INCORRETOS
 
 #### ~~BUG-01~~ — `gitBranchService.ts:100` — DIVERGED exibido como AHEAD *(decisão de design — não é bug)*

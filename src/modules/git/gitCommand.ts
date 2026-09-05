@@ -892,21 +892,37 @@ const detectServerType = (baseUrl: string): "gitlab" | "github" => {
 
 const storeGitHubServer = async (
   server: GitServerEntry,
-  session?: TuiSession,
-  cli?: SshKeyStoreCliOptions,
+  session: TuiSession | undefined,
+  cli: SshKeyStoreCliOptions | undefined,
+  logBroker: LoggerBroker,
   tokenOrigin: TokenOrigin = "personal-access-token"
 ): Promise<void> => {
-  const logger = session
-    ? (message: string) => {
-        session.showMessage({ title: t("cli.prompt.github.title"), message });
-      }
-    : console.log;
+  // Also written to the persistent log file (not just the ephemeral TUI
+  // modal / console) — this whole flow (SSH key setup, web-login scraping,
+  // token creation) used to be entirely invisible after the fact, the one
+  // gap in an otherwise fully-logged app.
+  const logger = (message: string): void => {
+    logBroker.info(message);
+    if (session) {
+      session.showMessage({ title: t("cli.prompt.github.title"), message });
+    } else {
+      console.log(message);
+    }
+  };
 
   const existingServers = readGitServers<GitServerEntry[]>([]);
   const normalizedUrl = normalizeBaseUrl(server.baseUrl);
   const existingServer = existingServers.find((s) => normalizeBaseUrl(s.baseUrl) === normalizedUrl);
 
-  let token = cli?.token?.trim() ?? existingServer?.token;
+  const cliToken = cli?.token?.trim();
+  let token = cliToken ?? existingServer?.token;
+  // Reusing the token already on disk (no explicit --token override, e.g. a
+  // generic edit that only changes the display name) must keep its real
+  // origin — the OAuth device-flow token GitHub issues starts with "gho_",
+  // not "ghp_", and defaulting it back to "personal-access-token" here would
+  // point the user at the wrong place (PAT settings instead of the
+  // authorized-app page) if they ever go looking to revoke/regenerate it.
+  const resolvedTokenOrigin = !cliToken && existingServer?.tokenOrigin ? existingServer.tokenOrigin : tokenOrigin;
 
   if (token) {
     const api = new GitHubApi({ baseUrl: server.baseUrl, token });
@@ -914,7 +930,7 @@ const storeGitHubServer = async (
       const user = await api.getAuthenticatedUser();
       logger(t("cli.prompt.github.tokenValid", { login: user.login }));
       const serverWithToken = {
-        ...withToken(server, token, tokenOrigin),
+        ...withToken(server, token, resolvedTokenOrigin),
         type: "github" as const,
         username: existingServer?.username ?? user.login,
       };
@@ -977,14 +993,20 @@ const storeGitHubServer = async (
 
 const storeSshKeyOnly = async (
   server: GitServerEntry,
-  session?: TuiSession,
-  cli?: SshKeyStoreCliOptions
+  session: TuiSession | undefined,
+  cli: SshKeyStoreCliOptions | undefined,
+  logBroker: LoggerBroker
 ): Promise<void> => {
-  const logger = session
-    ? (message: string) => {
-        session.showMessage({ title: t("cli.prompt.sshKey.title"), message });
-      }
-    : console.log;
+  // Also written to the persistent log file — see the matching comment in
+  // storeGitHubServer.
+  const logger = (message: string): void => {
+    logBroker.info(message);
+    if (session) {
+      session.showMessage({ title: t("cli.prompt.sshKey.title"), message });
+    } else {
+      console.log(message);
+    }
+  };
   const serverHost = new URL(server.baseUrl).hostname;
 
   const envConfig = loadEnvConfig({ envFile: resolveEnvFileFromCli(cli?.envFile) });
@@ -1205,55 +1227,17 @@ const storeSshKeyOnly = async (
     return;
   }
 
-  const port22Open = await probePort(serverHost, 22);
-  if (!port22Open) {
-    const message = `${t("cli.prompt.trust.port22Blocked", { server: serverHost })}\n${t("cli.prompt.trust.sshPort22Guidance")}`;
-    if (session) {
-      await session.showMessage({ title: t("cli.prompt.trust.title"), message });
-    } else {
-      console.warn(message);
-    }
-    return;
-  }
-
-  const resolvedPublicKeyPath = resolveEnvOrCliString(cli?.publicKeyPath, "publicKeyPath", "public-key-path");
-  let keyInfo: SshKeyInfo | undefined;
-  if (resolvedPublicKeyPath) {
-    const selectedKey = resolvedPublicKeyPath;
-    if (!fs.existsSync(selectedKey)) {
-      const message = t("cli.prompt.sshKey.missingProvidedKey", { path: selectedKey });
-      if (session) {
-        await session.showMessage({ title: t("cli.prompt.sshKey.title"), message });
-      } else {
-        console.log(message);
-      }
-      return;
-    }
-    keyInfo = {
-      publicKeyPath: selectedKey,
-      privateKeyPath: selectedKey.replace(/\.pub$/, ""),
-      publicKey: readPublicKey(selectedKey),
-    };
-  } else {
-    keyInfo = await ensurePajeKeyPair({
-      keyLabel: resolveEnvOrCliString(cli?.keyLabel, "keyLabel", "key-label"),
-      passphrase: resolveEnvOrCliString(cli?.passphrase, "passphrase", "passphrase"),
-      overwrite: resolveEnvOrCliBoolean(cli?.keyOverwrite, "keyOverwrite", "key-overwrite") ?? false,
-      logger,
-    });
-  }
-
-  upsertSshConfigHost(serverHost, keyInfo.privateKeyPath);
-  await ensureKnownHost(serverHost, session, resolveEnvOrCliBoolean(cli?.verbose, "verbose", "verbose"));
-  await reportSshPersistenceStatus(serverHost, session);
-
-  if (process.env.PAJE_SKIP_SSH_STORE === "1") {
-    logger?.(t("cli.log.skipRemoteStore"));
-    return;
-  }
-
+  // Password is needed for two independent reasons below (logging into the
+  // web UI to register the SSH key, and/or bootstrapping a personal access
+  // token) — resolved lazily, once, only when one of those actually still
+  // needs it, so a host that already has SSH fully set up (see
+  // hasSshAssociation below) is never asked for it unless it also turns out
+  // to need a brand new token.
   let resolvedPassword = cli?.password;
-  if (!resolvedPassword) {
+  const ensurePassword = async (): Promise<boolean> => {
+    if (resolvedPassword) {
+      return true;
+    }
     if (session) {
       const form = await session.promptForm<{ password: string }>({
         title: t("cli.prompt.gitlab.title"),
@@ -1273,34 +1257,113 @@ const storeSshKeyOnly = async (
       ])) as { password?: string };
       resolvedPassword = promptPass.password ?? "";
     }
-  }
+    return Boolean(resolvedPassword);
+  };
 
-  if (!resolvedUsername || !resolvedPassword) {
-    logger?.(t("cli.log.credentialsMissing"));
-    return;
-  }
-  const credentials: GitCredentials = { username: resolvedUsername, password: resolvedPassword, source: "prompt" };
+  // "I have SSH access" means exactly that: if this host already has a
+  // working association in ~/.ssh/config, the key is presumably already
+  // generated AND registered on the server too — there is nothing left to
+  // set up here. Skip the port probe, key generation, web-login and key
+  // registration entirely (none of it is needed, and re-running it against
+  // an account that only supports SSO/SAML/CAS login — common on self-hosted
+  // instances — would just fail for no benefit); only the token half (still
+  // needed for REST API calls) is checked/refreshed below.
+  const hasSshAssociation = hasValidSshAssociation(serverHost);
+  if (hasSshAssociation) {
+    logger?.(t("cli.log.sshAlreadyConfigured", { host: serverHost }));
+    await ensureKnownHost(serverHost, session, resolveEnvOrCliBoolean(cli?.verbose, "verbose", "verbose"));
+  } else {
+    const port22Open = await probePort(serverHost, 22);
+    if (!port22Open) {
+      const message = `${t("cli.prompt.trust.port22Blocked", { server: serverHost })}\n${t("cli.prompt.trust.sshPort22Guidance")}`;
+      if (session) {
+        await session.showMessage({ title: t("cli.prompt.trust.title"), message });
+      } else {
+        console.warn(message);
+      }
+      return;
+    }
 
-  await ensureGitLabSshKey({
-    baseUrl: server.baseUrl,
-    title: resolveEnvOrCliString(cli?.keyLabel, "keyLabel", "key-label") ?? "paje",
-    usageType: "auth_and_signing",
-    credentials: {
-      ...credentials,
-      username: resolvedUsername ?? credentials.username,
-      password: resolvedPassword ?? credentials.password ?? "",
-    },
-    keyInfo,
-    fetchImpl: globalThis.fetch,
-    logger,
-    maxAttempts: resolveEnvOrCliNumber(cli?.maxAttempts, "maxAttempts", "max-attempts"),
-    retryDelayMs: resolveEnvOrCliNumber(cli?.retryDelayMs, "retryDelayMs", "retry-delay-ms"),
-  });
-  logger?.(t("cli.prompt.sshKey.dualCredentialInfo"));
+    const resolvedPublicKeyPath = resolveEnvOrCliString(cli?.publicKeyPath, "publicKeyPath", "public-key-path");
+    let keyInfo: SshKeyInfo | undefined;
+    if (resolvedPublicKeyPath) {
+      const selectedKey = resolvedPublicKeyPath;
+      if (!fs.existsSync(selectedKey)) {
+        const message = t("cli.prompt.sshKey.missingProvidedKey", { path: selectedKey });
+        if (session) {
+          await session.showMessage({ title: t("cli.prompt.sshKey.title"), message });
+        } else {
+          console.log(message);
+        }
+        return;
+      }
+      keyInfo = {
+        publicKeyPath: selectedKey,
+        privateKeyPath: selectedKey.replace(/\.pub$/, ""),
+        publicKey: readPublicKey(selectedKey),
+      };
+    } else {
+      keyInfo = await ensurePajeKeyPair({
+        keyLabel: resolveEnvOrCliString(cli?.keyLabel, "keyLabel", "key-label"),
+        passphrase: resolveEnvOrCliString(cli?.passphrase, "passphrase", "passphrase"),
+        overwrite: resolveEnvOrCliBoolean(cli?.keyOverwrite, "keyOverwrite", "key-overwrite") ?? false,
+        logger,
+      });
+    }
 
-  if (process.env.PAJE_SKIP_SSH_STORE === "1") {
-    logger?.(t("cli.log.skipRemoteToken"));
-    return;
+    await ensureKnownHost(serverHost, session, resolveEnvOrCliBoolean(cli?.verbose, "verbose", "verbose"));
+    await reportSshPersistenceStatus(serverHost, session);
+
+    // ~/.ssh/config is only written once the key is confirmed registered on
+    // the server below (or when PAJE_SKIP_SSH_STORE=1 explicitly asks to trust
+    // it without checking, e.g. in tests) — never eagerly. hasValidSshAssociation()
+    // treats this file as ground truth for "SSH works for this host", and
+    // clone/pull/push now prefer it outright; writing it before the server
+    // actually accepted the key used to leave a host stuck offering a key the
+    // server would reject with "Permission denied (publickey)" on every future
+    // sync, with no fallback to the token that was working fine.
+    if (process.env.PAJE_SKIP_SSH_STORE === "1") {
+      upsertSshConfigHost(serverHost, keyInfo.privateKeyPath);
+      logger?.(t("cli.log.skipRemoteStore"));
+      return;
+    }
+
+    if (!resolvedUsername || !(await ensurePassword())) {
+      logger?.(t("cli.log.credentialsMissing"));
+      return;
+    }
+    const credentials: GitCredentials = { username: resolvedUsername, password: resolvedPassword as string, source: "prompt" };
+
+    try {
+      await ensureGitLabSshKey({
+        baseUrl: server.baseUrl,
+        title: resolveEnvOrCliString(cli?.keyLabel, "keyLabel", "key-label") ?? "paje",
+        usageType: "auth_and_signing",
+        credentials,
+        keyInfo,
+        fetchImpl: globalThis.fetch,
+        logger,
+        maxAttempts: resolveEnvOrCliNumber(cli?.maxAttempts, "maxAttempts", "max-attempts"),
+        retryDelayMs: resolveEnvOrCliNumber(cli?.retryDelayMs, "retryDelayMs", "retry-delay-ms"),
+      });
+    } catch (error) {
+      // Never write the local SSH association for a key the server didn't
+      // actually accept — see the comment above upsertSshConfigHost's call
+      // below. Common cause on a self-hosted GitLab: the login step here only
+      // knows GitLab's own LDAP form (/users/auth/ldapmain/callback) — an
+      // instance behind SSO/SAML/CAS instead rejects it, and this is where
+      // that first becomes visible.
+      const message = error instanceof Error ? error.message : t("cli.errors.unknown");
+      logger?.(t("cli.errors.gitlab.registerKeyFail", { message }));
+      return;
+    }
+    upsertSshConfigHost(serverHost, keyInfo.privateKeyPath);
+    logger?.(t("cli.prompt.sshKey.dualCredentialInfo"));
+
+    if (process.env.PAJE_SKIP_SSH_STORE === "1") {
+      logger?.(t("cli.log.skipRemoteToken"));
+      return;
+    }
   }
 
   const normalizedBaseUrl = normalizeBaseUrl(server.baseUrl);
@@ -1364,17 +1427,17 @@ const storeSshKeyOnly = async (
     logger?.(t("cli.log.tokenNameMissing"));
     return;
   }
+  if (!resolvedUsername || !(await ensurePassword())) {
+    logger?.(t("cli.log.credentialsMissing"));
+    return;
+  }
 
   const tokenResult = await ensureGitLabPersonalAccessToken({
     baseUrl: normalizedBaseUrl,
     name: tokenName,
     scopes: scopeList,
     expiresAt: resolvedTokenExpiresAt,
-    credentials: {
-      ...credentials,
-      username: resolvedUsername ?? credentials.username,
-      password: resolvedPassword ?? credentials.password ?? "",
-    },
+    credentials: { username: resolvedUsername, password: resolvedPassword as string, source: "prompt" },
     fetchImpl: globalThis.fetch,
     logger,
     maxAttempts: resolveEnvOrCliNumber(cli?.maxAttempts, "maxAttempts", "max-attempts"),
@@ -1803,11 +1866,16 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
         const normalizedBaseUrl = normalizeBaseUrl(mergedOptions.baseUrl);
         const savedEntry = servers.find((item) => normalizeBaseUrl(item.baseUrl) === normalizedBaseUrl);
         if (savedEntry) {
-          await ensureServerHasCredentials(session, savedEntry, {
-            ...bootstrapCliOptions,
-            baseUrl: savedEntry.baseUrl,
-            serverName: savedEntry.name,
-          });
+          await ensureServerHasCredentials(
+            session,
+            savedEntry,
+            {
+              ...bootstrapCliOptions,
+              baseUrl: savedEntry.baseUrl,
+              serverName: savedEntry.name,
+            },
+            logBroker
+          );
           servers = mergeServerList(readGitServers<GitServerEntry[]>([]));
           const confirmedEntry = servers.find((item) => normalizeBaseUrl(item.baseUrl) === normalizedBaseUrl);
           if (!confirmedEntry || !hasUsableServerCredentials(confirmedEntry)) {
@@ -1833,11 +1901,16 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
         servers = mergeServerList(merge.servers);
         const savedEntry = servers[0];
         if (savedEntry) {
-          await ensureServerHasCredentials(session, savedEntry, {
-            ...bootstrapCliOptions,
-            baseUrl: savedEntry.baseUrl,
-            serverName: savedEntry.name,
-          });
+          await ensureServerHasCredentials(
+            session,
+            savedEntry,
+            {
+              ...bootstrapCliOptions,
+              baseUrl: savedEntry.baseUrl,
+              serverName: savedEntry.name,
+            },
+            logBroker
+          );
           servers = mergeServerList(readGitServers<GitServerEntry[]>([]));
           // A server just registered from scratch must leave here with real
           // credentials before we let it anywhere near a sync — otherwise
@@ -2682,6 +2755,7 @@ const buildServerDetails = (server: GitServerEntry): string => {
 const runGitHubDeviceFlowRegistration = async (
   session: TuiSession,
   options: SshKeyStoreCliOptions,
+  logBroker: LoggerBroker,
   existingServer?: GitServerEntry
 ): Promise<void> => {
   const baseUrl = "https://github.com";
@@ -2754,7 +2828,7 @@ const runGitHubDeviceFlowRegistration = async (
     tokenExpiresAt: options.tokenExpiresAt ?? existingServer?.tokenExpiresAt,
   };
 
-  await storeGitHubServer(server, session, { ...options, token }, "oauth-device-flow");
+  await storeGitHubServer(server, session, { ...options, token }, logBroker, "oauth-device-flow");
 };
 
 // Shared by both entry points: registering a brand new server (existingServer
@@ -2766,6 +2840,7 @@ const runGitHubDeviceFlowRegistration = async (
 const promptAndPersistGitServer = async (
   session: TuiSession,
   options: SshKeyStoreCliOptions,
+  logBroker: LoggerBroker,
   existingServer?: GitServerEntry
 ): Promise<void> => {
   const hasCliArg = (flag: string): boolean => {
@@ -2817,7 +2892,7 @@ const promptAndPersistGitServer = async (
         ],
       });
       if (promptedChoice === "github") {
-        await runGitHubDeviceFlowRegistration(session, options, existingServer);
+        await runGitHubDeviceFlowRegistration(session, options, logBroker, existingServer);
         return;
       }
       authChoice = promptedChoice ?? defaultAuthChoice;
@@ -2884,9 +2959,9 @@ const promptAndPersistGitServer = async (
   };
 
   if (resolvedType === "github") {
-    await storeGitHubServer(server, session, cliOverrides);
+    await storeGitHubServer(server, session, cliOverrides, logBroker);
   } else {
-    await storeSshKeyOnly(server, session, cliOverrides);
+    await storeSshKeyOnly(server, session, cliOverrides, logBroker);
   }
 };
 
@@ -2899,36 +2974,42 @@ const promptAndPersistGitServer = async (
 const ensureServerHasCredentials = async (
   session: TuiSession | undefined,
   server: GitServerEntry,
-  cliOptions: SshKeyStoreCliOptions
+  cliOptions: SshKeyStoreCliOptions,
+  logBroker: LoggerBroker
 ): Promise<void> => {
   const hasSshAssociation = hasValidSshAssociation(new URL(server.baseUrl).hostname);
   if (server.token || hasSshAssociation) {
     return;
   }
   if (session) {
-    await promptAndPersistGitServer(session, cliOptions, server);
+    await promptAndPersistGitServer(session, cliOptions, logBroker, server);
     return;
   }
   if (detectServerType(server.baseUrl) === "github") {
-    await storeGitHubServer(server, undefined, cliOptions);
+    await storeGitHubServer(server, undefined, cliOptions, logBroker);
   } else {
-    await storeSshKeyOnly(server, undefined, cliOptions);
+    await storeSshKeyOnly(server, undefined, cliOptions, logBroker);
   }
 };
 
-const registerNewGitServer = (session: TuiSession, options: SshKeyStoreCliOptions): Promise<void> =>
-  promptAndPersistGitServer(session, options);
+const registerNewGitServer = (session: TuiSession, options: SshKeyStoreCliOptions, logBroker: LoggerBroker): Promise<void> =>
+  promptAndPersistGitServer(session, options, logBroker);
 
 const editGitServer = async (
   session: TuiSession,
   options: SshKeyStoreCliOptions,
-  server: GitServerEntry
+  server: GitServerEntry,
+  logBroker: LoggerBroker
 ): Promise<void> => {
   await session.showMessage({ title: server.name || server.baseUrl, message: buildServerDetails(server) });
-  await promptAndPersistGitServer(session, options, server);
+  await promptAndPersistGitServer(session, options, logBroker, server);
 };
 
-const manageGitServersInteractively = async (session: TuiSession, options: SshKeyStoreCliOptions): Promise<void> => {
+const manageGitServersInteractively = async (
+  session: TuiSession,
+  options: SshKeyStoreCliOptions,
+  logBroker: LoggerBroker
+): Promise<void> => {
   while (true) {
     const servers = mergeServerList(readGitServers<GitServerEntry[]>([]));
     const choices = [
@@ -2954,12 +3035,12 @@ const manageGitServersInteractively = async (session: TuiSession, options: SshKe
       return;
     }
     if (selection === "__register__") {
-      await registerNewGitServer(session, options);
+      await registerNewGitServer(session, options, logBroker);
       continue;
     }
     const server = servers.find((item) => item.id === selection);
     if (server) {
-      await editGitServer(session, options, server);
+      await editGitServer(session, options, server, logBroker);
     }
   }
 };
@@ -2995,6 +3076,17 @@ export const configureSshKeyStoreCommand = (program: Command, session?: TuiSessi
     .option("--locale <locale>", t("cli.command.gitServerStore.options.locale"))
     .action(async (options: SshKeyStoreCliOptions) => {
       setLocale(options.locale);
+      // The credential-bootstrap flow below (SSH key setup, web-login
+      // scraping, token creation/rotation) used to only ever show up in the
+      // ephemeral TUI modal or a bare console.log — the file transport here
+      // is what makes it show up in ~/.paje/logs afterwards, same as
+      // git-sync's own log.
+      const logBroker = new LoggerBroker();
+      logBroker.addTransport(createFileTransport("file", "info"));
+      if (session) {
+        logBroker.addTransport(createGlobalPanelTransport("tui-panel", "debug"));
+      }
+      logBroker.info(t("cli.command.gitServerStore.description"));
       const hasCliArg = (flag: string): boolean => {
         const dashed = `--${flag}`;
         return process.argv.some((arg) => arg === dashed || arg.startsWith(`${dashed}=`));
@@ -3002,7 +3094,7 @@ export const configureSshKeyStoreCommand = (program: Command, session?: TuiSessi
       const sshKeyParameters = buildSshKeyStoreParameters(options, hasCliArg);
       if (session) {
         session.setParameters([sshKeyParameters]);
-        await manageGitServersInteractively(session, options);
+        await manageGitServersInteractively(session, options, logBroker);
         return;
       }
 
@@ -3041,9 +3133,9 @@ export const configureSshKeyStoreCommand = (program: Command, session?: TuiSessi
       };
 
       if (resolvedType === "github") {
-        await storeGitHubServer(server, session, options);
+        await storeGitHubServer(server, session, options, logBroker);
       } else {
-        await storeSshKeyOnly(server, session, options);
+        await storeSshKeyOnly(server, session, options, logBroker);
       }
     });
 

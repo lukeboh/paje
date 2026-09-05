@@ -98,12 +98,31 @@ O tipo é resolvido nesta ordem:
 
 ## Fluxo principal — GitLab, opção "Tenho acesso SSH" (padrão)
 
+**Passo 0 — atalho quando o host já está pronto:** se `~/.ssh/config` já tem
+uma associação válida para o host (`hasValidSshAssociation()` — `Host`
+cadastrado e o arquivo de identidade existe em disco), o PAJÉ assume que
+"Tenho acesso SSH" significa exatamente isso — chave já gerada **e** já
+registrada no servidor — e pula direto para o passo 5 (só o token, para a
+API, é verificado/criado). Nada de sondar porta, gerar/reaproveitar chave,
+pedir senha ou tentar logar na web para "registrar" uma chave que já está
+lá — o que além de redundante falharia sempre contra uma conta autenticada
+via SSO/SAML/CAS (o login web deste fluxo só sabe preencher o formulário
+LDAP padrão do GitLab).
+
+Sem essa associação prévia:
+
 1. Sonda TCP na porta 22 do servidor (timeout 3 s); se bloqueada, exibe guia de geração de PAT e orienta escolher uma das outras 2 opções (`--use-basic-auth` ou `--token`).
 2. Verifica chave SSH existente e permite reutilizar ou gerar uma nova (ed25519).
-3. Atualiza `~/.ssh/config` e `known_hosts`.
-4. Registra chave no GitLab (quando autenticado). Ao concluir, exibe uma mensagem explicando que a chave SSH e o token são duas credenciais distintas em uso: SSH para clone/push, token para a API.
-5. Valida token existente; se inválido, tenta rotacionar e, se necessário, cria novo — este passo é **sempre** executado, mesmo no caminho SSH: todo servidor termina com um token, não só uma chave.
+3. Atualiza `known_hosts` (identidade do servidor — independente de qual chave o usuário acabe usando).
+4. Registra a chave no GitLab (login web + formulário de chaves SSH). **`~/.ssh/config` só é atualizado depois que este passo confirma sucesso** — nunca antes: `hasValidSshAssociation()` usa esse arquivo como única fonte de verdade para decidir se clone/push usam SSH, então associar um host a uma chave que o servidor ainda não aceitou deixaria toda sincronização futura falhando com "Permission denied (publickey)", sem cair de volta para o token. Se o registro falhar (ex.: SSO/SAML/CAS, como acima), a falha é reportada e nenhuma associação local é criada — o servidor continua utilizável via HTTPS+token normalmente. Ao concluir com sucesso, exibe uma mensagem explicando que a chave SSH e o token são duas credenciais distintas em uso: SSH para clone/push, token para a API.
+5. Valida token existente; se inválido, tenta rotacionar e, se necessário, cria novo — este passo é **sempre** executado, mesmo no caminho SSH: todo servidor termina com um token, não só uma chave. Só pede usuário/senha aqui (nunca antes) se não houver nenhum token reaproveitável.
 6. Persiste dados em `~/.paje/git-servers.json` (sem `useBasicAuth`, sem senha).
+
+Todo esse fluxo (geração/reaproveitamento de chave, tentativa de registro
+remoto, criação/rotação de token) também é gravado no arquivo de log
+(`~/.paje/logs/git-sync-<data>.log`, o mesmo do `git-sync`) — antes só
+aparecia em mensagens efêmeras da TUI ou no console, sem deixar rastro para
+diagnóstico posterior.
 
 ## Fluxo principal — GitLab, opção "Não tenho SSH, mas tenho usuário e senha" (`--use-basic-auth`)
 
