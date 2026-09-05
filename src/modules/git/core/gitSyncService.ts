@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { t } from "../../../i18n/index.js";
 import { GitLabApi } from "../gitlabApi.js";
-import { parallelSync, runGit, type ProgressEvent } from "../parallelSync.js";
+import { parallelSync, reconcileRemoteUrl, runGit, type ProgressEvent, type RemoteReconcileOutcome } from "../parallelSync.js";
 import { antPatternToRegex, compileAntPatterns, matchesAntPatterns, splitFilterPatterns } from "../patternFilter.js";
 import { resolveLocalPathConflicts, resolveProjectLocalPath } from "../gitPathUtils.js";
 import { readGitServers, writeGitServers, readGitTreeCache, writeGitTreeCache } from "../persistence.js";
@@ -21,6 +21,7 @@ import {
 } from "../sshManager.js";
 import {
   buildGitLabTree,
+  collectProjectNodesFromNode,
   collectSelectedProjects,
   applyInitialSelectionFromLocalClones,
   applyInitialSelectionFromStatusMap,
@@ -133,6 +134,10 @@ export type GitSyncCore = {
     selectedProjects?: GitLabProject[];
     handlers?: GitSyncProgressHandlers;
   }) => Promise<{ summary: GitSyncSummary }>;
+  fixRemotes: (options: {
+    logger: LoggerBroker;
+    tree: GitLabTreeNode[];
+  }) => Promise<{ results: RemoteFixResult[] }>;
 };
 
 const normalizeBaseUrl = (url: string): string => url.trim().replace(/\/+$/, "");
@@ -627,6 +632,65 @@ export const prepareTargets = (
     gitUserName: username,
     gitUserEmail: project.pajeUserEmail ?? userEmail,
   }));
+};
+
+export type RemoteFixTarget = {
+  pathWithNamespace: string;
+  localPath: string;
+  sshUrl: string;
+  httpUrl?: string;
+};
+
+export type RemoteFixResult = RemoteFixTarget & { outcome: RemoteReconcileOutcome };
+
+// Walks every project node already in a loaded tree (regardless of
+// selection/checkbox state — "corrigir os remotes" is meant to reach every
+// repository the user already has cloned, not just what's marked right now)
+// and keeps only the ones with a real local clone on disk, since there is no
+// remote to reconcile otherwise.
+export const collectFixRemoteTargets = async (tree: GitLabTreeNode[]): Promise<RemoteFixTarget[]> => {
+  const projectNodes = collectProjectNodesFromNode({ id: "root", label: "root", type: "group", children: tree });
+  const targets: RemoteFixTarget[] = [];
+  for (const node of projectNodes) {
+    if (!node.project || !node.localPath) {
+      continue;
+    }
+    if (!(await hasGitDir(node.localPath))) {
+      continue;
+    }
+    targets.push({
+      pathWithNamespace: node.project.path_with_namespace,
+      localPath: node.localPath,
+      sshUrl: node.project.ssh_url_to_repo,
+      httpUrl: node.project.pajeHttpUrl,
+    });
+  }
+  return targets;
+};
+
+const REMOTE_FIX_CONCURRENCY = 4;
+
+// Bounded worker pool, same reasoning as loadTree's background status
+// refresh: one git subprocess per repo, so firing them all at once would
+// saturate the machine for a large tree.
+export const fixRemotesForTargets = async (
+  targets: RemoteFixTarget[],
+  onResult?: (result: RemoteFixResult) => void
+): Promise<RemoteFixResult[]> => {
+  const results: RemoteFixResult[] = [];
+  let nextIndex = 0;
+  const worker = async (): Promise<void> => {
+    while (nextIndex < targets.length) {
+      const target = targets[nextIndex];
+      nextIndex += 1;
+      const outcome = await reconcileRemoteUrl(target);
+      const result: RemoteFixResult = { ...target, outcome };
+      results.push(result);
+      onResult?.(result);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(REMOTE_FIX_CONCURRENCY, targets.length) }, () => worker()));
+  return results;
 };
 
 export const resolveParallels = (rawValue?: string): number | "auto" => {
@@ -1149,6 +1213,24 @@ export const createGitSyncCore = (): GitSyncCore => {
       });
 
       return { summary };
+    },
+
+    fixRemotes: async ({ logger, tree }) => {
+      const targets = await collectFixRemoteTargets(tree);
+      const results = await fixRemotesForTargets(targets, (result) => {
+        if (result.outcome === "unchanged") {
+          return;
+        }
+        logger.info(
+          t(
+            result.outcome === "migrated-to-ssh" ? "cli.fixRemotes.migratedToSsh" : "cli.fixRemotes.migratedToHttp",
+            { path: result.pathWithNamespace }
+          )
+        );
+      });
+      const changed = results.filter((result) => result.outcome !== "unchanged").length;
+      logger.info(t("cli.fixRemotes.summary", { changed: String(changed), total: String(results.length) }));
+      return { results };
     },
   };
 };

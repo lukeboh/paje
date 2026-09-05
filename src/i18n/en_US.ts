@@ -114,6 +114,7 @@ const enUS: PtBrTranslations = {
         exclude: "exclude from tree (never sync or show it again)",
         bulkCheckout: "bulk checkout on marked repositories (with option to create)",
         bulkReturnDefault: "return marked repositories to each one's default branch",
+        fixRemotes: "fix the remote of every repository already cloned locally",
         exitAtDirectory: "exit and switch to the highlighted repository's directory",
       },
     },
@@ -122,9 +123,9 @@ const enUS: PtBrTranslations = {
     tree: {
       empty: "(No repositories found)",
       orientationDefault:
-        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | Ctrl+S to sync all | Enter to sync highlighted scope | Esc to cancel | Ctrl+F to search by name | Ctrl+X to filter selected | Ctrl+B to branch | Ctrl+D to exclude from tree | Ctrl+K to bulk checkout | Ctrl+R to bulk return to default | Ctrl+Q to exit at highlighted directory | Ctrl+W to expand workspace | Ctrl+L to expand log | Ctrl+H for help",
+        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | Ctrl+S to sync all | Enter to sync highlighted scope | Esc to cancel | Ctrl+F to search by name | Ctrl+X to filter selected | Ctrl+B to branch | Ctrl+D to exclude from tree | Ctrl+K to bulk checkout | Ctrl+R to bulk return to default | Ctrl+U to fix remotes | Ctrl+Q to exit at highlighted directory | Ctrl+W to expand workspace | Ctrl+L to expand log | Ctrl+H for help",
       orientationConfirm:
-        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | Ctrl+S to confirm selection (all) | Enter to confirm selection (scope) | Esc to cancel | Ctrl+F to search by name | Ctrl+X to filter selected | Ctrl+B to branch | Ctrl+D to exclude from tree | Ctrl+K to bulk checkout | Ctrl+R to bulk return to default | Ctrl+Q to exit at highlighted directory | Ctrl+W to expand workspace | Ctrl+L to expand log | Ctrl+H for help",
+        "Use ↑/↓ and PgUp/PgDn to navigate | Space to select | Ctrl+S to confirm selection (all) | Enter to confirm selection (scope) | Esc to cancel | Ctrl+F to search by name | Ctrl+X to filter selected | Ctrl+B to branch | Ctrl+D to exclude from tree | Ctrl+K to bulk checkout | Ctrl+R to bulk return to default | Ctrl+U to fix remotes | Ctrl+Q to exit at highlighted directory | Ctrl+W to expand workspace | Ctrl+L to expand log | Ctrl+H for help",
       textFilterIndicator: 'Filter: "{{query}}" — {{count}} item(s) | Esc clears | Backspace erases',
       filterAll: "[DEBUG] Showing all repositories.",
       filterSelected: "[DEBUG] Showing only selected repositories.",
@@ -145,6 +146,10 @@ const enUS: PtBrTranslations = {
       bulkSkippedNoDefaultBranch: "{{label}}: skipped (default branch unknown).",
       bulkSkippedNotCloned: "{{label}}: skipped (not cloned locally yet).",
       bulkFailed: "{{label}}: failed — {{error}}",
+      fixRemotesNoLocalClones: "No locally cloned repository was found to fix.",
+      fixRemotesMigratedToSsh: "{{path}}: remote fixed to SSH.",
+      fixRemotesMigratedToHttp: "{{path}}: remote fixed to HTTPS+token.",
+      fixRemotesSummary: "Remotes fixed: {{changed}} of {{total}} repository(ies) checked.",
       archivedTag: "ARCHIVED",
       exitAtDirectoryInvalid: "Select an already cloned repository or a folder that exists locally to exit into its directory.",
       exitAtDirectoryConfirmTitle: "Exit and change directory",
@@ -298,6 +303,8 @@ const enUS: PtBrTranslations = {
           syncRepos: "Repos/branches to sync (separate with ;)",
           parallels: "Number of processes/threads for synchronization (AUTO|0|1..N)",
           dryRun: "Simulate operations without persisting",
+          fixRemotes:
+            "Fix the remote of every already-cloned repository to the URL PAJÉ would resolve (SSH when the host has a key associated in ~/.ssh/config, HTTPS+token otherwise) and exit, without syncing",
         },
       },
       gitServerStore: {
@@ -518,6 +525,12 @@ const enUS: PtBrTranslations = {
       dryRunPush: "Dry run: push skipped.",
       noAction: "No action needed.",
       failed: "Failed: {{message}}",
+    },
+    fixRemotes: {
+      noLocalClones: "No locally cloned repository was found to fix.",
+      migratedToSsh: "{{path}}: remote fixed to SSH.",
+      migratedToHttp: "{{path}}: remote fixed to HTTPS+token.",
+      summary: "Remotes fixed: {{changed}} of {{total}} repository(ies) checked.",
     },
     sync: {
       serverCount: "GitLab servers: {{count}}",

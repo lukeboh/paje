@@ -182,6 +182,12 @@ const buildGroups = (options: { logMaximized: boolean; workspaceMaximized: boole
           contexts: ["tree"],
         },
         {
+          id: "tree-fix-remotes",
+          key: "Ctrl+U",
+          description: t("helpModal.shortcuts.tree.fixRemotes"),
+          contexts: ["tree"],
+        },
+        {
           id: "tree-exit-at-directory",
           key: "Ctrl+Q",
           description: t("helpModal.shortcuts.tree.exitAtDirectory"),

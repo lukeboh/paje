@@ -23,6 +23,7 @@ import {
   type BulkBranchResult,
 } from "./core/gitBranchService.js";
 import { hasGitDir, readLocalRepoInfo } from "./gitRepoScanner.js";
+import { collectFixRemoteTargets, fixRemotesForTargets } from "./core/gitSyncService.js";
 import { splitFilterPatterns } from "./patternFilter.js";
 import { writeCdTarget, writeEnvYamlUpdates } from "./persistence.js";
 
@@ -458,6 +459,10 @@ export const renderRepositoryTree = async (
       // itself (kept separate so neither guard has to know about the other's
       // internals, just check the flag).
       const branchOpInProgressRef = useRef(false);
+      // Fix-remotes (Ctrl+U) touches origin's URL on every locally cloned
+      // repo — same mutual-exclusion reasoning as branchOpInProgressRef, kept
+      // as its own flag for the same reason.
+      const fixRemotesInProgressRef = useRef(false);
 
       const parametersSnapshot = useMemo(() => {
         const base = options?.parameters ?? [];
@@ -531,7 +536,7 @@ export const renderRepositoryTree = async (
             return;
           }
           if (confirmed && options?.onConfirm) {
-            if (syncInProgressRef.current || branchOpInProgressRef.current) {
+            if (syncInProgressRef.current || branchOpInProgressRef.current || fixRemotesInProgressRef.current) {
               return;
             }
             syncInProgressRef.current = true;
@@ -615,7 +620,7 @@ export const renderRepositoryTree = async (
       }, [items, selectedIndex, nodes, modalState]);
 
       const openExitAtDirectory = useCallback(async () => {
-        if (syncInProgressRef.current || branchOpInProgressRef.current) {
+        if (syncInProgressRef.current || branchOpInProgressRef.current || fixRemotesInProgressRef.current) {
           return;
         }
         const item = items[selectedIndex];
@@ -840,7 +845,7 @@ export const renderRepositoryTree = async (
       );
 
       const openBulkCheckout = useCallback(() => {
-        if (branchOpInProgressRef.current || syncInProgressRef.current) {
+        if (branchOpInProgressRef.current || syncInProgressRef.current || fixRemotesInProgressRef.current) {
           return;
         }
         const targetNodes = collectBulkTargets();
@@ -873,7 +878,7 @@ export const renderRepositoryTree = async (
       );
 
       const openBulkReturnToDefault = useCallback(() => {
-        if (branchOpInProgressRef.current || syncInProgressRef.current) {
+        if (branchOpInProgressRef.current || syncInProgressRef.current || fixRemotesInProgressRef.current) {
           return;
         }
         const targetNodes = collectBulkTargets();
@@ -894,6 +899,43 @@ export const renderRepositoryTree = async (
         });
         modalState.openModal("confirm");
       }, [collectBulkTargets, modalState, runBulkReturnToDefault]);
+
+      // Unlike the bulk branch operations above, this reaches every project
+      // node with a local clone regardless of checkbox selection — "fix the
+      // remotes" is a maintenance action meant to cover everything already
+      // on disk, not just what's marked right now.
+      const runFixRemotes = useCallback(async () => {
+        if (syncInProgressRef.current || branchOpInProgressRef.current || fixRemotesInProgressRef.current) {
+          return;
+        }
+        fixRemotesInProgressRef.current = true;
+        try {
+          const targets = await collectFixRemoteTargets(nodes);
+          if (targets.length === 0) {
+            appendLogEntry(t("tui.tree.fixRemotesNoLocalClones"), "warn");
+            return;
+          }
+          const results = await fixRemotesForTargets(targets, (result) => {
+            if (result.outcome === "unchanged") {
+              return;
+            }
+            appendLogEntry(
+              t(
+                result.outcome === "migrated-to-ssh" ? "tui.tree.fixRemotesMigratedToSsh" : "tui.tree.fixRemotesMigratedToHttp",
+                { path: result.pathWithNamespace }
+              ),
+              "info"
+            );
+          });
+          const changed = results.filter((result) => result.outcome !== "unchanged").length;
+          appendLogEntry(
+            t("tui.tree.fixRemotesSummary", { changed: String(changed), total: String(results.length) }),
+            "info"
+          );
+        } finally {
+          fixRemotesInProgressRef.current = false;
+        }
+      }, [nodes]);
 
       const toggleSelectionFilter = useCallback(() => {
         setShowOnlySelected((value) => !value);
@@ -921,6 +963,10 @@ export const renderRepositoryTree = async (
           }
           if (key.ctrl && lower === "r") {
             openBulkReturnToDefault();
+            return;
+          }
+          if (key.ctrl && lower === "u") {
+            void runFixRemotes();
             return;
           }
           if (key.ctrl && lower === "q") {
@@ -1072,6 +1118,10 @@ export const renderRepositoryTree = async (
             }
             if (key.ctrl && lower === "r") {
               openBulkReturnToDefault();
+              return;
+            }
+            if (key.ctrl && lower === "u") {
+              void runFixRemotes();
               return;
             }
             if (key.ctrl && lower === "q") {

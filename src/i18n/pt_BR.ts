@@ -112,6 +112,7 @@ const ptBR = {
         exclude: "excluir da árvore (nunca sincronizar nem exibir)",
         bulkCheckout: "checkout em massa nos repositórios marcados (com opção de criar)",
         bulkReturnDefault: "voltar os repositórios marcados para a branch padrão de cada um",
+        fixRemotes: "corrigir o remote de todos os repositórios já clonados localmente",
         exitAtDirectory: "sair e mudar para o diretório do repositório destacado",
       },
     },
@@ -120,9 +121,9 @@ const ptBR = {
     tree: {
       empty: "(Nenhum repositório encontrado)",
       orientationDefault:
-        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | Ctrl+S para sincronizar tudo | Enter para sincronizar apenas o escopo destacado | Esc para cancelar | Ctrl+F para pesquisar por nome | Ctrl+X para filtrar selecionados | Ctrl+B para branch | Ctrl+D para excluir da árvore | Ctrl+K para checkout em massa | Ctrl+R para voltar ao padrão em massa | Ctrl+Q para sair no diretório destacado | Ctrl+W para ampliar área de trabalho | Ctrl+L para ampliar log | Ctrl+H para ajuda",
+        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | Ctrl+S para sincronizar tudo | Enter para sincronizar apenas o escopo destacado | Esc para cancelar | Ctrl+F para pesquisar por nome | Ctrl+X para filtrar selecionados | Ctrl+B para branch | Ctrl+D para excluir da árvore | Ctrl+K para checkout em massa | Ctrl+R para voltar ao padrão em massa | Ctrl+U para corrigir remotes | Ctrl+Q para sair no diretório destacado | Ctrl+W para ampliar área de trabalho | Ctrl+L para ampliar log | Ctrl+H para ajuda",
       orientationConfirm:
-        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | Ctrl+S para confirmar seleção (tudo) | Enter para confirmar seleção (escopo) | Esc para cancelar | Ctrl+F para pesquisar por nome | Ctrl+X para filtrar selecionados | Ctrl+B para branch | Ctrl+D para excluir da árvore | Ctrl+K para checkout em massa | Ctrl+R para voltar ao padrão em massa | Ctrl+Q para sair no diretório destacado | Ctrl+W para ampliar área de trabalho | Ctrl+L para ampliar log | Ctrl+H para ajuda",
+        "Use ↑/↓ e PgUp/PgDn para navegar | Espaço para selecionar | Ctrl+S para confirmar seleção (tudo) | Enter para confirmar seleção (escopo) | Esc para cancelar | Ctrl+F para pesquisar por nome | Ctrl+X para filtrar selecionados | Ctrl+B para branch | Ctrl+D para excluir da árvore | Ctrl+K para checkout em massa | Ctrl+R para voltar ao padrão em massa | Ctrl+U para corrigir remotes | Ctrl+Q para sair no diretório destacado | Ctrl+W para ampliar área de trabalho | Ctrl+L para ampliar log | Ctrl+H para ajuda",
       textFilterIndicator: 'Filtro: "{{query}}" — {{count}} item(ns) | Esc limpa | Backspace apaga',
       filterAll: "[DEBUG] Exibindo todos os repositórios.",
       filterSelected: "[DEBUG] Exibindo apenas repositórios marcados.",
@@ -143,6 +144,10 @@ const ptBR = {
       bulkSkippedNoDefaultBranch: "{{label}}: pulado (branch padrão desconhecida).",
       bulkSkippedNotCloned: "{{label}}: pulado (ainda não clonado localmente).",
       bulkFailed: "{{label}}: falhou — {{error}}",
+      fixRemotesNoLocalClones: "Nenhum repositório clonado localmente foi encontrado para corrigir.",
+      fixRemotesMigratedToSsh: "{{path}}: remote corrigido para SSH.",
+      fixRemotesMigratedToHttp: "{{path}}: remote corrigido para HTTPS+token.",
+      fixRemotesSummary: "Remotes corrigidos: {{changed}} de {{total}} repositório(s) verificado(s).",
       archivedTag: "ARQUIVADO",
       exitAtDirectoryInvalid: "Selecione um repositório já clonado ou uma pasta existente localmente para sair no diretório dela.",
       exitAtDirectoryConfirmTitle: "Sair e mudar de diretório",
@@ -296,6 +301,8 @@ const ptBR = {
           syncRepos: "Repos/branchs para sincronizar (separe por ;)",
           parallels: "Número de processos/threads para sincronização (AUTO|0|1..N)",
           dryRun: "Simula operações sem persistir",
+          fixRemotes:
+            "Corrige o remote de cada repositório já clonado para a URL que o PAJÉ resolveria (SSH quando o host tem chave associada em ~/.ssh/config, HTTPS+token caso contrário) e encerra, sem sincronizar",
         },
       },
       gitServerStore: {
@@ -518,6 +525,12 @@ const ptBR = {
       dryRunPush: "Dry-run: push ignorado.",
       noAction: "Nenhuma ação necessária.",
       failed: "Falha: {{message}}",
+    },
+    fixRemotes: {
+      noLocalClones: "Nenhum repositório clonado localmente foi encontrado para corrigir.",
+      migratedToSsh: "{{path}}: remote corrigido para SSH.",
+      migratedToHttp: "{{path}}: remote corrigido para HTTPS+token.",
+      summary: "Remotes corrigidos: {{changed}} de {{total}} repositório(s) verificado(s).",
     },
     sync: {
       serverCount: "Servidores GitLab: {{count}}",

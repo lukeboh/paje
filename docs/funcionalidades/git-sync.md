@@ -38,6 +38,7 @@ A TUI é iniciada ao executar `paje` sem parâmetros e selecionar **Sincronizar 
 | `--sync-repos <pattern>` | não | — | CLI/env | Filtro Ant/Glob com branch |
 | `--parallels <value>` | não | `1` | CLI/env | Paralelismo (`AUTO`, `0` ou número) |
 | `--dry-run` | não | `false` | CLI/env | Simula ações sem alterar |
+| `--fix-remotes` | não | `false` | CLI | Corrige o remote de cada repositório já clonado localmente para a URL que o PAJÉ resolveria (SSH ou HTTPS+token) e encerra, sem carregar a TUI nem sincronizar. Ação pontual — não é lida de `env.yaml` nem aparece no editor de parâmetros. |
 | `--env-file <path>` | não | `~/.paje/env.yaml` | CLI | Arquivo de ambiente |
 | `-v, --verbose` | não | `false` | CLI/env | Logs detalhados |
 
@@ -84,6 +85,7 @@ A TUI é iniciada ao executar `paje` sem parâmetros e selecionar **Sincronizar 
 - `--dry-run` evita alterações reais, apenas reporta ações.
 - Diretórios desmarcados na TUI são removidos; a confirmação é exibida apenas para estados `UNCOMMITTED`, `AHEAD` e `DIVERGED`.
 - Operações git usam SSH (quando o servidor tem uma chave associada em `~/.ssh/config`) ou HTTPS com token embutido (`oauth2:` para GitLab; `x-access-token:` para GitHub).
+- Como essa escolha depende do estado de `~/.ssh/config` no momento de cada sincronização, um remote local pode ficar desalinhado se essa associação mudar depois do clone original (ex.: a chave SSH foi configurada só depois). `Ctrl+U` na TUI e `--fix-remotes` na CLI corrigem o remote de todo repositório já clonado, sem clonar nem sincronizar nada — reconciliam apenas a URL do `origin` (nunca um `https://` configurado manualmente pelo usuário).
 - Um servidor sem token e sem chave SSH (registro legado ou interrompido) faz o bootstrap automaticamente na sincronização: pede a senha uma única vez, gera e persiste o token, e a sincronização continua sem reiniciar. Se a senha não for informada, o servidor é pulado com o aviso de "sem autenticação configurada" de sempre.
 - O cache nunca armazena URLs com token (`pajeHttpUrl`); elas são reidratadas da configuração atual do servidor a cada carga.
 - Logs são centralizados no LoggerBroker (motor pino), com níveis configuráveis por transport (console/painel/arquivo).

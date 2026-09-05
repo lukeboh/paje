@@ -58,6 +58,8 @@ const testFiles = [
   "./git_sync_stale_preselection_test.js",
   "./git_sync_known_hosts_test.js",
   "./git_sync_ssh_preferred_over_token_test.js",
+  "./git_sync_fix_remotes_test.js",
+  "./git_sync_fix_remotes_cli_test.js",
   "./tui_tree_text_filter_test.js",
   "./tui_tree_exclude_test.js",
   "./tui_branch_rename_test.js",

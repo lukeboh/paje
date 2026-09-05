@@ -85,6 +85,8 @@ import {
   resolveParallels,
   isValidHttpUrl,
   withToken,
+  collectFixRemoteTargets,
+  fixRemotesForTargets,
 } from "./core/gitSyncService.js";
 import {
   requestGitHubDeviceCode,
@@ -225,6 +227,7 @@ type GitSyncCliOptions = {
   syncRepos?: string;
   dryRun?: boolean;
   parallels?: string;
+  fixRemotes?: boolean;
 };
 
 const parseBooleanFlag = (value?: string | boolean): boolean | undefined => {
@@ -1699,6 +1702,7 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
     .option("--sync-repos <pattern>", t("cli.command.gitSync.options.syncRepos"))
     .option("--parallels <value>", t("cli.command.gitSync.options.parallels"))
     .option("--dry-run", t("cli.command.gitSync.options.dryRun"), false)
+    .option("--fix-remotes", t("cli.command.gitSync.options.fixRemotes"), false)
     .action(async function (this: Command, options: GitSyncCliOptions) {
       setLocale(options.locale);
       const logBroker = new LoggerBroker();
@@ -1977,6 +1981,29 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
       if (filteredProjects.length === 0 && tree.length === 0) {
         return;
       }
+
+      if (cliOptions.fixRemotes) {
+        const fixTargets = await collectFixRemoteTargets(tree);
+        if (fixTargets.length === 0) {
+          logInfo(t("cli.fixRemotes.noLocalClones"));
+          return;
+        }
+        const fixResults = await fixRemotesForTargets(fixTargets, (result) => {
+          if (result.outcome === "unchanged") {
+            return;
+          }
+          logInfo(
+            t(
+              result.outcome === "migrated-to-ssh" ? "cli.fixRemotes.migratedToSsh" : "cli.fixRemotes.migratedToHttp",
+              { path: result.pathWithNamespace }
+            )
+          );
+        });
+        const changedCount = fixResults.filter((result) => result.outcome !== "unchanged").length;
+        logInfo(t("cli.fixRemotes.summary", { changed: String(changedCount), total: String(fixResults.length) }));
+        return;
+      }
+
       if (!session) {
         const defaultBaseDir = mergedOptions.baseDir ?? "repos";
         const resolvedUserName = mergedOptions.username?.trim() || undefined;

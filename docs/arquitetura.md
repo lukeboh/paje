@@ -513,6 +513,19 @@ host em `~/.ssh/config` (ex.: a configuração pessoal comum para
 `buildPajeHttpUrl`) quando essa associação não existe — nunca como
 alternativa preferencial a uma chave SSH já disponível.
 
+Como essa decisão é reavaliada a cada carga da árvore, um remote local pode
+ficar desalinhado se a associação SSH do host mudar depois do clone original
+(ex.: a chave só foi configurada mais tarde). `reconcileRemoteUrl`
+(`parallelSync.ts`) mantém o `origin` de cada repositório alinhado com essa
+decisão a cada sincronização — nas duas direções, mas só reescrevendo um
+remote que já tenha o prefixo `oauth2:`/`x-access-token:` embutido pelo
+próprio PAJÉ, ou um `git@`/`ssh://`; nunca um `https://` configurado
+manualmente pelo usuário. `collectFixRemoteTargets` +
+`fixRemotesForTargets` (`gitSyncService.ts`) expõem essa mesma correção como
+ação independente, sem clonar nem sincronizar nada — `Ctrl+U` na TUI
+(alcança todo repositório com clone local, não só os marcados) e
+`paje git-sync --fix-remotes` na CLI.
+
 O cadastro (`git-server-store`, TUI) pergunta o método de autenticação antes
 de pedir a URL do servidor (para não obrigar a digitar a URL só para
 descobrir que a única opção válida para GitHub é colar um token), então a
