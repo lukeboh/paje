@@ -184,6 +184,76 @@ causas não relacionadas — ver observação abaixo).
 
 ---
 
+#### ~~BUG-07~~ — `gitSyncService.ts` ignorava a associação SSH do host e sempre gerava `pajeHttpUrl` (HTTPS+token) quando havia token — clone/pull/push usavam HTTPS em vez de SSH mesmo com chave SSH válida
+**Status: RESOLVIDO**
+
+Relatado pelo usuário ao revisar o cadastro de servidores via SSH: a
+expectativa (documentada em `docs/arquitetura.md`, tabela de autenticação, e
+na própria mensagem exibida ao usuário após configurar SSH,
+`cli.prompt.sshKey.dualCredentialInfo`) é que, quando o host de um servidor
+tem uma chave SSH associada em `~/.ssh/config`, todas as operações git
+(`clone`/`pull`/`push`) usem a URL SSH — o token deveria servir só para
+chamadas à API REST (listar grupos/projetos). O código não respeitava isso.
+
+`gitSyncService.ts` já calculava `hasValidSshAssociation(host)` (função
+`hasValidSshAssociation`, então na linha ~424) e a usava para decidir se um
+token era exigido e se `ensureSshKey` deveria rodar — mas **nunca** para
+decidir se `pajeHttpUrl` (a URL HTTPS com o token embutido,
+`oauth2:<token>@host` para GitLab ou `x-access-token:<token>@host` para
+GitHub) deveria ser montada. `pajeHttpUrl` era preenchida sempre que um
+token existisse, em três pontos distintos: rehidratação do caminho de
+cache-hit, busca fresca de servidores GitHub (onde `hasSshAssociation` nem
+chegava a ser calculada) e busca fresca de servidores GitLab. Como o próprio
+fluxo de cadastro via SSH sempre termina gerando um token também (modelo
+"token-first", ver `docs/funcionalidades/git-server-store.md`), praticamente
+todo servidor "configurado via SSH" tinha `pajeHttpUrl` preenchida.
+
+Essa URL fluía sem alteração para `GitRepositoryTarget.httpUrl`
+(`resolveSyncTargets`/`prepareTargets`), e `parallelSync.ts` sempre preferia
+`target.httpUrl` a `target.sshUrl` quando presente
+(`const cloneUrl = target.httpUrl ?? target.sshUrl`) — inclusive
+reescrevendo, a cada sincronização, um remote `git@`/`ssh://` já configurado
+para a URL HTTPS+token via `git remote set-url` (`parallelSync.ts`, bloco
+logo após a checagem de `!snapshot.hasRemote`). Ou seja: clone/pull/push
+usavam HTTPS com o token embutido no lugar de SSH, e um remote SSH
+existente era ativamente migrado para HTTPS+token na sincronização seguinte.
+
+**Correção:** `gitSyncService.ts` ganhou um helper `buildPajeHttpUrl(url,
+username, token, hasSshAssociation)` que só monta a URL quando
+`!hasSshAssociation`, usado nos três pontos citados (o cálculo de
+`serverHost`/`hasSshAssociation` foi movido para o topo do loop de
+servidores, antes do branch GitHub, que passou a calculá-lo também).
+`parallelSync.ts` não precisou mudar a escolha de URL em si (já estava
+correta uma vez alimentada com os valores certos vindos do core) — apenas
+ganhou o caso simétrico: quando `target.httpUrl` está ausente e o remote
+atual já é uma URL HTTPS com prefixo `oauth2:`/`x-access-token:` (ou seja,
+foi o próprio PAJÉ quem a configurou, nunca uma URL `https://` qualquer
+definida manualmente pelo usuário), ele migra de volta para
+`target.sshUrl` — corrigindo automaticamente, na sincronização seguinte,
+repositórios já clonados via HTTPS+token antes desta correção.
+
+Cobertura adicionada: `tests/git_sync_ssh_preferred_over_token_test.ts`
+(gating de `pajeHttpUrl` nos caminhos de cache-hit e fresh-fetch, GitLab e
+GitHub) e `tests/git_parallel_sync_remote_migration_test.ts` (migração de
+remote nas duas direções, e não-migração de um remote HTTPS configurado
+manualmente pelo usuário).
+
+> **Observação:** durante a escrita do primeiro teste acima foi reproduzida
+> uma variante da mesma condição de corrida documentada em `~~BUG-01~~`
+> acima (o refresh de status em segundo plano do cache-hit, agendado via
+> `setImmediate` em `loadTree()`, regrava `git-tree-cache.json` sem que
+> nada aguardasse esse job) — desta vez não vazando para o `~/.paje` real,
+> mas fazendo um teste subsequente que também exercita o cache-hit
+> encontrar o arquivo de cache reescrito por outro arquivo de teste que já
+> havia terminado. Contornado no novo teste com um flush do event loop
+> antes de montar suas próprias fixtures; não é um problema em uso real
+> (o `HOME` não muda no meio de uma execução do PAJÉ) e a causa raiz (o
+> job em segundo plano não é aguardado por ninguém) permanece, então
+> qualquer novo teste que combine cache-hit com verificação imediata do
+> conteúdo do cache pode precisar do mesmo cuidado.
+
+---
+
 ### 1. BUGS / COMPORTAMENTOS INCORRETOS
 
 #### ~~BUG-01~~ — `gitBranchService.ts:100` — DIVERGED exibido como AHEAD *(decisão de design — não é bug)*

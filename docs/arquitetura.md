@@ -501,7 +501,17 @@ credencial persistente.
 |---|---|---|
 | GitLab, com chave SSH associada ao host | SSH + token | URL `ssh_url_to_repo` via `~/.ssh/config` para clone/push; token para a API (listar grupos/projetos) — as duas credenciais são usadas juntas, cada uma para sua finalidade |
 | GitLab, só token (sem chave SSH) | HTTPS + PAT | `pajeHttpUrl` com `oauth2:<token>@host` embutido |
-| GitHub (`type: "github"`) | HTTPS + PAT ou OAuth (device flow) | `pajeHttpUrl` com `x-access-token:<token>@host` embutido — a origem do token (`tokenOrigin`) não muda como ele é usado depois |
+| GitHub (`type: "github"`), com chave SSH associada ao host | SSH + token | URL `ssh_url_to_repo` via `~/.ssh/config` para clone/push; token para a API (listar orgs/repos) |
+| GitHub (`type: "github"`), sem chave SSH | HTTPS + PAT ou OAuth (device flow) | `pajeHttpUrl` com `x-access-token:<token>@host` embutido — a origem do token (`tokenOrigin`) não muda como ele é usado depois |
+
+A associação SSH é decidida por host (`hasValidSshAssociation`, checando
+`~/.ssh/config`), não por um campo no cadastro — então mesmo um servidor
+GitHub, para o qual o PAJÉ não tem fluxo próprio de configurar SSH, usa a
+URL SSH automaticamente se o usuário já tiver uma entrada válida para aquele
+host em `~/.ssh/config` (ex.: a configuração pessoal comum para
+`github.com`). `pajeHttpUrl` só é montada (`gitSyncService.ts`,
+`buildPajeHttpUrl`) quando essa associação não existe — nunca como
+alternativa preferencial a uma chave SSH já disponível.
 
 O cadastro (`git-server-store`, TUI) pergunta o método de autenticação antes
 de pedir a URL do servidor (para não obrigar a digitar a URL só para

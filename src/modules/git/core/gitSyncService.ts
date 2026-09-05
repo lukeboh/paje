@@ -429,6 +429,30 @@ const hasValidSshAssociation = (host: string): boolean => {
   return fs.existsSync(resolveSshIdentityPath(identityPath));
 };
 
+// Git plumbing (clone/pull/push) must prefer SSH whenever the host already
+// has a valid association in ~/.ssh/config — the token is reserved for REST
+// API calls only (see docs/arquitetura.md, tabela de autenticação). GitLab
+// uses "oauth2" as the HTTP Basic Auth username for token auth; GitHub uses
+// "x-access-token".
+const buildPajeHttpUrl = (
+  httpUrlToRepo: string,
+  username: "oauth2" | "x-access-token",
+  token: string | undefined,
+  hasSshAssociation: boolean
+): string | undefined => {
+  if (!token || hasSshAssociation) {
+    return undefined;
+  }
+  try {
+    const url = new URL(httpUrlToRepo);
+    url.username = username;
+    url.password = token;
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+};
+
 const ensureKnownHost = async (server: string, logger: LoggerBroker, verbose?: boolean): Promise<void> => {
   if (await isHostInKnownHosts(server)) {
     return;
@@ -682,18 +706,19 @@ export const createGitSyncCore = (): GitSyncCore => {
           .map(({ serverName, groups, projects }) => {
             const server = serversByName.get(serverName);
             if (!server) return null;
-            const projectsWithHttpUrl = server.token
-              ? projects.map((project) => {
-                  try {
-                    const url = new URL(project.http_url_to_repo);
-                    url.username = "oauth2";
-                    url.password = server.token as string;
-                    return { ...project, pajeHttpUrl: url.toString() };
-                  } catch {
-                    return project;
-                  }
-                })
-              : projects;
+            const serverHost = (() => {
+              try {
+                return new URL(server.baseUrl).hostname;
+              } catch {
+                return "";
+              }
+            })();
+            const hasSshAssociation = serverHost ? hasValidSshAssociation(serverHost) : false;
+            const username = server.type === "github" ? "x-access-token" : "oauth2";
+            const projectsWithHttpUrl = projects.map((project) => {
+              const pajeHttpUrl = buildPajeHttpUrl(project.http_url_to_repo, username, server.token, hasSshAssociation);
+              return pajeHttpUrl ? { ...project, pajeHttpUrl } : project;
+            });
             return { server, groups, projects: projectsWithHttpUrl };
           })
           .filter((r): r is { server: GitServerEntry; groups: GitLabGroup[]; projects: GitLabProject[] } => r !== null);
@@ -797,6 +822,9 @@ export const createGitSyncCore = (): GitSyncCore => {
 
       const serverResults = await Promise.all(
         servers.map(async (server) => {
+          const serverHost = new URL(server.baseUrl).hostname;
+          const hasSshAssociation = hasValidSshAssociation(serverHost);
+
           if (server.type === "github") {
             if (!server.token) {
               logger.warn(t("cli.sync.noAuthConfigured", { server: server.name }));
@@ -820,14 +848,8 @@ export const createGitSyncCore = (): GitSyncCore => {
                 const meta: Partial<GitLabProject> = {};
                 if (server.baseDir) meta.pajeBaseDir = server.baseDir;
                 if (server.userEmail) meta.pajeUserEmail = server.userEmail;
-                try {
-                  const url = new URL(project.http_url_to_repo);
-                  url.username = "x-access-token";
-                  url.password = server.token as string;
-                  meta.pajeHttpUrl = url.toString();
-                } catch {
-                  // keep without pajeHttpUrl
-                }
+                const pajeHttpUrl = buildPajeHttpUrl(project.http_url_to_repo, "x-access-token", server.token, hasSshAssociation);
+                if (pajeHttpUrl) meta.pajeHttpUrl = pajeHttpUrl;
                 return { ...project, ...meta };
               });
               const serverFiltered = filterProjects(projectsWithMetadata, {
@@ -849,9 +871,6 @@ export const createGitSyncCore = (): GitSyncCore => {
               return null;
             }
           }
-
-          const serverHost = new URL(server.baseUrl).hostname;
-          const hasSshAssociation = hasValidSshAssociation(serverHost);
 
           let resolvedToken = server.token;
           if (!resolvedToken && !hasSshAssociation && onMissingCredentials) {
@@ -886,16 +905,8 @@ export const createGitSyncCore = (): GitSyncCore => {
               const meta: Partial<GitLabProject> = {};
               if (server.baseDir) meta.pajeBaseDir = server.baseDir;
               if (server.userEmail) meta.pajeUserEmail = server.userEmail;
-              if (resolvedToken) {
-                try {
-                  const url = new URL(project.http_url_to_repo);
-                  url.username = "oauth2";
-                  url.password = resolvedToken;
-                  meta.pajeHttpUrl = url.toString();
-                } catch {
-                  // keep without pajeHttpUrl
-                }
-              }
+              const pajeHttpUrl = buildPajeHttpUrl(project.http_url_to_repo, "oauth2", resolvedToken, hasSshAssociation);
+              if (pajeHttpUrl) meta.pajeHttpUrl = pajeHttpUrl;
               return { ...project, ...meta };
             });
 

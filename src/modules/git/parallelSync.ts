@@ -205,6 +205,37 @@ const applyGitLocalConfig = async (target: GitRepositoryTarget): Promise<void> =
   }
 };
 
+export type RemoteReconcileOutcome = "unchanged" | "migrated-to-ssh" | "migrated-to-http";
+
+// Keeps origin aligned with whatever the core resolved as the right URL for
+// this host (target.httpUrl when there's no valid SSH association for it,
+// target.sshUrl otherwise — see gitSyncService.ts's buildPajeHttpUrl). Only
+// ever rewrites a remote carrying PAJÉ's own oauth2:/x-access-token: prefix
+// or a git@/ssh:// remote — never a plain https:// URL a user configured by
+// hand, in either direction.
+export const reconcileRemoteUrl = async (
+  target: Pick<GitRepositoryTarget, "localPath" | "sshUrl" | "httpUrl">
+): Promise<RemoteReconcileOutcome> => {
+  const currentRemote = (
+    await runGitQuiet(["-C", target.localPath, "remote", "get-url", "origin"]).catch(() => "")
+  ).trim();
+  if (!currentRemote) {
+    return "unchanged";
+  }
+  if (target.httpUrl) {
+    if (currentRemote.startsWith("git@") || currentRemote.startsWith("ssh://")) {
+      await runGit(["-C", target.localPath, "remote", "set-url", "origin", target.httpUrl]);
+      return "migrated-to-http";
+    }
+    return "unchanged";
+  }
+  if (target.sshUrl && /^https:\/\/(oauth2|x-access-token):/.test(currentRemote)) {
+    await runGit(["-C", target.localPath, "remote", "set-url", "origin", target.sshUrl]);
+    return "migrated-to-ssh";
+  }
+  return "unchanged";
+};
+
 export const syncRepository = async (
   target: GitRepositoryTarget,
   options?: ParallelSyncOptions,
@@ -269,12 +300,7 @@ export const syncRepository = async (
       return { target, status: "skipped", message: t("cli.parallel.noRemote") };
     }
 
-    if (target.httpUrl) {
-      const currentRemote = await runGitQuiet(["-C", target.localPath, "remote", "get-url", "origin"]).catch(() => "");
-      if (currentRemote.trim().startsWith("git@") || currentRemote.trim().startsWith("ssh://")) {
-        await runGit(["-C", target.localPath, "remote", "set-url", "origin", target.httpUrl]);
-      }
-    }
+    await reconcileRemoteUrl(target);
 
     if (snapshot.behind > 0 && snapshot.ahead === 0) {
       if (!dryRun) {
