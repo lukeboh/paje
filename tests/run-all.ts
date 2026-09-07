@@ -1,4 +1,10 @@
 export {};
+
+// Impede que os testes do GitHub device flow abram o navegador de verdade
+// (https://github.com/login/device/...) a cada execução. Ver openInBrowser
+// em src/modules/git/githubDeviceFlow.ts.
+process.env.PAJE_NO_BROWSER = "1";
+
 const globalBucket = globalThis as { __pajeTests?: Promise<void>[] };
 globalBucket.__pajeTests = [];
 
@@ -53,6 +59,7 @@ const testFiles = [
   "./git_ant_glob_filter_test.js",
   "./env_yaml_write_test.js",
   "./env_yaml_first_run_test.js",
+  "./locale_resolver_test.js",
   "./logger_panel_color_test.js",
   "./tui_edit_params_modal_test.js",
   "./tui_help_modal_context_test.js",

@@ -19,6 +19,7 @@ documentos.
 | Bug | Crítico | 2 |
 | Bug | Normal | 2 |
 | Bug | Cosmético | 1 |
+| Bug | Infra de testes | 1 |
 | Melhoria | — | 1 |
 
 ---
@@ -112,6 +113,50 @@ alternativa de detectar essas teclas (ex.: reconhecer a sequência bruta antes
 do parse do Ink, ou atualizar o Ink) antes de poder corrigir.
 
 *(anteriormente BUG-15)*
+
+---
+
+### BUG-07 — `tests/tui_bulk_branch_ops_test.ts` — teste instável (flaky) por esperas de tempo fixo curtas demais no Windows
+**Gravidade: INFRA DE TESTES (não afeta o produto)** | **Status: ABERTO**
+
+O teste do checkout em massa (`Ctrl+K`) sobre repositórios git reais falha de
+forma intermitente na asserção da linha ~165:
+
+```
+AssertionError: Árvore deve mostrar repoA já na branch feature-x
+```
+
+**Não é bug do produto.** Investigado reproduzindo o cenário manualmente: as
+operações git em si sempre terminam corretamente (`repoA` e `repoB` ficam em
+`feature-x`, sem upstream indevido em `repoB`), e a coluna de status da árvore
+**é** atualizada para `[feature-x, synced]` — só que um pouco depois do
+instante em que o teste lê o frame.
+
+**Causa:** após confirmar a criação da branch ausente (`await tty.press(KEYS.enter)`,
+linha ~156), o teste aguarda um `setTimeout` **fixo de 2000 ms** (linha ~157) e
+então lê `lastFrame()` imediatamente. Nesse intervalo precisam caber, em
+sequência: o checkout em massa rodando repo a repo (git real, clones locais,
+`git.exe` do Git for Windows — mais lento), o `resolveRepoStatus` por item
+(`applyBulkResults`) e o re-render do Ink. Em máquinas mais lentas / Windows,
+2000 ms fica no limite e às vezes estoura. Com ~500 ms a mais o frame já
+mostra o resultado esperado.
+
+Outros pontos do mesmo teste têm o mesmo cheiro (linhas ~117, ~135, ~193,
+~199: `setTimeout` fixo de 100–400 ms), embora só a asserção de 2000 ms tenha
+falhado de forma observável até agora.
+
+**Correção sugerida:** trocar o `setTimeout` fixo por polling do frame, como o
+próprio teste já faz na linha ~145 — por exemplo
+`await tty.waitForOutput((f) => f.includes("feature-x") && f.includes("synced"), 15000)` —
+antes de qualquer asserção sobre o frame pós-operação; aplicar o mesmo padrão
+aos demais `setTimeout` fixos do arquivo.
+
+**Impacto:** o runner (`tests/run-all.ts`) é tolerante a falhas e segue com os
+demais testes, mas esta falha específica sobe como exceção não capturada
+(`triggerUncaughtException` / "unsettled top-level await"), abortando o
+processo com exit 13 **antes** da linha de resumo final
+("Todos os arquivos de teste passaram." / lista de falhas). Ou seja: além de
+instável, ela encobre o veredito final da suíte.
 
 ---
 
@@ -433,6 +478,61 @@ nunca palpita.
 Cobertura adicionada: `tests/ssh_manager_git_compat_test.ts` (nenhum
 contorno fora do Windows; nenhum contorno quando nenhum dos dois clientes
 consegue ler a identidade).
+
+---
+
+#### ~~BUG-13~~ — `locale:` do `env.yaml` era ignorado — TUI/CLI sempre em inglês mesmo com `locale: "pt_BR"` configurado
+**Status: RESOLVIDO**
+
+O sistema i18n (`src/i18n/index.ts`) só resolvia o idioma a partir de (1)
+`--locale` na CLI e (2) variáveis de ambiente (`PAJE_LOCALE`, `LC_ALL`,
+`LC_MESSAGES`, `LANG`). A chave `locale` do `~/.paje/env.yaml` era lida por
+`loadEnvConfig()` e usada apenas para montar o painel de parâmetros e o
+`GitSyncConfig`, mas **nunca chegava a `setLocale()`**. Resultado: com
+`locale: "pt_BR"` no `env.yaml` e nenhuma variável de ambiente de locale, a
+TUI (menu) e os logs iniciais dos comandos caíam sempre no `DEFAULT_LOCALE`
+(`en_US`).
+
+**Correção:** novo helper de core `resolveLocale()`
+(`src/modules/git/core/localeResolver.ts`) centraliza a ordem de prioridade
+padrão do PAJÉ — `--locale` > variáveis de ambiente > `locale` do `env.yaml`
+(via `loadEnvConfig`, respeitando `--env-file`) > `undefined` (deixa o i18n
+cair no seu próprio default). Todos os pontos de entrada da camada de
+apresentação passaram a chamar `setLocale(resolveLocale({ ... }))`:
+`src/cli.ts` (menu TUI), `buildInitialParameters()` e as `action` de
+`git-sync` e `git-server-store` em `gitCommand.ts`. A extensão VSCode mantém
+a própria lógica (idioma do editor), sem alteração. O i18n permanece sem
+conhecer `env.yaml` — a dependência aponta da apresentação/core para o i18n,
+nunca o contrário.
+
+Cobertura adicionada: `tests/locale_resolver_test.ts` (precedência CLI > env
+var > env.yaml, `locale` vazio → `undefined`, `--env-file` explícito,
+integração com `setLocale`/`getLocale`).
+
+> Observação: o comentário do `env-template.yaml` diz "default: pt_BR", mas o
+> `DEFAULT_LOCALE` do i18n é `en_US`. Mudar o default é uma decisão à parte —
+> esta correção apenas faz o `locale:` configurado ser respeitado.
+
+---
+
+#### ~~BUG-14~~ — Testes do GitHub device flow abriam o navegador real repetidamente
+**Status: RESOLVIDO**
+
+`openInBrowser()` (`src/modules/git/githubDeviceFlow.ts`) era chamado sem
+seam pelos testes `git_server_store_github_quick_pick_test` e
+`git_server_store_github_device_flow_denied_test`, que exercitam o fluxo de
+device code. A cada execução da suíte no Windows/macOS/Linux com ambiente
+gráfico, isso disparava `cmd /c start "" https://github.com/login/device?...`
+(ou `open`/`xdg-open`), abrindo abas reais do navegador
+(`https://github.com/login/device/select_account` quando não autenticado).
+Sem impacto na correção dos testes nem no comportamento real do PAJÉ —
+apenas abas indesejadas e processos de navegador desnecessários.
+
+**Correção:** `openInBrowser()` passa a respeitar a variável de ambiente
+`PAJE_NO_BROWSER` (qualquer valor não vazio → não abre nada; o código e a
+URL continuam sendo exibidos ao usuário, como já acontecia em sessões
+headless). `tests/run-all.ts` e os dois testes de device flow definem
+`PAJE_NO_BROWSER=1`.
 
 ---
 

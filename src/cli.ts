@@ -4,6 +4,7 @@ import { renderMenu, type MenuItem } from "./modules/git/tui/menu.app";
 import { appendLogEntry, setLogLevel } from "./modules/git/tui/logStore.js";
 import { createScreenHost, type ScreenHost } from "./modules/git/tui/screenHost.js";
 import { createSessionForCommand } from "./cliSession";
+import { resolveLocale } from "./modules/git/core/localeResolver.js";
 import { setLocale, t } from "./i18n/index.js";
 import { PajeLogger } from "./modules/git/logger";
 import { APP_VERSION } from "./version.js";
@@ -67,7 +68,10 @@ const main = async (): Promise<void> => {
   process.on("SIGINT", () => {
     debugLogger.info("[TUI][CLI] SIGINT received");
   });
-  setLocale(resolveLocaleArg(args));
+  // Resolve o idioma uma vez: --locale > variáveis de ambiente > env.yaml.
+  // Sem isto, o menu TUI e os logs iniciais ignoram `locale:` do env.yaml.
+  const resolvedLocale = resolveLocale({ cliLocale: resolveLocaleArg(args) });
+  setLocale(resolvedLocale);
 
   const baseProgram = new Command();
 
@@ -101,7 +105,7 @@ const main = async (): Promise<void> => {
           `[TUI][CLI] runMenu start suppressInitialEscapeMs=${suppressInitialEscapeMs} justReturnedFromCommand=${justReturnedFromCommand}`
         );
         try {
-          const { selection } = await runMenu(resolveLocaleArg(args), suppressInitialEscapeMs, appendMenuLog, host);
+          const { selection } = await runMenu(resolvedLocale, suppressInitialEscapeMs, appendMenuLog, host);
           debugLogger.info(
             `[TUI][CLI] runMenu result selection=${selection?.command ?? "null"} suppressInitialEscapeMs=${suppressInitialEscapeMs}`
           );

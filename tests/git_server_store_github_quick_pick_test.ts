@@ -24,6 +24,9 @@ const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "paje-github-device-flow-
 process.env.HOME = tempHome;
 process.env.USERPROFILE = tempHome;
 process.env.PAJE_SKIP_SSH_STORE = "1";
+// Evita abrir o navegador real em https://github.com/login/device/... ao
+// exercitar o device flow neste teste.
+process.env.PAJE_NO_BROWSER = "1";
 
 const pajeDir = path.join(tempHome, ".paje");
 fs.mkdirSync(pajeDir, { recursive: true });

@@ -8,6 +8,7 @@ import { setLocale, t } from "../../i18n/index.js";
 import { GitLabApi } from "./gitlabApi.js";
 import { GitHubApi } from "./githubApi.js";
 import { resolveGitSyncConfig } from "./core/gitSyncConfig.js";
+import { resolveLocale } from "./core/localeResolver.js";
 import { buildParameter, type CommandParameters, type ParameterSource } from "./core/parameters.js";
 import {
   resolveEnvBooleanWithSource,
@@ -1731,7 +1732,7 @@ const buildSshKeyStoreParameters = (options: SshKeyStoreCliOptions, hasCliArg: (
 };
 
 export const buildInitialParameters = (locale?: string): CommandParameters[] => {
-  setLocale(locale);
+  setLocale(resolveLocale({ cliLocale: locale }));
   const hasCliArg = (_flag: string): boolean => false;
   const resolveCliBoolean = (_flag: string): boolean | undefined => undefined;
   const { parameters: gitSyncParameters } = resolveGitSyncConfig({}, hasCliArg, resolveCliBoolean);
@@ -1767,7 +1768,7 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
     .option("--dry-run", t("cli.command.gitSync.options.dryRun"), false)
     .option("--fix-remotes", t("cli.command.gitSync.options.fixRemotes"), false)
     .action(async function (this: Command, options: GitSyncCliOptions) {
-      setLocale(options.locale);
+      setLocale(resolveLocale({ cliLocale: options.locale, envFile: options.envFile }));
       const logBroker = new LoggerBroker();
       if (!session) {
         logBroker.addTransport(createConsoleTransport("cli-console", "info"));
@@ -3075,7 +3076,7 @@ export const configureSshKeyStoreCommand = (program: Command, session?: TuiSessi
     .option("--sync-repos <pattern>", t("cli.command.gitServerStore.options.syncRepos"))
     .option("--locale <locale>", t("cli.command.gitServerStore.options.locale"))
     .action(async (options: SshKeyStoreCliOptions) => {
-      setLocale(options.locale);
+      setLocale(resolveLocale({ cliLocale: options.locale, envFile: options.envFile }));
       // The credential-bootstrap flow below (SSH key setup, web-login
       // scraping, token creation/rotation) used to only ever show up in the
       // ephemeral TUI modal or a bare console.log — the file transport here

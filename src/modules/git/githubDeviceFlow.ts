@@ -130,7 +130,14 @@ export const pollGitHubDeviceAccessToken = async (
 // Best-effort only: the code + URL are always shown to the user too, so a
 // headless/remote session (or a platform this doesn't recognize) still has
 // a way forward — it just means opening the link by hand.
+//
+// Set PAJE_NO_BROWSER (any non-empty value) to suppress the browser launch
+// entirely — used by the test suite so the device-flow tests don't spawn
+// real browser tabs, and useful for headless/CI runs.
 export const openInBrowser = (url: string): void => {
+  if (process.env.PAJE_NO_BROWSER) {
+    return;
+  }
   const platform = process.platform;
   if (platform === "win32") {
     execFile("cmd", ["/c", "start", "", url], { windowsHide: true }, () => undefined);
