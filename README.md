@@ -2,6 +2,38 @@
 
 O PAJÉ automatiza tarefas repetitivas de ambiente de desenvolvimento com servidores Git (GitLab e GitHub): sincronização paralela de repositórios, gerenciamento de chaves SSH e tokens pessoais de acesso.
 
+## Índice
+
+- [Características](#características)
+  - [Sincronização](#sincronização)
+  - [Branches](#branches)
+  - [Autenticação e segurança](#autenticação-e-segurança)
+  - [Configuração e persistência](#configuração-e-persistência)
+  - [Interface](#interface)
+  - [Multiplataforma](#multiplataforma)
+- [Requisitos](#requisitos)
+- [Instalação](#instalação)
+  - [Linux, macOS ou WSL](#linux-macos-ou-wsl)
+  - [Windows (PowerShell)](#windows-powershell)
+  - [Windows (cmd)](#windows-cmd)
+- [Como executar](#como-executar)
+- [Funcionalidades](#funcionalidades)
+  - [`git-sync` — sincronizar repositórios Git](#git-sync--sincronizar-repositórios-git)
+  - [`git-server-store` — registrar e editar servidores](#git-server-store--registrar-e-editar-servidores)
+  - [Extensão VSCode](#extensão-vscode)
+- [Propriedades por servidor (`~/.paje/git-servers.json`)](#propriedades-por-servidor-pajegit-serversjson)
+- [Configuração por arquivo (`env.yaml`)](#configuração-por-arquivo-envyaml)
+- [Interface TUI](#interface-tui)
+  - [Editor de parâmetros (`Ctrl+E`)](#editor-de-parâmetros-ctrle)
+  - [Atalhos globais](#atalhos-globais)
+  - [Atalhos do menu](#atalhos-do-menu)
+  - [Atalhos da árvore git-sync](#atalhos-da-árvore-git-sync)
+- [Testes](#testes)
+- [Roadmap](#roadmap)
+  - [Novas funcionalidades planejadas](#novas-funcionalidades-planejadas)
+  - [Bugs conhecidos](#bugs-conhecidos)
+- [Documentação técnica](#documentação-técnica)
+
 ## Características
 
 ### Sincronização
