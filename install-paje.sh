@@ -282,15 +282,32 @@ ensure_paje_on_path() {
 
   local rc_file
   rc_file="$(detect_shell_rc)"
+  local marker="# PAJÉ - PATH"
   local export_line
   export_line="export PATH=\"$dest_dir:\$PATH\""
 
   if [[ -f "$rc_file" ]] && grep -Fxq "$export_line" "$rc_file"; then
     log_info "PATH já contém o PAJÉ em $rc_file."
+  elif [[ -f "$rc_file" ]] && grep -Fxq "$marker" "$rc_file"; then
+    # Já existe um bloco do PAJÉ, mas apontando para outro diretório (ex.:
+    # reinstalação em local diferente). Atualiza a linha existente em vez de
+    # anexar um segundo bloco duplicado.
+    log_info "Atualizando entrada do PAJÉ no PATH em $rc_file (diretório mudou)."
+    local marker_line total_lines
+    marker_line="$(grep -Fxn "$marker" "$rc_file" | head -n1 | cut -d: -f1)"
+    total_lines="$(wc -l <"$rc_file")"
+    if [[ "$marker_line" -ge "$total_lines" ]]; then
+      printf "%s\n" "$export_line" >>"$rc_file" || abort "Falha ao atualizar $rc_file"
+    else
+      awk -v n="$((marker_line + 1))" -v newline="$export_line" \
+        'NR==n {print newline; next} {print}' "$rc_file" >"$rc_file.tmp" \
+        && mv "$rc_file.tmp" "$rc_file" \
+        || abort "Falha ao atualizar $rc_file"
+    fi
   else
     log_info "Adicionando PAJÉ ao PATH em $rc_file"
     {
-      printf "\n# PAJÉ - PATH\n"
+      printf "\n%s\n" "$marker"
       printf "%s\n" "$export_line"
     } >>"$rc_file" || abort "Falha ao atualizar $rc_file"
   fi
