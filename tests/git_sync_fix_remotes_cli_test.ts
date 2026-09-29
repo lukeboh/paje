@@ -135,8 +135,8 @@ try {
 
   const gitLog = fs.readFileSync(gitLogPath, "utf-8");
   assert.ok(
-    gitLog.includes("remote set-url origin https://oauth2:glpat-x@gitlab.example.com/grupo/repo.git"),
-    "Deve ter reescrito o remote para a URL HTTPS+token (host sem associação SSH nesta HOME de teste)"
+    gitLog.includes("remote set-url origin https://gitlab.example.com/grupo/repo.git"),
+    "Deve ter reescrito o remote para a URL HTTPS limpa (host sem associação SSH nesta HOME de teste)"
   );
   assert.ok(
     !gitLog.includes(" clone "),

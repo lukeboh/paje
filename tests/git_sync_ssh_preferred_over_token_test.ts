@@ -4,18 +4,13 @@ import os from "node:os";
 import path from "node:path";
 import type { LogEntry } from "../src/modules/git/core/loggerBroker.js";
 
-// Regressão: gitSyncService.ts calculava hasValidSshAssociation(host) mas só
-// usava o resultado para decidir se um token era exigido / se ensureSshKey
-// deveria rodar — nunca para decidir se deveria montar pajeHttpUrl (URL
-// HTTPS com o token embutido). Resultado: sempre que um servidor tinha um
-// token (o que acontece em praticamente todo servidor, já que o próprio
-// fluxo de cadastro via SSH também gera um token só para a API), pajeHttpUrl
-// era preenchida e parallelSync.ts a usava para clone/pull/push em vez da
-// URL SSH — contrariando docs/arquitetura.md e a própria mensagem exibida
-// ao usuário após configurar SSH. Este teste cobre os três pontos onde
-// pajeHttpUrl era montada (cache-hit, fresh-fetch GitLab, fresh-fetch
-// GitHub), garantindo que ela só é preenchida quando o host NÃO tem
-// associação SSH válida.
+// Regressão: servidores GitLab com SSH configurado no PAJÉ devem preferir SSH
+// para clone/pull/push em vez de HTTPS com token (pajeHttpUrl). Porém, servidores
+// GitHub no PAJÉ autenticam via OAuth Device Flow / PAT e operam sobre HTTPS,
+// assim como servidores com useBasicAuth, independentemente de haver uma chave
+// pessoal para github.com no ~/.ssh/config do desenvolvedor.
+// Este teste garante que GitLab-SSH usa SSH (sem pajeHttpUrl), enquanto GitLab-Token
+// e servidores GitHub recebem a pajeHttpUrl limpa para uso com o git credential helper.
 
 const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "paje-ssh-preferred-home-"));
 const originalHome = process.env.HOME;
@@ -139,6 +134,7 @@ try {
       servers: [
         { serverName: "GitLab-SSH", groups: [], projects: [cachedProject(gitlabSshHost, 1)] },
         { serverName: "GitLab-Token", groups: [], projects: [cachedProject(gitlabTokenHost, 2)] },
+        { serverName: "GitHub-SSH", groups: [], projects: [cachedProject(githubSshHost, 3)] },
       ],
       statusMap: {},
     })
@@ -150,16 +146,24 @@ try {
 
   const cacheSshProject = cacheView.projects?.find((p) => p.path_with_namespace === "grupo/repo" && p.id === 1);
   const cacheTokenProject = cacheView.projects?.find((p) => p.id === 2);
+  const cacheGithubProject = cacheView.projects?.find((p) => p.id === 3);
   assert.ok(cacheSshProject, "Projeto do servidor SSH deve estar presente no cache-hit");
   assert.ok(cacheTokenProject, "Projeto do servidor sem SSH deve estar presente no cache-hit");
+  assert.ok(cacheGithubProject, "Projeto do servidor GitHub deve estar presente no cache-hit");
   assert.equal(
     cacheSshProject!.pajeHttpUrl,
     undefined,
     "Host com associação SSH válida não deve receber pajeHttpUrl mesmo com token configurado (cache-hit)"
   );
-  assert.ok(
-    cacheTokenProject!.pajeHttpUrl?.startsWith("https://oauth2:glpat-used-for-clone@"),
-    "Host sem associação SSH deve continuar recebendo pajeHttpUrl com token embutido (cache-hit)"
+  assert.equal(
+    cacheTokenProject!.pajeHttpUrl,
+    `https://${gitlabTokenHost}/grupo/repo.git`,
+    "Host sem associação SSH deve receber pajeHttpUrl limpa sem token embutido (cache-hit)"
+  );
+  assert.equal(
+    cacheGithubProject!.pajeHttpUrl,
+    `https://${githubSshHost}/grupo/repo.git`,
+    "GitHub em cache-hit deve sempre receber pajeHttpUrl limpa mesmo com Host em ~/.ssh/config"
   );
 
   // -------------------------------------------------------------------
@@ -239,24 +243,28 @@ try {
     undefined,
     "GitLab com host SSH-associado não deve receber pajeHttpUrl (fresh-fetch)"
   );
-  assert.ok(
-    byId(12)?.pajeHttpUrl?.startsWith("https://oauth2:glpat-used-for-clone@"),
-    "GitLab sem associação SSH deve receber pajeHttpUrl com token embutido (fresh-fetch)"
+  assert.equal(
+    byId(12)?.pajeHttpUrl,
+    `https://${gitlabTokenHost}/grupo/repo.git`,
+    "GitLab sem associação SSH deve receber pajeHttpUrl limpa sem token embutido (fresh-fetch)"
   );
   assert.equal(
     byId(21)?.pajeHttpUrl,
-    undefined,
-    "GitHub com host SSH-associado não deve receber pajeHttpUrl (fresh-fetch)"
+    `https://${githubSshHost}/grupo/repo.git`,
+    "GitHub sempre usa HTTPS em PAJÉ mesmo se host tiver entrada em ~/.ssh/config (fresh-fetch)"
   );
-  assert.ok(
-    byId(22)?.pajeHttpUrl?.startsWith("https://x-access-token:ghp-used-for-clone@"),
-    "GitHub sem associação SSH deve receber pajeHttpUrl com token embutido (fresh-fetch)"
+  assert.equal(
+    byId(22)?.pajeHttpUrl,
+    `https://${githubTokenHost}/grupo/repo.git`,
+    "GitHub sem associação SSH deve receber pajeHttpUrl limpa sem token embutido (fresh-fetch)"
   );
 } finally {
   globalThis.fetch = originalFetch;
   process.env.HOME = originalHome;
   process.env.USERPROFILE = originalUserProfile;
-  fs.rmSync(tmpHome, { recursive: true, force: true });
+  try {
+    fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  } catch {}
 }
 
 console.log("git_sync_ssh_preferred_over_token_test: OK");

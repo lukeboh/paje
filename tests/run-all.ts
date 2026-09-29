@@ -80,6 +80,7 @@ const testFiles = [
   "./tui_orientation_bar_truncate_test.js",
   "./vscode_tree_adapter_test.js",
   "./vscode_extension_smoke_test.js",
+  "./git_credential_helper_test.js",
 ];
 
 // One crashing test must not silently skip the rest of the suite: import each

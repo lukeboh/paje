@@ -97,20 +97,20 @@ const resetLog = () => fs.writeFileSync(gitLogPath, "");
 const readLog = () => (fs.existsSync(gitLogPath) ? fs.readFileSync(gitLogPath, "utf-8") : "");
 
 try {
-  // Caso 1 (pré-existente): remote SSH, target resolvido para HTTPS+token
-  // (host sem associação SSH válida) -> deve migrar SSH -> HTTPS.
+  // Caso 1: remote SSH, target resolvido para HTTPS limpo
+  // (host sem associação SSH válida) -> deve migrar SSH -> HTTPS limpo.
   resetLog();
   process.env.CURRENT_REMOTE = "git@exemplo.com:grupo/repo.git";
   await syncRepository({
     ...baseTarget,
-    httpUrl: "https://oauth2:newtoken@exemplo.com/grupo/repo.git",
+    httpUrl: "https://exemplo.com/grupo/repo.git",
   });
   assert.ok(
-    readLog().includes("remote set-url origin https://oauth2:newtoken@exemplo.com/grupo/repo.git"),
-    "Deve migrar remote SSH para HTTPS+token quando target.httpUrl está presente"
+    readLog().includes("remote set-url origin https://exemplo.com/grupo/repo.git"),
+    "Deve migrar remote SSH para HTTPS limpo quando target.httpUrl está presente"
   );
 
-  // Caso 2 (nova correção): remote HTTPS+token deixado por uma sincronização
+  // Caso 2: remote HTTPS+token deixado por uma sincronização
   // anterior (ou por versões antes desta correção), target agora resolvido
   // para SSH (host passou a ter associação SSH válida) -> deve migrar de
   // volta HTTPS -> SSH.
@@ -137,6 +137,19 @@ try {
   assert.ok(
     !readLog().includes("remote set-url"),
     "Não deve reescrever um remote HTTPS configurado manualmente pelo usuário"
+  );
+
+  // Caso 4: remote HTTPS antigo deixado com token embutido (oauth2:token@), target
+  // agora resolvido para HTTPS limpo -> deve sanitizar o remote e migrar para HTTPS limpo.
+  resetLog();
+  process.env.CURRENT_REMOTE = "https://oauth2:oldtoken@exemplo.com/grupo/repo.git";
+  await syncRepository({
+    ...baseTarget,
+    httpUrl: "https://exemplo.com/grupo/repo.git",
+  });
+  assert.ok(
+    readLog().includes("remote set-url origin https://exemplo.com/grupo/repo.git"),
+    "Deve sanitizar remote com token embutido para HTTPS limpo"
   );
 } finally {
   process.env.PATH = originalPath;

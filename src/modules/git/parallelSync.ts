@@ -223,13 +223,15 @@ export const reconcileRemoteUrl = async (
     return "unchanged";
   }
   if (target.httpUrl) {
-    if (currentRemote.startsWith("git@") || currentRemote.startsWith("ssh://")) {
+    const isSsh = currentRemote.startsWith("git@") || currentRemote.startsWith("ssh://");
+    const hasEmbeddedToken = /^https:\/\/(oauth2|x-access-token):/i.test(currentRemote);
+    if ((isSsh || hasEmbeddedToken) && currentRemote !== target.httpUrl) {
       await runGit(["-C", target.localPath, "remote", "set-url", "origin", target.httpUrl]);
       return "migrated-to-http";
     }
     return "unchanged";
   }
-  if (target.sshUrl && /^https:\/\/(oauth2|x-access-token):/.test(currentRemote)) {
+  if (target.sshUrl && /^https:\/\/(oauth2|x-access-token):/i.test(currentRemote)) {
     await runGit(["-C", target.localPath, "remote", "set-url", "origin", target.sshUrl]);
     return "migrated-to-ssh";
   }

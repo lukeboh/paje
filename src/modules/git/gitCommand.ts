@@ -77,6 +77,7 @@ import {
   type GitCredentials,
 } from "./sshManager.js";
 import { readGitServers, writeGitServers } from "./persistence.js";
+import { approveGitCredential } from "./gitCredentialHelper.js";
 import {
   type GitServerEntry,
   type GitSyncSummary,
@@ -88,6 +89,7 @@ import {
   withToken,
   collectFixRemoteTargets,
   fixRemotesForTargets,
+  isServerSshActive,
 } from "./core/gitSyncService.js";
 import {
   requestGitHubDeviceCode,
@@ -760,7 +762,7 @@ const hasUsableServerCredentials = (server: GitServerEntry): boolean => {
     return true;
   }
   try {
-    return hasValidSshAssociation(new URL(server.baseUrl).hostname);
+    return isServerSshActive(server, new URL(server.baseUrl).hostname);
   } catch {
     return false;
   }
@@ -937,6 +939,13 @@ const storeGitHubServer = async (
       };
       const merged = mergeServer(existingServers, serverWithToken);
       writeGitServers(merged.servers);
+      await approveGitCredential({
+        baseUrl: server.baseUrl,
+        token,
+        username: serverWithToken.username,
+        isGitHub: true,
+        logger,
+      }).catch(() => {});
       return;
     } catch {
       logger(t("cli.prompt.github.tokenInvalid"));
@@ -990,6 +999,13 @@ const storeGitHubServer = async (
   };
   const merged = mergeServer(existingServers, serverWithToken);
   writeGitServers(merged.servers);
+  await approveGitCredential({
+    baseUrl: server.baseUrl,
+    token,
+    username: login,
+    isGitHub: true,
+    logger,
+  }).catch(() => {});
 };
 
 const storeSshKeyOnly = async (
@@ -1082,9 +1098,16 @@ const storeSshKeyOnly = async (
     }
 
     const existingServersPaste = readGitServers<GitServerEntry[]>([]);
-    const serverWithPastedToken = withToken(server, pastedToken);
+    const serverWithPastedToken = withToken({ ...server, useBasicAuth: true }, pastedToken);
     const mergedPaste = mergeServer(existingServersPaste, serverWithPastedToken);
     writeGitServers(mergedPaste.servers);
+    await approveGitCredential({
+      baseUrl: server.baseUrl,
+      token: pastedToken,
+      username: server.username,
+      isGitHub: server.type === "github",
+      logger,
+    }).catch(() => {});
     return;
   }
 
@@ -1225,6 +1248,13 @@ const storeSshKeyOnly = async (
     const basicAuthServerWithToken = withToken(server, tokenResultBA.token);
     const basicAuthMergedServers = mergeServer(existingServersBA, basicAuthServerWithToken);
     writeGitServers(basicAuthMergedServers.servers);
+    await approveGitCredential({
+      baseUrl: server.baseUrl,
+      token: tokenResultBA.token,
+      username: server.username,
+      isGitHub: false,
+      logger,
+    }).catch(() => {});
     return;
   }
 
@@ -1405,6 +1435,13 @@ const storeSshKeyOnly = async (
       const serverWithToken = withToken(server, rotated.token);
       const mergedServers = mergeServer(existingServers, serverWithToken);
       writeGitServers(mergedServers.servers);
+      await approveGitCredential({
+        baseUrl: server.baseUrl,
+        token: rotated.token,
+        username: server.username,
+        isGitHub: false,
+        logger,
+      }).catch(() => {});
       logger?.(t("cli.log.tokenRotateSuccess", { baseUrl: normalizedBaseUrl }));
       return;
     } catch (error) {
@@ -1448,6 +1485,13 @@ const storeSshKeyOnly = async (
   const serverWithToken = withToken(server, tokenResult.token);
   const mergedServers = mergeServer(existingServers, serverWithToken);
   writeGitServers(mergedServers.servers);
+  await approveGitCredential({
+    baseUrl: server.baseUrl,
+    token: tokenResult.token,
+    username: server.username,
+    isGitHub: false,
+    logger,
+  }).catch(() => {});
 };
 
 const findNodeById = (nodes: GitLabTreeNode[], id: string): GitLabTreeNode | undefined => {
@@ -2035,6 +2079,13 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
             const existingServers = readGitServers<GitServerEntry[]>([]);
             const merged = mergeServer(existingServers, withToken(server, tokenResult.token));
             writeGitServers(merged.servers);
+            await approveGitCredential({
+              baseUrl: server.baseUrl,
+              token: tokenResult.token,
+              username: server.username,
+              isGitHub: false,
+              logger: logToTuiPlain,
+            }).catch(() => {});
             logToTui(t("cli.log.tokenValid", { baseUrl: server.baseUrl }));
             return { token: tokenResult.token };
           } catch (error) {
@@ -2074,7 +2125,14 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
           );
         });
         const changedCount = fixResults.filter((result) => result.outcome !== "unchanged").length;
-        logInfo(t("cli.fixRemotes.summary", { changed: String(changedCount), total: String(fixResults.length) }));
+        const unchangedCount = fixResults.length - changedCount;
+        logInfo(
+          t("cli.fixRemotes.summary", {
+            changed: String(changedCount),
+            unchanged: String(unchangedCount),
+            total: String(fixResults.length),
+          })
+        );
         return;
       }
 
@@ -2707,7 +2765,7 @@ const promptGitServerForm = async (
 
 const buildServerAuthLabel = (server: GitServerEntry): string => {
   const host = new URL(server.baseUrl).hostname;
-  return hasValidSshAssociation(host) ? t("cli.prompt.manageServers.authSsh") : t("cli.prompt.manageServers.authBasic");
+  return isServerSshActive(server, host) ? t("cli.prompt.manageServers.authSsh") : t("cli.prompt.manageServers.authBasic");
 };
 
 const buildServerTokenLabel = (server: GitServerEntry): string =>
@@ -2849,7 +2907,7 @@ const promptAndPersistGitServer = async (
     return process.argv.some((arg) => arg === dashed || arg.startsWith(`${dashed}=`));
   };
   const existingHasSshAssociation = existingServer
-    ? hasValidSshAssociation(new URL(existingServer.baseUrl).hostname)
+    ? isServerSshActive(existingServer, new URL(existingServer.baseUrl).hostname)
     : false;
   // GitHub has no username/password bootstrap at all (storeGitHubServer
   // always auto-detects or asks to paste a token) — only ask the 3-way
@@ -2946,6 +3004,7 @@ const promptAndPersistGitServer = async (
     tokenName: formResult.tokenName,
     tokenScopes: options.tokenScopes ?? existingServer?.tokenScopes,
     tokenExpiresAt: options.tokenExpiresAt ?? existingServer?.tokenExpiresAt,
+    useBasicAuth: useBasicAuth || existingServer?.useBasicAuth,
   };
   const cliOverrides: SshKeyStoreCliOptions = {
     ...options,
@@ -2978,7 +3037,7 @@ const ensureServerHasCredentials = async (
   cliOptions: SshKeyStoreCliOptions,
   logBroker: LoggerBroker
 ): Promise<void> => {
-  const hasSshAssociation = hasValidSshAssociation(new URL(server.baseUrl).hostname);
+  const hasSshAssociation = isServerSshActive(server, new URL(server.baseUrl).hostname);
   if (server.token || hasSshAssociation) {
     return;
   }

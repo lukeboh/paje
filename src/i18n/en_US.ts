@@ -148,8 +148,8 @@ const enUS: PtBrTranslations = {
       bulkFailed: "{{label}}: failed — {{error}}",
       fixRemotesNoLocalClones: "No locally cloned repository was found to fix.",
       fixRemotesMigratedToSsh: "{{path}}: remote fixed to SSH.",
-      fixRemotesMigratedToHttp: "{{path}}: remote fixed to HTTPS+token.",
-      fixRemotesSummary: "Remotes fixed: {{changed}} of {{total}} repository(ies) checked.",
+      fixRemotesMigratedToHttp: "{{path}}: remote fixed to HTTPS.",
+      fixRemotesSummary: "Remotes fixed: {{changed}} of {{total}} repository(ies) checked ({{unchanged}} already correct).",
       archivedTag: "ARCHIVED",
       exitAtDirectoryInvalid: "Select an already cloned repository or a folder that exists locally to exit into its directory.",
       exitAtDirectoryConfirmTitle: "Exit and change directory",
@@ -530,8 +530,8 @@ const enUS: PtBrTranslations = {
     fixRemotes: {
       noLocalClones: "No locally cloned repository was found to fix.",
       migratedToSsh: "{{path}}: remote fixed to SSH.",
-      migratedToHttp: "{{path}}: remote fixed to HTTPS+token.",
-      summary: "Remotes fixed: {{changed}} of {{total}} repository(ies) checked.",
+      migratedToHttp: "{{path}}: remote fixed to HTTPS.",
+      summary: "Remotes fixed: {{changed}} of {{total}} repository(ies) checked ({{unchanged}} already correct).",
     },
     sync: {
       serverCount: "GitLab servers: {{count}}",

@@ -928,8 +928,13 @@ export const renderRepositoryTree = async (
             );
           });
           const changed = results.filter((result) => result.outcome !== "unchanged").length;
+          const unchanged = results.length - changed;
           appendLogEntry(
-            t("tui.tree.fixRemotesSummary", { changed: String(changed), total: String(results.length) }),
+            t("tui.tree.fixRemotesSummary", {
+              changed: String(changed),
+              unchanged: String(unchanged),
+              total: String(results.length),
+            }),
             "info"
           );
         } finally {

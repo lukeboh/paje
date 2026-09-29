@@ -7,6 +7,7 @@ import { antPatternToRegex, compileAntPatterns, matchesAntPatterns, splitFilterP
 import { resolveLocalPathConflicts, resolveProjectLocalPath } from "../gitPathUtils.js";
 import { readGitServers, writeGitServers, readGitTreeCache, writeGitTreeCache } from "../persistence.js";
 import { GitHubApi } from "../githubApi.js";
+import { approveGitCredential } from "../gitCredentialHelper.js";
 import {
   addHostToKnownHosts,
   getIdentityFileForHost,
@@ -71,6 +72,7 @@ export type GitServerEntry = {
   tokenName?: string;
   tokenScopes?: string;
   tokenExpiresAt?: string;
+  useBasicAuth?: boolean;
 };
 
 // Every place that persists a fresh/rotated token should go through this
@@ -435,24 +437,42 @@ const hasValidSshAssociation = (host: string): boolean => {
   return fs.existsSync(resolveSshIdentityPath(identityPath));
 };
 
+export const isServerSshActive = (server: GitServerEntry, host: string): boolean => {
+  if (server.type === "github") {
+    return false;
+  }
+  if (server.useBasicAuth) {
+    return false;
+  }
+  return hasValidSshAssociation(host);
+};
+
 // Git plumbing (clone/pull/push) must prefer SSH whenever the host already
-// has a valid association in ~/.ssh/config — the token is reserved for REST
-// API calls only (see docs/arquitetura.md, tabela de autenticação). GitLab
-// uses "oauth2" as the HTTP Basic Auth username for token auth; GitHub uses
-// "x-access-token".
+// has a valid association in ~/.ssh/config. When no SSH association exists,
+// git uses HTTPS with credentials managed by Git's credential helper (store).
+// The remote URL itself remains clean (no embedded token in .git/config).
 const buildPajeHttpUrl = (
   httpUrlToRepo: string,
-  username: "oauth2" | "x-access-token",
-  token: string | undefined,
-  hasSshAssociation: boolean
+  arg2: string | undefined,
+  arg3: boolean | string | undefined,
+  arg4?: boolean
 ): string | undefined => {
+  let token: string | undefined;
+  let hasSshAssociation = false;
+  if (typeof arg3 === "boolean") {
+    token = arg2;
+    hasSshAssociation = arg3;
+  } else {
+    token = typeof arg3 === "string" ? arg3 : undefined;
+    hasSshAssociation = Boolean(arg4);
+  }
   if (!token || hasSshAssociation) {
     return undefined;
   }
   try {
     const url = new URL(httpUrlToRepo);
-    url.username = username;
-    url.password = token;
+    url.username = "";
+    url.password = "";
     return url.toString();
   } catch {
     return undefined;
@@ -511,7 +531,7 @@ const ensureKnownHostsForServers = async (
     try {
       const host = new URL(server.baseUrl).hostname;
       const identityFile = getIdentityFileForHost(host);
-      if (identityFile && hasValidSshAssociation(host)) {
+      if (identityFile && isServerSshActive(server, host)) {
         hostIdentities.set(host, resolveSshIdentityPath(identityFile));
       }
     } catch {
@@ -798,7 +818,16 @@ export const createGitSyncCore = (): GitSyncCore => {
                 return "";
               }
             })();
-            const hasSshAssociation = serverHost ? hasValidSshAssociation(serverHost) : false;
+            const hasSshAssociation = serverHost ? isServerSshActive(server, serverHost) : false;
+            if (server.token && !hasSshAssociation) {
+              void approveGitCredential({
+                baseUrl: server.baseUrl,
+                token: server.token,
+                username: server.username,
+                isGitHub: server.type === "github",
+                logger: (message) => logger.debug(message),
+              }).catch(() => {});
+            }
             const username = server.type === "github" ? "x-access-token" : "oauth2";
             const projectsWithHttpUrl = projects.map((project) => {
               const pajeHttpUrl = buildPajeHttpUrl(project.http_url_to_repo, username, server.token, hasSshAssociation);
@@ -908,12 +937,21 @@ export const createGitSyncCore = (): GitSyncCore => {
       const serverResults = await Promise.all(
         servers.map(async (server) => {
           const serverHost = new URL(server.baseUrl).hostname;
-          const hasSshAssociation = hasValidSshAssociation(serverHost);
+          const hasSshAssociation = isServerSshActive(server, serverHost);
 
           if (server.type === "github") {
             if (!server.token) {
               logger.warn(t("cli.sync.noAuthConfigured", { server: server.name }));
               return null;
+            }
+            if (!hasSshAssociation) {
+              void approveGitCredential({
+                baseUrl: server.baseUrl,
+                token: server.token,
+                username: server.username,
+                isGitHub: true,
+                logger: (message) => logger.debug(message),
+              }).catch(() => {});
             }
             const api = new GitHubApi({
               baseUrl: server.baseUrl,
@@ -970,6 +1008,16 @@ export const createGitSyncCore = (): GitSyncCore => {
             return null;
           }
 
+          if (resolvedToken && !hasSshAssociation) {
+            void approveGitCredential({
+              baseUrl: server.baseUrl,
+              token: resolvedToken,
+              username: server.username,
+              isGitHub: false,
+              logger: (message) => logger.debug(message),
+            }).catch(() => {});
+          }
+
           let api = new GitLabApi({
             baseUrl: server.baseUrl,
             token: resolvedToken,
@@ -977,7 +1025,7 @@ export const createGitSyncCore = (): GitSyncCore => {
             logger: (message) => logger.debug(message),
           });
 
-          if (hasSshAssociation || api.hasAuth()) {
+          if (!server.useBasicAuth && (hasSshAssociation || api.hasAuth())) {
             await ensureSshKey(api, logger, config);
           }
 
@@ -1054,6 +1102,15 @@ export const createGitSyncCore = (): GitSyncCore => {
             const existingServers = readGitServers<GitServerEntry[]>([]);
             const merged = mergeServer(existingServers, withToken(server, healedToken));
             writeGitServers(merged.servers);
+            if (!hasSshAssociation) {
+              void approveGitCredential({
+                baseUrl: server.baseUrl,
+                token: healedToken,
+                username: server.username,
+                isGitHub: false,
+                logger: (message) => logger.debug(message),
+              }).catch(() => {});
+            }
 
             resolvedToken = healedToken;
             api = new GitLabApi({
@@ -1250,7 +1307,14 @@ export const createGitSyncCore = (): GitSyncCore => {
         );
       });
       const changed = results.filter((result) => result.outcome !== "unchanged").length;
-      logger.info(t("cli.fixRemotes.summary", { changed: String(changed), total: String(results.length) }));
+      const unchanged = results.length - changed;
+      logger.info(
+        t("cli.fixRemotes.summary", {
+          changed: String(changed),
+          unchanged: String(unchanged),
+          total: String(results.length),
+        })
+      );
       return { results };
     },
   };

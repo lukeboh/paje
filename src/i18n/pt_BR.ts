@@ -146,8 +146,8 @@ const ptBR = {
       bulkFailed: "{{label}}: falhou — {{error}}",
       fixRemotesNoLocalClones: "Nenhum repositório clonado localmente foi encontrado para corrigir.",
       fixRemotesMigratedToSsh: "{{path}}: remote corrigido para SSH.",
-      fixRemotesMigratedToHttp: "{{path}}: remote corrigido para HTTPS+token.",
-      fixRemotesSummary: "Remotes corrigidos: {{changed}} de {{total}} repositório(s) verificado(s).",
+      fixRemotesMigratedToHttp: "{{path}}: remote corrigido para HTTPS.",
+      fixRemotesSummary: "Remotes corrigidos: {{changed}} de {{total}} repositório(s) verificado(s) ({{unchanged}} já correto(s)).",
       archivedTag: "ARQUIVADO",
       exitAtDirectoryInvalid: "Selecione um repositório já clonado ou uma pasta existente localmente para sair no diretório dela.",
       exitAtDirectoryConfirmTitle: "Sair e mudar de diretório",
@@ -530,8 +530,8 @@ const ptBR = {
     fixRemotes: {
       noLocalClones: "Nenhum repositório clonado localmente foi encontrado para corrigir.",
       migratedToSsh: "{{path}}: remote corrigido para SSH.",
-      migratedToHttp: "{{path}}: remote corrigido para HTTPS+token.",
-      summary: "Remotes corrigidos: {{changed}} de {{total}} repositório(s) verificado(s).",
+      migratedToHttp: "{{path}}: remote corrigido para HTTPS.",
+      summary: "Remotes corrigidos: {{changed}} de {{total}} repositório(s) verificado(s) ({{unchanged}} já correto(s)).",
     },
     sync: {
       serverCount: "Servidores GitLab: {{count}}",

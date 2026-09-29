@@ -500,9 +500,9 @@ credencial persistente.
 | Servidor | Modo | Operações git usam |
 |---|---|---|
 | GitLab, com chave SSH associada ao host | SSH + token | URL `ssh_url_to_repo` via `~/.ssh/config` para clone/push; token para a API (listar grupos/projetos) — as duas credenciais são usadas juntas, cada uma para sua finalidade |
-| GitLab, só token (sem chave SSH) | HTTPS + PAT | `pajeHttpUrl` com `oauth2:<token>@host` embutido |
+| GitLab, só token (sem chave SSH) | HTTPS + PAT | URL HTTPS limpa (`http_url_to_repo`), autenticação via Git Credential Helper (`credential.helper store`) |
 | GitHub (`type: "github"`), com chave SSH associada ao host | SSH + token | URL `ssh_url_to_repo` via `~/.ssh/config` para clone/push; token para a API (listar orgs/repos) |
-| GitHub (`type: "github"`), sem chave SSH | HTTPS + PAT ou OAuth (device flow) | `pajeHttpUrl` com `x-access-token:<token>@host` embutido — a origem do token (`tokenOrigin`) não muda como ele é usado depois |
+| GitHub (`type: "github"`), sem chave SSH | HTTPS + PAT ou OAuth (device flow) | URL HTTPS limpa (`http_url_to_repo`), autenticação via Git Credential Helper (`credential.helper store`) — a origem do token (`tokenOrigin`) não muda como ele é usado depois |
 
 A associação SSH é decidida por host (`hasValidSshAssociation`, checando
 `~/.ssh/config`), não por um campo no cadastro — então mesmo um servidor
@@ -517,10 +517,10 @@ Como essa decisão é reavaliada a cada carga da árvore, um remote local pode
 ficar desalinhado se a associação SSH do host mudar depois do clone original
 (ex.: a chave só foi configurada mais tarde). `reconcileRemoteUrl`
 (`parallelSync.ts`) mantém o `origin` de cada repositório alinhado com essa
-decisão a cada sincronização — nas duas direções, mas só reescrevendo um
-remote que já tenha o prefixo `oauth2:`/`x-access-token:` embutido pelo
-próprio PAJÉ, ou um `git@`/`ssh://`; nunca um `https://` configurado
-manualmente pelo usuário. `collectFixRemoteTargets` +
+decisão a cada sincronização — sanitizando remotes que ainda tenham o prefixo
+`oauth2:`/`x-access-token:` embutido para a URL HTTPS limpa, ou migrando entre
+SSH e HTTPS conforme a chave SSH existir ou não; nunca alterando um `https://`
+configurado manualmente pelo usuário. `collectFixRemoteTargets` +
 `fixRemotesForTargets` (`gitSyncService.ts`) expõem essa mesma correção como
 ação independente, sem clonar nem sincronizar nada — `Ctrl+U` na TUI
 (alcança todo repositório com clone local, não só os marcados) e

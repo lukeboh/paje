@@ -243,7 +243,7 @@ com uma senha guardada em lugar nenhum.
 1. Valida token existente salvo (se houver) e reutiliza se válido.
 2. Se inválido, rotaciona automaticamente.
 3. Se não houver token, solicita a senha (nunca lida de `env.yaml`), cria novo PAT via login web e persiste — a senha é usada uma única vez e descartada.
-4. As operações `git clone/pull/push` passam a usar URL HTTPS com `oauth2:<token>@host` embutido.
+4. As operações `git clone/pull/push` usam URL HTTPS limpa, com o token configurado no Git Credential Helper (`git config --global credential.helper store`).
 
 **Fluxo "já tenho um token" (`--token`, GitLab):**
 

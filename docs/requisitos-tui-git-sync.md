@@ -161,8 +161,8 @@ Quando um repositório está **divergido** (`ahead > 0` e `behind > 0`), o siste
 ### RF-17 — Corrigir remotes (`Ctrl+U`)
 
 - Diferente dos RF-12/RF-13, alcança **todo** repositório com clone local já existente na árvore carregada, independentemente de estar marcado com checkbox ou não — é uma ação de manutenção, não uma operação sobre a seleção atual.
-- Para cada repositório alcançado, corrige apenas a URL do remote `origin` para a que o PAJÉ resolveria agora (SSH quando o host tem uma chave associada em `~/.ssh/config`, HTTPS com token embutido caso contrário) — nunca clona, nunca faz fetch/pull/push, nunca toca branch ou working tree.
-- Só reescreve um remote que já tenha o prefixo `oauth2:`/`x-access-token:` (GitLab/GitHub, embutido pelo próprio PAJÉ) ou que seja `git@`/`ssh://`; um `https://` configurado manualmente pelo usuário nunca é alterado.
+- Para cada repositório alcançado, corrige apenas a URL do remote `origin` para a que o PAJÉ resolveria agora (SSH quando o host tem uma chave associada em `~/.ssh/config`, HTTPS limpo com Git Credential Helper caso contrário) — nunca clona, nunca faz fetch/pull/push, nunca toca branch ou working tree.
+- Reconcilia remotes SSH e sanitiza remotes HTTPS que ainda tenham o prefixo `oauth2:`/`x-access-token:` (embutido pelo PAJÉ antigamente), migrando para HTTPS limpo; um `https://` limpo configurado manualmente pelo usuário nunca é alterado.
 - Sem nenhum repositório clonado localmente entre os conhecidos, apenas registra um aviso no log e não faz nada.
 - Cada repositório cujo remote foi reescrito gera uma linha de log; ao final, um resumo indica quantos de quantos foram corrigidos.
 - Mesma exclusão mútua dos RF-12/13/14/15: não inicia enquanto uma sincronização ou outra operação em massa estiver em andamento, e vice-versa.

@@ -128,7 +128,7 @@ diagnóstico posterior.
 
 1. Valida token salvo e reutiliza se válido; rotaciona se inválido.
 2. Sem token: solicita usuário/senha (nunca lida de `env.yaml`), cria novo PAT via login web no GitLab e persiste. A senha é usada só nesse instante e descartada em seguida.
-3. Operações git passam a usar `oauth2:<token>@host` na URL HTTPS.
+3. Operações git passam a usar HTTPS limpo com credenciais gerenciadas pelo Git Credential Helper (`credential.helper store`).
 
 ## Fluxo principal — GitLab, opção "Já tenho um token pessoal" (`--token`)
 
