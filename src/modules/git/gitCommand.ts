@@ -76,13 +76,14 @@ import {
   type SshKeyInfo,
   type GitCredentials,
 } from "./sshManager.js";
-import { readGitServers, writeGitServers } from "./persistence.js";
+import { readGitServers, writeGitServers, readGitTreeCache } from "./persistence.js";
 import { approveGitCredential } from "./gitCredentialHelper.js";
 import {
   type GitServerEntry,
   type GitSyncSummary,
   type TokenOrigin,
   createGitSyncCore,
+  computeConfigHash,
   resolveRepoStatus,
   resolveParallels,
   isValidHttpUrl,
@@ -1996,9 +1997,13 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
         return;
       }
 
+      const configHash = computeConfigHash(servers);
+      const cached = readGitTreeCache();
+      const willHitCache = cached?.version === 1 && cached.configHash === configHash;
+
       const spinnerFrames = ["/", "-", "\\", "|"];
       let spinnerFrameIndex = 0;
-      const loadingHandle = session
+      const loadingHandle = (session && !willHitCache)
         ? renderLoadingScreen(
             {
               title: t("app.gitSyncTitle"),
@@ -2011,6 +2016,7 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
           )
         : null;
 
+      let isBackgroundLoading = willHitCache;
       let treeProgress: TuiTreeProgress | null = null;
       const treeProgressRef = (): TuiTreeProgress | null => treeProgress;
       const projectNodeMap = new Map<number, string>();
@@ -2101,6 +2107,18 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
           logToTui(t("cli.http.start", { server: serverName, label: "...", count: requestCount }));
         },
         onStatusRefreshed: session ? deliverStatus : undefined,
+        onBackgroundSyncStart: () => {
+          isBackgroundLoading = true;
+          treeProgressRef()?.setBackgroundLoading?.(true);
+        },
+        onBackgroundSyncEnd: () => {
+          isBackgroundLoading = false;
+          treeProgressRef()?.setBackgroundLoading?.(false);
+        },
+        onTreeUpdated: ({ tree: updatedTree }) => {
+          treeProgressRef()?.updateTree?.(updatedTree);
+          updatedTree.forEach((node) => buildProjectNodeMap(node));
+        },
       }).finally(() => loadingHandle?.stop());
 
       if (filteredProjects.length === 0 && tree.length === 0) {
@@ -2454,8 +2472,10 @@ export const configureGitSyncCommand = (program: Command, session?: TuiSession):
         parameters: session?.getParameters() ?? parametersSummary,
         envFilePath: mergedOptions.envFile,
         initialSelectedNodeId,
+        initialBackgroundLoading: isBackgroundLoading,
         onReady: (handlers) => {
           treeProgress = handlers.progress;
+          handlers.progress.setBackgroundLoading?.(isBackgroundLoading);
           flushPendingStatuses();
           handlers.render();
         },

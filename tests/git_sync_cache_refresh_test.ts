@@ -81,6 +81,8 @@ try {
     verbose: false,
   } as unknown as import("../src/modules/git/core/gitSyncConfig.js").GitSyncConfig;
 
+  let backgroundStarted = false;
+  let backgroundEnded = false;
   const refreshed: Array<{ id: number; state: string }> = [];
   const core = createGitSyncCore();
   const started = Date.now();
@@ -90,10 +92,17 @@ try {
     onStatusRefreshed: (projectId, status) => {
       refreshed.push({ id: projectId, state: status.state });
     },
+    onBackgroundSyncStart: () => {
+      backgroundStarted = true;
+    },
+    onBackgroundSyncEnd: () => {
+      backgroundEnded = true;
+    },
   });
   const elapsed = Date.now() - started;
 
   assert.equal(view.fromCache, true, "loadTree deve responder a partir do cache");
+  assert.equal(backgroundStarted, true, "onBackgroundSyncStart deve ser chamado no cache hit");
   assert.ok(view.tree.length > 0, "Árvore do cache não deve ser vazia");
   assert.equal(view.projects.length, 2, "Ambos os projetos do cache devem ser carregados");
   assert.ok(elapsed < 2000, `Cache hit deve ser rápido (levou ${elapsed}ms)`);
@@ -117,6 +126,9 @@ try {
   refreshed.forEach((r) => {
     assert.equal(r.state, "EMPTY", "Diretórios inexistentes devem resultar em estado EMPTY");
   });
+
+  const allBackgroundDone = await waitFor(() => backgroundEnded);
+  assert.ok(allBackgroundDone, "onBackgroundSyncEnd deve ser chamado ao final do background refresh");
 
   const cacheRewritten = await waitFor(() => {
     try {

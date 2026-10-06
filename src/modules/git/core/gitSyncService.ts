@@ -110,6 +110,9 @@ export type GitSyncLoadOptions = {
   ) => Promise<{ token: string } | null>;
   onRequestStart?: (serverName: string, requestCount: number) => void;
   onStatusRefreshed?: (projectId: number, status: RepoSyncStatus) => void;
+  onBackgroundSyncStart?: () => void;
+  onBackgroundSyncEnd?: () => void;
+  onTreeUpdated?: (data: { tree: GitLabTreeNode[]; projects: GitLabProject[]; statusMap: Record<number, RepoSyncStatus> }) => void;
 };
 
 export type GitSyncProgressHandlers = {
@@ -792,7 +795,16 @@ export const createGitSyncCore = (): GitSyncCore => {
 
       return servers;
     },
-    loadTree: async ({ config, logger, onMissingCredentials, onRequestStart, onStatusRefreshed }) => {
+    loadTree: async ({
+      config,
+      logger,
+      onMissingCredentials,
+      onRequestStart,
+      onStatusRefreshed,
+      onBackgroundSyncStart,
+      onBackgroundSyncEnd,
+      onTreeUpdated,
+    }) => {
       const servers = await createGitSyncCore().listServers({ config, logger });
       if (servers.length === 0) {
         return { header: "GitLab", tree: [], statusMap: {}, projects: [] };
@@ -803,8 +815,235 @@ export const createGitSyncCore = (): GitSyncCore => {
       const configHash = computeConfigHash(servers);
       const cached = readGitTreeCache();
 
+      let listRequestCount = 0;
+      const wrapRequest = async <T,>(server: GitServerEntry, label: string, fn: () => Promise<T>): Promise<T> => {
+        listRequestCount += 1;
+        onRequestStart?.(server.name, listRequestCount);
+        logger.info(t("cli.http.start", { server: server.name, label, count: String(listRequestCount) }));
+        try {
+          const result = await fn();
+          logger.info(t("cli.http.success", { server: server.name, label }));
+          return result;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : t("cli.errors.unknown");
+          logger.error(t("cli.http.fail", { server: server.name, label, message }));
+          throw error;
+        }
+      };
+
+      const fetchRemoteServerResults = async (): Promise<
+        Array<{ server: GitServerEntry; groups: GitLabGroup[]; projects: GitLabProject[] }>
+      > => {
+        const serverResults = await Promise.all(
+          servers.map(async (server) => {
+            const serverHost = new URL(server.baseUrl).hostname;
+            const hasSshAssociation = isServerSshActive(server, serverHost);
+
+            if (server.type === "github") {
+              if (!server.token) {
+                logger.warn(t("cli.sync.noAuthConfigured", { server: server.name }));
+                return null;
+              }
+              if (!hasSshAssociation) {
+                void approveGitCredential({
+                  baseUrl: server.baseUrl,
+                  token: server.token,
+                  username: server.username,
+                  isGitHub: true,
+                  logger: (message) => logger.debug(message),
+                }).catch(() => {});
+              }
+              const api = new GitHubApi({
+                baseUrl: server.baseUrl,
+                token: server.token,
+                verbose: config.verbose ?? false,
+                logger: (message) => logger.debug(message),
+              });
+              try {
+                const [groups, userProjects] = await Promise.all([
+                  wrapRequest(server, t("cli.http.listGroups"), () => api.listGroups()),
+                  wrapRequest(server, t("cli.http.listUserProjects"), () => api.listUserProjects()),
+                ]);
+                const projects = userProjects.filter((project, index, all) => {
+                  return all.findIndex((item) => item.id === project.id) === index;
+                });
+                const projectsWithMetadata: GitLabProject[] = projects.map((project) => {
+                  const meta: Partial<GitLabProject> = {};
+                  if (server.baseDir) meta.pajeBaseDir = server.baseDir;
+                  if (server.userEmail) meta.pajeUserEmail = server.userEmail;
+                  const pajeHttpUrl = buildPajeHttpUrl(project.http_url_to_repo, "x-access-token", server.token, hasSshAssociation);
+                  if (pajeHttpUrl) meta.pajeHttpUrl = pajeHttpUrl;
+                  return { ...project, ...meta };
+                });
+                const serverFiltered = filterProjects(projectsWithMetadata, {
+                  filter: server.filter,
+                  noPublicRepos: server.noPublicRepos,
+                  noArchivedRepos: server.noArchivedRepos,
+                } as GitSyncConfig);
+                return { server, groups, projects: serverFiltered };
+              } catch (error) {
+                const status = (error as Error & { status?: number })?.status;
+                if (status === 401 || status === 403) {
+                  logger.warn(t("cli.sync.githubTokenExpired", { server: server.name }));
+                }
+                return null;
+              }
+            }
+
+            let resolvedToken = server.token;
+            if (!resolvedToken && !hasSshAssociation && onMissingCredentials) {
+              const bootstrapped = await onMissingCredentials(server, "missing");
+              if (bootstrapped?.token) {
+                resolvedToken = bootstrapped.token;
+              }
+            }
+
+            if (!resolvedToken && !hasSshAssociation) {
+              logger.warn(t("cli.sync.noAuthConfigured", { server: server.name }));
+              return null;
+            }
+
+            if (resolvedToken && !hasSshAssociation) {
+              void approveGitCredential({
+                baseUrl: server.baseUrl,
+                token: resolvedToken,
+                username: server.username,
+                isGitHub: false,
+                logger: (message) => logger.debug(message),
+              }).catch(() => {});
+            }
+
+            let api = new GitLabApi({
+              baseUrl: server.baseUrl,
+              token: resolvedToken,
+              verbose: config.verbose ?? false,
+              logger: (message) => logger.debug(message),
+            });
+
+            if (!server.useBasicAuth && (hasSshAssociation || api.hasAuth())) {
+              await ensureSshKey(api, logger, config);
+            }
+
+            const buildResult = (groups: GitLabGroup[], userProjects: GitLabProject[]) => {
+              const projects = userProjects.filter((project, index, all) => {
+                return all.findIndex((item) => item.id === project.id) === index;
+              });
+
+              const projectsWithMetadata: GitLabProject[] = projects.map((project) => {
+                const meta: Partial<GitLabProject> = {};
+                if (server.baseDir) meta.pajeBaseDir = server.baseDir;
+                if (server.userEmail) meta.pajeUserEmail = server.userEmail;
+                const pajeHttpUrl = buildPajeHttpUrl(project.http_url_to_repo, "oauth2", resolvedToken, hasSshAssociation);
+                if (pajeHttpUrl) meta.pajeHttpUrl = pajeHttpUrl;
+                return { ...project, ...meta };
+              });
+
+              const serverFiltered = filterProjects(projectsWithMetadata, {
+                filter: server.filter,
+                noPublicRepos: server.noPublicRepos,
+                noArchivedRepos: server.noArchivedRepos,
+              } as GitSyncConfig);
+
+              return { server, groups, projects: serverFiltered };
+            };
+
+            const listOnce = () =>
+              Promise.all([
+                wrapRequest(server, t("cli.http.listGroups"), () => api.listGroups()),
+                wrapRequest(server, t("cli.http.listUserProjects"), () => api.listUserProjects()),
+              ]);
+
+            try {
+              const [groups, userProjects] = await listOnce();
+              return buildResult(groups, userProjects);
+            } catch (error) {
+              const status = (error as { details?: { status?: number } })?.details?.status;
+              const looksLikeAuthFailure = status === 401 || status === 403;
+              if (!looksLikeAuthFailure || !resolvedToken) {
+                return null;
+              }
+
+              let healedToken: string | null = null;
+              try {
+                const rotated = await rotatePersonalAccessToken({
+                  baseUrl: server.baseUrl,
+                  token: resolvedToken,
+                  fetchImpl: globalThis.fetch,
+                  logger: (message) => logger.debug(message),
+                });
+                healedToken = rotated.token;
+              } catch {}
+
+              if (!healedToken && onMissingCredentials) {
+                const bootstrapped = await onMissingCredentials(server, "invalid");
+                healedToken = bootstrapped?.token ?? null;
+              }
+
+              if (!healedToken) {
+                logger.warn(t("cli.sync.tokenExpired", { server: server.name }));
+                return null;
+              }
+
+              const existingServers = readGitServers<GitServerEntry[]>([]);
+              const merged = mergeServer(existingServers, withToken(server, healedToken));
+              writeGitServers(merged.servers);
+              if (!hasSshAssociation) {
+                void approveGitCredential({
+                  baseUrl: server.baseUrl,
+                  token: healedToken,
+                  username: server.username,
+                  isGitHub: false,
+                  logger: (message) => logger.debug(message),
+                }).catch(() => {});
+              }
+
+              resolvedToken = healedToken;
+              api = new GitLabApi({
+                baseUrl: server.baseUrl,
+                token: resolvedToken,
+                verbose: config.verbose ?? false,
+                logger: (message) => logger.debug(message),
+              });
+
+              try {
+                const [groups, userProjects] = await listOnce();
+                return buildResult(groups, userProjects);
+              } catch {
+                logger.warn(t("cli.sync.tokenExpired", { server: server.name }));
+                return null;
+              }
+            }
+          })
+        );
+
+        return serverResults.filter(
+          (result): result is { server: GitServerEntry; groups: GitLabGroup[]; projects: GitLabProject[] } =>
+            result !== null
+        );
+      };
+
+      const buildTreeData = async (
+        validServerResults: Array<{ server: GitServerEntry; groups: GitLabGroup[]; projects: GitLabProject[] }>
+      ) => {
+        const { groups, idMapByServer } = mergeGroupsByPath(
+          validServerResults.map((result) => ({ server: result.server, groups: result.groups }))
+        );
+        const { projects } = mergeProjectsByPath(
+          validServerResults.map((result) => ({ server: result.server, projects: result.projects })),
+          idMapByServer
+        );
+        const activeServers = validServerResults.map((result) => result.server);
+        const header = buildServersHeader(activeServers);
+        const filteredProjects = filterProjects(projects, config);
+        await ensureLocalDirsIfNeeded(filteredProjects, config.baseDir, config.prepareLocalDirs ?? false);
+        const resolvedPaths = resolveLocalPathConflicts(filteredProjects);
+        const tree = buildGitLabTree(filterGroups(groups, config), filteredProjects);
+        return { groups, projects, filteredProjects, activeServers, header, resolvedPaths, tree };
+      };
+
       if (cached?.version === 1 && cached.configHash === configHash) {
         logger.info(t("cli.cache.hit"));
+        onBackgroundSyncStart?.();
 
         const serversByName = new Map(servers.map((s) => [s.name, s]));
         const cachedServerResults = cached.servers
@@ -838,325 +1077,151 @@ export const createGitSyncCore = (): GitSyncCore => {
           .filter((r): r is { server: GitServerEntry; groups: GitLabGroup[]; projects: GitLabProject[] } => r !== null);
 
         if (cachedServerResults.length > 0) {
-          const { groups, idMapByServer } = mergeGroupsByPath(
-            cachedServerResults.map((r) => ({ server: r.server, groups: r.groups }))
-          );
-          const { projects } = mergeProjectsByPath(
-            cachedServerResults.map((r) => ({ server: r.server, projects: r.projects })),
-            idMapByServer
-          );
-          const header = buildServersHeader(cachedServerResults.map((r) => r.server));
-
-          const filteredProjects = filterProjects(projects, config);
-          await ensureLocalDirsIfNeeded(filteredProjects, config.baseDir, config.prepareLocalDirs ?? false);
-          const resolvedPaths = resolveLocalPathConflicts(filteredProjects);
-
-          const statusMap = cached.statusMap;
-          const tree = buildGitLabTree(filterGroups(groups, config), filteredProjects);
-          const applyStatusToTree = (node: GitLabTreeNode): void => {
-            if (node.type === "project" && node.project) {
-              node.status = statusMap[node.project.id];
-              node.localPath = path.join(
-                node.project.pajeBaseDir ?? config.baseDir,
-                resolvedPaths.get(node.project.id) ?? resolveProjectLocalPath(node.project)
-              );
-              return;
-            }
-            node.children?.forEach((child) => applyStatusToTree(child));
-          };
-          tree.forEach((node) => applyStatusToTree(node));
-          // NEVER pre-select from cached.statusMap here: it is the snapshot
-          // written at the PREVIOUS session's load — before that session's
-          // sync/removals, and before any manual deletion on disk since. A
-          // repo whose clone no longer exists would arrive pre-selected [x]
-          // (and Ctrl+S would clone it back, unasked), while a repo cloned
-          // last session would arrive unmarked [ ] (and become an undue
-          // removal candidate). Only the disk can answer "is it cloned now".
-          await applyInitialSelectionFromLocalClones(tree, (node) =>
-            node.localPath ? hasGitDir(node.localPath) : Promise.resolve(false)
-          );
+          const { header, tree, statusMap: initialStatusMap, filteredProjects, resolvedPaths } = await (async () => {
+            const data = await buildTreeData(cachedServerResults);
+            const statusMap = cached.statusMap;
+            const applyStatusToTree = (node: GitLabTreeNode): void => {
+              if (node.type === "project" && node.project) {
+                node.status = statusMap[node.project.id];
+                node.localPath = path.join(
+                  node.project.pajeBaseDir ?? config.baseDir,
+                  data.resolvedPaths.get(node.project.id) ?? resolveProjectLocalPath(node.project)
+                );
+                return;
+              }
+              node.children?.forEach((child) => applyStatusToTree(child));
+            };
+            data.tree.forEach((node) => applyStatusToTree(node));
+            await applyInitialSelectionFromLocalClones(data.tree, (node) =>
+              node.localPath ? hasGitDir(node.localPath) : Promise.resolve(false)
+            );
+            return {
+              header: data.header,
+              tree: data.tree,
+              statusMap,
+              filteredProjects: data.filteredProjects,
+              resolvedPaths: data.resolvedPaths,
+            };
+          })();
 
           setImmediate(async () => {
-            // Bounded worker pool: one git subprocess per repo, so spawning
-            // them all at once would saturate the machine and starve the TUI
-            // event loop (the interface stops responding to keystrokes).
-            const REFRESH_CONCURRENCY = 4;
-            const freshStatusMap: Record<number, RepoSyncStatus> = {};
-            let nextIndex = 0;
-            const worker = async (): Promise<void> => {
-              while (nextIndex < filteredProjects.length) {
-                const project = filteredProjects[nextIndex];
-                nextIndex += 1;
-                const targetPath = path.join(
-                  project.pajeBaseDir ?? config.baseDir,
-                  resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project)
-                );
-                const status = await resolveRepoStatus({
-                  targetPath,
-                  defaultBranch: project.default_branch,
-                  knownRemote: true,
-                });
-                freshStatusMap[project.id] = status;
-                // Deliver each status as soon as it is known instead of after
-                // the full sweep, so the tree updates progressively.
-                onStatusRefreshed?.(project.id, status);
-              }
-            };
-            await Promise.all(
-              Array.from({ length: Math.min(REFRESH_CONCURRENCY, filteredProjects.length) }, () => worker())
-            );
             try {
-              writeGitTreeCache({ ...cached, statusMap: freshStatusMap });
-              logger.info(t("cli.cache.statusRefreshed"));
-            } catch {
-              // non-critical
+              const REFRESH_CONCURRENCY = 4;
+              const freshStatusMap: Record<number, RepoSyncStatus> = {};
+              let nextIndex = 0;
+              const worker = async (): Promise<void> => {
+                while (nextIndex < filteredProjects.length) {
+                  const project = filteredProjects[nextIndex];
+                  nextIndex += 1;
+                  const targetPath = path.join(
+                    project.pajeBaseDir ?? config.baseDir,
+                    resolvedPaths.get(project.id) ?? resolveProjectLocalPath(project)
+                  );
+                  const status = await resolveRepoStatus({
+                    targetPath,
+                    defaultBranch: project.default_branch,
+                    knownRemote: true,
+                  });
+                  freshStatusMap[project.id] = status;
+                  onStatusRefreshed?.(project.id, status);
+                }
+              };
+              const statusSweepPromise = Promise.all(
+                Array.from({ length: Math.min(REFRESH_CONCURRENCY, filteredProjects.length) }, () => worker())
+              );
+
+              const remoteFetchPromise = fetchRemoteServerResults().catch((err) => {
+                logger.debug(`Background server fetch failed: ${err instanceof Error ? err.message : String(err)}`);
+                return null;
+              });
+
+              const [, freshValidServerResults] = await Promise.all([statusSweepPromise, remoteFetchPromise]);
+
+              if (freshValidServerResults && freshValidServerResults.length > 0) {
+                const freshTreeData = await buildTreeData(freshValidServerResults);
+                for (const proj of freshTreeData.filteredProjects) {
+                  if (!freshStatusMap[proj.id]) {
+                    const targetPath = path.join(
+                      proj.pajeBaseDir ?? config.baseDir,
+                      freshTreeData.resolvedPaths.get(proj.id) ?? resolveProjectLocalPath(proj)
+                    );
+                    const status = await resolveRepoStatus({
+                      targetPath,
+                      defaultBranch: proj.default_branch,
+                      knownRemote: true,
+                    });
+                    freshStatusMap[proj.id] = status;
+                    onStatusRefreshed?.(proj.id, status);
+                  }
+                }
+
+                const applyFreshStatus = (node: GitLabTreeNode): void => {
+                  if (node.type === "project" && node.project) {
+                    node.status = freshStatusMap[node.project.id];
+                    node.localPath = path.join(
+                      node.project.pajeBaseDir ?? config.baseDir,
+                      freshTreeData.resolvedPaths.get(node.project.id) ?? resolveProjectLocalPath(node.project)
+                    );
+                    return;
+                  }
+                  node.children?.forEach((child) => applyFreshStatus(child));
+                };
+                freshTreeData.tree.forEach((node) => applyFreshStatus(node));
+
+                try {
+                  const updatedCacheEntry: GitTreeCacheEntry = {
+                    version: 1,
+                    configHash,
+                    servers: freshValidServerResults.map((r) => ({
+                      serverName: r.server.name,
+                      groups: r.groups,
+                      projects: r.projects.map(({ pajeHttpUrl: _url, ...rest }) => rest),
+                    })),
+                    statusMap: freshStatusMap,
+                  };
+                  writeGitTreeCache(updatedCacheEntry);
+                  logger.info(t("cli.cache.saved"));
+                } catch {
+                  // non-critical
+                }
+
+                onTreeUpdated?.({
+                  tree: freshTreeData.tree,
+                  projects: freshTreeData.filteredProjects,
+                  statusMap: freshStatusMap,
+                });
+              } else {
+                try {
+                  writeGitTreeCache({ ...cached, statusMap: freshStatusMap });
+                  logger.info(t("cli.cache.statusRefreshed"));
+                } catch {
+                  // non-critical
+                }
+              }
+            } catch (err) {
+              logger.debug(`Background refresh error: ${err instanceof Error ? err.message : String(err)}`);
+            } finally {
+              onBackgroundSyncEnd?.();
             }
           });
 
-          return { header, tree, statusMap, projects: filteredProjects, fromCache: true };
+          return { header, tree, statusMap: initialStatusMap, projects: filteredProjects, fromCache: true };
         }
       }
 
       const listStartAt = Date.now();
-      let listRequestCount = 0;
-      const wrapRequest = async <T,>(server: GitServerEntry, label: string, fn: () => Promise<T>): Promise<T> => {
-        listRequestCount += 1;
-        onRequestStart?.(server.name, listRequestCount);
-        logger.info(t("cli.http.start", { server: server.name, label, count: String(listRequestCount) }));
-        try {
-          const result = await fn();
-          logger.info(t("cli.http.success", { server: server.name, label }));
-          return result;
-        } catch (error) {
-          const message = error instanceof Error ? error.message : t("cli.errors.unknown");
-          logger.error(t("cli.http.fail", { server: server.name, label, message }));
-          throw error;
-        }
-      };
-
-      const serverResults = await Promise.all(
-        servers.map(async (server) => {
-          const serverHost = new URL(server.baseUrl).hostname;
-          const hasSshAssociation = isServerSshActive(server, serverHost);
-
-          if (server.type === "github") {
-            if (!server.token) {
-              logger.warn(t("cli.sync.noAuthConfigured", { server: server.name }));
-              return null;
-            }
-            if (!hasSshAssociation) {
-              void approveGitCredential({
-                baseUrl: server.baseUrl,
-                token: server.token,
-                username: server.username,
-                isGitHub: true,
-                logger: (message) => logger.debug(message),
-              }).catch(() => {});
-            }
-            const api = new GitHubApi({
-              baseUrl: server.baseUrl,
-              token: server.token,
-              verbose: config.verbose ?? false,
-              logger: (message) => logger.debug(message),
-            });
-            try {
-              const [groups, userProjects] = await Promise.all([
-                wrapRequest(server, t("cli.http.listGroups"), () => api.listGroups()),
-                wrapRequest(server, t("cli.http.listUserProjects"), () => api.listUserProjects()),
-              ]);
-              const projects = userProjects.filter((project, index, all) => {
-                return all.findIndex((item) => item.id === project.id) === index;
-              });
-              const projectsWithMetadata: GitLabProject[] = projects.map((project) => {
-                const meta: Partial<GitLabProject> = {};
-                if (server.baseDir) meta.pajeBaseDir = server.baseDir;
-                if (server.userEmail) meta.pajeUserEmail = server.userEmail;
-                const pajeHttpUrl = buildPajeHttpUrl(project.http_url_to_repo, "x-access-token", server.token, hasSshAssociation);
-                if (pajeHttpUrl) meta.pajeHttpUrl = pajeHttpUrl;
-                return { ...project, ...meta };
-              });
-              const serverFiltered = filterProjects(projectsWithMetadata, {
-                filter: server.filter,
-                noPublicRepos: server.noPublicRepos,
-                noArchivedRepos: server.noArchivedRepos,
-              } as GitSyncConfig);
-              return { server, groups, projects: serverFiltered };
-            } catch (error) {
-              const status = (error as Error & { status?: number })?.status;
-              if (status === 401 || status === 403) {
-                // GitHub has no rotate-without-user-interaction endpoint and
-                // no password-bootstrap fallback (PATs/OAuth tokens aren't
-                // created that way there), so unlike GitLab this can't heal
-                // itself — the clearest thing to do is name the cause and
-                // point at the fix instead of silently skipping the server.
-                logger.warn(t("cli.sync.githubTokenExpired", { server: server.name }));
-              }
-              return null;
-            }
-          }
-
-          let resolvedToken = server.token;
-          if (!resolvedToken && !hasSshAssociation && onMissingCredentials) {
-            const bootstrapped = await onMissingCredentials(server, "missing");
-            if (bootstrapped?.token) {
-              resolvedToken = bootstrapped.token;
-            }
-          }
-
-          if (!resolvedToken && !hasSshAssociation) {
-            logger.warn(t("cli.sync.noAuthConfigured", { server: server.name }));
-            return null;
-          }
-
-          if (resolvedToken && !hasSshAssociation) {
-            void approveGitCredential({
-              baseUrl: server.baseUrl,
-              token: resolvedToken,
-              username: server.username,
-              isGitHub: false,
-              logger: (message) => logger.debug(message),
-            }).catch(() => {});
-          }
-
-          let api = new GitLabApi({
-            baseUrl: server.baseUrl,
-            token: resolvedToken,
-            verbose: config.verbose ?? false,
-            logger: (message) => logger.debug(message),
-          });
-
-          if (!server.useBasicAuth && (hasSshAssociation || api.hasAuth())) {
-            await ensureSshKey(api, logger, config);
-          }
-
-          const buildResult = (groups: GitLabGroup[], userProjects: GitLabProject[]) => {
-            const projects = userProjects.filter((project, index, all) => {
-              return all.findIndex((item) => item.id === project.id) === index;
-            });
-
-            const projectsWithMetadata: GitLabProject[] = projects.map((project) => {
-              const meta: Partial<GitLabProject> = {};
-              if (server.baseDir) meta.pajeBaseDir = server.baseDir;
-              if (server.userEmail) meta.pajeUserEmail = server.userEmail;
-              const pajeHttpUrl = buildPajeHttpUrl(project.http_url_to_repo, "oauth2", resolvedToken, hasSshAssociation);
-              if (pajeHttpUrl) meta.pajeHttpUrl = pajeHttpUrl;
-              return { ...project, ...meta };
-            });
-
-            const serverFiltered = filterProjects(projectsWithMetadata, {
-              filter: server.filter,
-              noPublicRepos: server.noPublicRepos,
-              noArchivedRepos: server.noArchivedRepos,
-            } as GitSyncConfig);
-
-            return { server, groups, projects: serverFiltered };
-          };
-
-          const listOnce = () =>
-            Promise.all([
-              wrapRequest(server, t("cli.http.listGroups"), () => api.listGroups()),
-              wrapRequest(server, t("cli.http.listUserProjects"), () => api.listUserProjects()),
-            ]);
-
-          try {
-            const [groups, userProjects] = await listOnce();
-            return buildResult(groups, userProjects);
-          } catch (error) {
-            const status = (error as { details?: { status?: number } })?.details?.status;
-            const looksLikeAuthFailure = status === 401 || status === 403;
-            if (!looksLikeAuthFailure || !resolvedToken) {
-              // Not an auth problem (network error, etc.), or there was no
-              // token to have gone stale in the first place (pure-SSH case
-              // failing for some other reason) — behave as before.
-              return null;
-            }
-
-            // The token exists but the server just rejected it — try to heal
-            // it before giving up. Rotation needs no user interaction, so
-            // it's attempted first; only if that fails too does this fall
-            // back to the presentation layer's bootstrap (a fresh password).
-            let healedToken: string | null = null;
-            try {
-              const rotated = await rotatePersonalAccessToken({
-                baseUrl: server.baseUrl,
-                token: resolvedToken,
-                fetchImpl: globalThis.fetch,
-                logger: (message) => logger.debug(message),
-              });
-              healedToken = rotated.token;
-            } catch {
-              // Rotation itself failed — the token is likely fully revoked,
-              // not just expired. Fall through to the bootstrap below.
-            }
-
-            if (!healedToken && onMissingCredentials) {
-              const bootstrapped = await onMissingCredentials(server, "invalid");
-              healedToken = bootstrapped?.token ?? null;
-            }
-
-            if (!healedToken) {
-              logger.warn(t("cli.sync.tokenExpired", { server: server.name }));
-              return null;
-            }
-
-            const existingServers = readGitServers<GitServerEntry[]>([]);
-            const merged = mergeServer(existingServers, withToken(server, healedToken));
-            writeGitServers(merged.servers);
-            if (!hasSshAssociation) {
-              void approveGitCredential({
-                baseUrl: server.baseUrl,
-                token: healedToken,
-                username: server.username,
-                isGitHub: false,
-                logger: (message) => logger.debug(message),
-              }).catch(() => {});
-            }
-
-            resolvedToken = healedToken;
-            api = new GitLabApi({
-              baseUrl: server.baseUrl,
-              token: resolvedToken,
-              verbose: config.verbose ?? false,
-              logger: (message) => logger.debug(message),
-            });
-
-            try {
-              const [groups, userProjects] = await listOnce();
-              return buildResult(groups, userProjects);
-            } catch {
-              logger.warn(t("cli.sync.tokenExpired", { server: server.name }));
-              return null;
-            }
-          }
-        })
-      );
-
-      const validServerResults = serverResults.filter(
-        (result): result is { server: GitServerEntry; groups: GitLabGroup[]; projects: GitLabProject[] } =>
-          result !== null
-      );
+      const validServerResults = await fetchRemoteServerResults();
 
       if (validServerResults.length === 0) {
         logger.warn(t("cli.sync.noValidServer"));
         return { header: "GitLab", tree: [], statusMap: {}, projects: [] };
       }
 
-      const { groups, idMapByServer } = mergeGroupsByPath(
-        validServerResults.map((result) => ({ server: result.server, groups: result.groups }))
-      );
-      const { projects } = mergeProjectsByPath(
-        validServerResults.map((result) => ({ server: result.server, projects: result.projects })),
-        idMapByServer
-      );
-      const activeServers = validServerResults.map((result) => result.server);
-      const header = buildServersHeader(activeServers);
       const listDurationMs = Date.now() - listStartAt;
       logger.info(t("cli.sync.listDuration", { seconds: (listDurationMs / 1000).toFixed(2) }));
 
-      const filteredProjects = filterProjects(projects, config);
-      await ensureLocalDirsIfNeeded(filteredProjects, config.baseDir, config.prepareLocalDirs ?? false);
+      const { header, tree, filteredProjects, resolvedPaths } = await buildTreeData(validServerResults);
 
-      const resolvedPaths = resolveLocalPathConflicts(filteredProjects);
       const statusEntries = await Promise.all(
         filteredProjects.map(async (project) => {
           const targetPath = path.join(
@@ -1190,7 +1255,6 @@ export const createGitSyncCore = (): GitSyncCore => {
         // non-critical
       }
 
-      const tree = buildGitLabTree(filterGroups(groups, config), filteredProjects);
       const applyStatusToTree = (node: GitLabTreeNode): void => {
         if (node.type === "project" && node.project) {
           node.status = statusMap[node.project.id];

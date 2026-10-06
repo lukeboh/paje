@@ -210,13 +210,13 @@ export const loadEnvConfig = (options: { envFile?: string } = {}): EnvConfig => 
 O `loadTree()` (`gitSyncService.ts`) implementa carga instantânea:
 
 1. Calcula `configHash` a partir dos servidores configurados (nome, URL normalizada, filtros).
-2. **Cache hit** (hash igual): a árvore é montada imediatamente a partir do cache (`fromCache: true`) e um refresh de status é agendado com `setImmediate`:
+2. **Cache hit** (hash igual): a árvore é montada imediatamente a partir do cache (`fromCache: true`). Na TUI, a tela da árvore abre de imediato sem bloquear a interação do usuário, e um spinner animado com o status `Carregando repositórios...` é exibido na linha superior à esquerda da versão (`TitleBar`). Em segundo plano (`setImmediate`):
    - o status local de cada repositório é recalculado com **concorrência limitada a 4** (um subprocesso git por repositório — sem limite, dezenas de processos simultâneos saturariam a máquina e travariam a TUI);
    - cada status é entregue **incrementalmente** via callback `onStatusRefreshed(projectId, status)` — a TUI atualiza linha a linha;
-   - ao final, o cache é regravado com o `statusMap` atualizado.
-3. **Cache miss** (hash diferente ou sem cache): carga completa via API; ao final o cache é gravado (sem `pajeHttpUrl`, que contém token).
-
-O cache **não tem TTL** — é invalidado apenas por mudança de configuração de servidores.
+   - em paralelo, uma consulta remota às APIs dos servidores configurados busca atualizações e novos repositórios criados remotamente;
+   - caso novos repositórios sejam descobertos, o callback `onTreeUpdated` atualiza os nós da árvore na TUI preservando a seleção do usuário e o `git-tree-cache.json` é atualizado em disco;
+   - ao término do processo em segundo plano, o callback `onBackgroundSyncEnd` é acionado e o spinner da barra de título desaparece.
+3. **Cache miss** (hash diferente ou sem cache): exibe a tela de carregamento central e executa a carga completa via API; ao final o cache é gravado (sem `pajeHttpUrl`, que contém token) e a árvore é aberta.
 
 Na camada de apresentação (`gitCommand.ts`), statuses que chegam antes de a TUI montar
 são bufferizados e aplicados no `onReady` da árvore.

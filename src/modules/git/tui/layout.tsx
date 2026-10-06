@@ -22,6 +22,7 @@ import { APP_VERSION } from "../../../version.js";
 
 export type LayoutProps = {
   title: string;
+  headerStatus?: string;
   breadcrumbs?: string[];
   orientation: string;
   logEntries?: LogEntry[];
@@ -75,6 +76,7 @@ const formatHeaderLeft = (title: string, breadcrumbs?: string[]): string => {
 
 export const Layout: React.FC<LayoutProps> = ({
   title,
+  headerStatus,
   breadcrumbs,
   orientation,
   logEntries,
@@ -325,7 +327,7 @@ export const Layout: React.FC<LayoutProps> = ({
           }}
         >
           <Box flexDirection="column" width="100%" height={terminalHeight}>
-            <TitleBar left={headerLeft} right={t("layout.rightTitle", { version: APP_VERSION })} />
+            <TitleBar left={headerLeft} right={t("layout.rightTitle", { version: APP_VERSION })} status={headerStatus} />
             <Box flexDirection="column" width="100%" height={layoutMetrics.containerHeight}>
               <PanelFrame title={workspaceLegend} height={layoutMetrics.workspaceFrameHeight}>
                 <Workspace height={layoutMetrics.workspaceContentHeight}>{children}</Workspace>

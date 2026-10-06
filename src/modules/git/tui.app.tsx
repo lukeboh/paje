@@ -376,6 +376,33 @@ export type TuiTreeProgress = {
   updateProgress: (nodeId: string, text: string) => void;
   updateStatus: (nodeId: string, status: RepoSyncStatus) => void;
   clearProgress: (nodeId: string) => void;
+  setBackgroundLoading?: (loading: boolean) => void;
+  updateTree?: (newNodes: GitLabTreeNode[]) => void;
+};
+
+const copySelectionState = (source: GitLabTreeNode[], target: GitLabTreeNode[]): void => {
+  const selectionMap = new Map<string, { selected?: boolean; partiallySelected?: boolean }>();
+  const collect = (list: GitLabTreeNode[]) => {
+    for (const node of list) {
+      if (node.selected !== undefined || node.partiallySelected !== undefined) {
+        selectionMap.set(node.id, { selected: node.selected, partiallySelected: node.partiallySelected });
+      }
+      if (node.children) collect(node.children);
+    }
+  };
+  collect(source);
+
+  const apply = (list: GitLabTreeNode[]) => {
+    for (const node of list) {
+      const state = selectionMap.get(node.id);
+      if (state) {
+        node.selected = state.selected;
+        node.partiallySelected = state.partiallySelected;
+      }
+      if (node.children) apply(node.children);
+    }
+  };
+  apply(target);
 };
 
 export const renderRepositoryTree = async (
@@ -389,6 +416,7 @@ export const renderRepositoryTree = async (
     parameters?: CommandParameters[];
     envFilePath?: string;
     initialSelectedNodeId?: string;
+    initialBackgroundLoading?: boolean;
     onReady?: (handlers: {
       render: () => void;
       progress: TuiTreeProgress;
@@ -408,6 +436,23 @@ export const renderRepositoryTree = async (
       const debugLogger = useMemo(() => new PajeLogger(), []);
       const [orientation, setOrientation] = useState(options?.footer ?? t("tui.tree.orientationDefault"));
       const [version, setVersion] = useState(0);
+      const [backgroundLoading, setBackgroundLoading] = useState(options?.initialBackgroundLoading ?? false);
+      const [spinnerFrameIndex, setSpinnerFrameIndex] = useState(0);
+
+      useEffect(() => {
+        if (!backgroundLoading) return;
+        const intervalId = setInterval(() => {
+          setSpinnerFrameIndex((prev) => (prev + 1) % 4);
+        }, 120);
+        return () => clearInterval(intervalId);
+      }, [backgroundLoading]);
+
+      const spinnerFrames = ["/", "-", "\\", "|"];
+      const spinnerFrame = spinnerFrames[spinnerFrameIndex % spinnerFrames.length];
+      const headerStatus = backgroundLoading
+        ? `${spinnerFrame} ${t("tui.loading.repositories")}`
+        : undefined;
+
       const progressMapRef = useRef<Map<string, ProgressSnapshot>>(new Map());
       const initialPosRef = useRef<{ index: number; scroll: number } | null>(null);
       if (initialPosRef.current === null) {
@@ -1085,6 +1130,15 @@ export const renderRepositoryTree = async (
               progressMapRef.current.delete(nodeId);
               setVersion((value: number) => value + 1);
             },
+            setBackgroundLoading: (loading: boolean) => {
+              setBackgroundLoading(loading);
+            },
+            updateTree: (newNodes: GitLabTreeNode[]) => {
+              copySelectionState(nodes, newNodes);
+              nodes.length = 0;
+              nodes.push(...newNodes);
+              setVersion((value: number) => value + 1);
+            },
           },
           log: {
             append: (message: string, level: "info" | "warn" | "error" = "info") => {
@@ -1100,6 +1154,7 @@ export const renderRepositoryTree = async (
       return (
         <Layout
           title={headerTitle}
+          headerStatus={headerStatus}
           orientation={orientation}
           parameters={parametersSnapshot}
           envFilePath={options?.envFilePath}
