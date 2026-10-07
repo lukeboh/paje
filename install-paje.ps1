@@ -229,7 +229,7 @@ function paje {
     `$cdTarget = Join-Path `$env:USERPROFILE ".paje\cd-target"
     if (Test-Path `$cdTarget) {
         `$dir = (Get-Content `$cdTarget -Raw).Trim()
-        Remove-Item `$cdTarget -Force
+        Remove-Item `$cdTarget -Force -ErrorAction SilentlyContinue
         if (`$dir -and (Test-Path `$dir)) {
             Set-Location `$dir
         }

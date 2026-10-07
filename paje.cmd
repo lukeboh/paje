@@ -33,4 +33,20 @@ if not exist "%PAJE_ROOT%\node_modules" (
 )
 
 call npm run dev -- %*
-exit /b %ERRORLEVEL%
+set "PAJE_EXIT_CODE=%ERRORLEVEL%"
+
+set "PAJE_CD_TARGET_FILE=%USERPROFILE%\.paje\cd-target"
+set "PAJE_TARGET_DIR="
+
+if exist "%PAJE_CD_TARGET_FILE%" (
+    set /p PAJE_TARGET_DIR=<"%PAJE_CD_TARGET_FILE%"
+    del /f /q "%PAJE_CD_TARGET_FILE%" >nul 2>&1
+)
+
+if defined PAJE_TARGET_DIR (
+    if exist "%PAJE_TARGET_DIR%" (
+        endlocal & cd /d "%PAJE_TARGET_DIR%" & exit /b %PAJE_EXIT_CODE%
+    )
+)
+
+endlocal & cd /d "%PAJE_INVOKED_FROM%" & exit /b %PAJE_EXIT_CODE%
