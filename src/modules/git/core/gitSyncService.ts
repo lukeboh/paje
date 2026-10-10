@@ -9,7 +9,14 @@ import { readGitServers, writeGitServers, readGitTreeCache, writeGitTreeCache } 
 import { GitHubApi } from "../githubApi.js";
 import { approveGitCredential } from "../gitCredentialHelper.js";
 import {
+  GitHubDeviceFlowError,
+  pollGitHubDeviceAccessToken,
+  requestGitHubDeviceCode,
+  type GitHubDeviceCodeResult,
+} from "../githubDeviceFlow.js";
+import {
   addHostToKnownHosts,
+  ensureGitLabPersonalAccessToken,
   getIdentityFileForHost,
   isHostInKnownHosts,
   listSshPublicKeys,
@@ -1382,4 +1389,139 @@ export const createGitSyncCore = (): GitSyncCore => {
       return { results };
     },
   };
+};
+
+export type RegenerateTokenOutcome = "rotated" | "created" | "cancelled" | "failed";
+
+export type RegenerateTokenResult = {
+  outcome: RegenerateTokenOutcome;
+  // Set on "failed": a GitHubDeviceFlowError code (access_denied,
+  // expired_token, ...) or "error" for anything else, so the presentation
+  // layer can pick a message specific to each case.
+  errorCode?: string;
+  message?: string;
+};
+
+export type RegenerateTokenOptions = {
+  server: GitServerEntry;
+  logger: LoggerBroker;
+  // GitLab only: asked when the current token can't be rotated (missing,
+  // revoked, or lacking the self_rotate scope) and a brand new one has to
+  // be created through the web login. Returning null/"" cancels.
+  promptPassword: (server: GitServerEntry) => Promise<string | null>;
+  // GitHub only: called once the device code is known, so the presentation
+  // layer can show it (and open the browser) before polling starts.
+  onGitHubDeviceCode: (deviceCode: GitHubDeviceCodeResult) => Promise<void> | void;
+};
+
+const persistRegeneratedToken = async (
+  server: GitServerEntry,
+  token: string,
+  origin: TokenOrigin,
+  logger: LoggerBroker,
+  extra: Partial<GitServerEntry> = {}
+): Promise<void> => {
+  const existingServers = readGitServers<GitServerEntry[]>([]);
+  const merged = mergeServer(existingServers, { ...withToken(server, token, origin), ...extra });
+  writeGitServers(merged.servers);
+  await approveGitCredential({
+    baseUrl: server.baseUrl,
+    token,
+    username: extra.username ?? server.username,
+    isGitHub: server.type === "github",
+    logger: (message) => logger.debug(message),
+  }).catch(() => {});
+};
+
+// Renews only the token of an already registered server — nothing else in
+// its entry (name, URL, filters, SSH association) changes. Unlike the full
+// registration flow, a still-valid token is never just reused: the point is
+// to end up with a new one (e.g. to pick up new scopes or extend expiry).
+//
+// GitHub: always a new OAuth device-flow authorization, which also grants
+// the scopes PAJÉ currently requests. GitLab: rotates the current token via
+// /personal_access_tokens/self/rotate when possible (no password needed);
+// otherwise creates a new one through the web login, asking for the password.
+export const regenerateServerToken = async (options: RegenerateTokenOptions): Promise<RegenerateTokenResult> => {
+  const { server, logger, promptPassword, onGitHubDeviceCode } = options;
+  const baseUrl = normalizeBaseUrl(server.baseUrl);
+
+  if (server.type === "github") {
+    try {
+      const deviceCode = await requestGitHubDeviceCode();
+      await onGitHubDeviceCode(deviceCode);
+      const result = await pollGitHubDeviceAccessToken({
+        deviceCode: deviceCode.deviceCode,
+        intervalSeconds: deviceCode.interval,
+        expiresInSeconds: deviceCode.expiresIn,
+      });
+      const user = await new GitHubApi({ baseUrl, token: result.token }).getAuthenticatedUser();
+      await persistRegeneratedToken(server, result.token, "oauth-device-flow", logger, {
+        type: "github",
+        username: user.login,
+      });
+      logger.info(t("cli.log.tokenRegenerated", { server: server.name || baseUrl }));
+      return { outcome: "created" };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t("cli.errors.unknown");
+      logger.warn(t("cli.log.tokenRegenerateFail", { server: server.name || baseUrl, message }));
+      return {
+        outcome: "failed",
+        errorCode: error instanceof GitHubDeviceFlowError ? error.code : "error",
+        message,
+      };
+    }
+  }
+
+  if (server.token) {
+    logger.info(t("cli.log.tokenRotateStart", { baseUrl }));
+    try {
+      const rotated = await rotatePersonalAccessToken({
+        baseUrl,
+        token: server.token,
+        fetchImpl: globalThis.fetch,
+        logger: (message) => logger.debug(message),
+      });
+      await persistRegeneratedToken(server, rotated.token, "personal-access-token", logger, {
+        tokenExpiresAt: rotated.expiresAt ?? server.tokenExpiresAt,
+      });
+      logger.info(t("cli.log.tokenRotateSuccess", { baseUrl }));
+      return { outcome: "rotated" };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t("cli.errors.unknown");
+      logger.warn(t("cli.log.tokenRotateFail", { message }));
+    }
+  }
+
+  const username = server.username?.trim();
+  if (!username) {
+    logger.warn(t("cli.log.credentialsMissing"));
+    return { outcome: "failed", errorCode: "error", message: t("cli.log.credentialsMissing") };
+  }
+  const password = await promptPassword(server);
+  if (!password) {
+    logger.warn(t("cli.log.credentialsMissing"));
+    return { outcome: "cancelled" };
+  }
+  const scopes = server.tokenScopes
+    ?.split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  try {
+    const created = await ensureGitLabPersonalAccessToken({
+      baseUrl,
+      name: server.tokenName?.trim() || "paje",
+      scopes: scopes && scopes.length > 0 ? scopes : undefined,
+      credentials: { username, password, source: "prompt" },
+      fetchImpl: globalThis.fetch,
+      logger: (message) => logger.debug(message),
+    });
+    await persistRegeneratedToken(server, created.token, "personal-access-token", logger);
+    logger.info(t("cli.log.tokenRegenerated", { server: server.name || baseUrl }));
+    return { outcome: "created" };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : t("cli.errors.unknown");
+    logger.warn(t("cli.log.tokenRegenerateFail", { server: server.name || baseUrl, message }));
+    return { outcome: "failed", errorCode: "error", message };
+  }
 };

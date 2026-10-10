@@ -88,6 +88,7 @@ import {
   resolveParallels,
   isValidHttpUrl,
   withToken,
+  regenerateServerToken,
   collectFixRemoteTargets,
   fixRemotesForTargets,
   isServerSshActive,
@@ -3075,14 +3076,82 @@ const ensureServerHasCredentials = async (
 const registerNewGitServer = (session: TuiSession, options: SshKeyStoreCliOptions, logBroker: LoggerBroker): Promise<void> =>
   promptAndPersistGitServer(session, options, logBroker);
 
-const editGitServer = async (
+// Token-only renewal: everything (rotate vs. create, GitHub device flow,
+// persistence) lives in core.regenerateServerToken — this only supplies the
+// interactive bits (password prompt, showing the device code) and reports
+// the outcome.
+const regenerateGitServerToken = async (
+  session: TuiSession,
+  server: GitServerEntry,
+  logBroker: LoggerBroker
+): Promise<void> => {
+  const title = t("cli.prompt.regenerateToken.title", { server: server.name || server.baseUrl });
+  let loadingHandle: { stop: () => void } | undefined;
+  const result = await regenerateServerToken({
+    server,
+    logger: logBroker,
+    promptPassword: async (target) => {
+      const password = await promptBasicAuthPassword(target.username?.trim() ?? "", session);
+      return password || null;
+    },
+    onGitHubDeviceCode: async (deviceCode) => {
+      openInBrowser(deviceCode.verificationUriComplete ?? deviceCode.verificationUri);
+      await session.showMessage({
+        title,
+        message: t("cli.prompt.github.deviceFlowInstructions", {
+          url: deviceCode.verificationUri,
+          code: deviceCode.userCode,
+        }),
+      });
+      loadingHandle = renderLoadingScreen(
+        { title, message: t("cli.prompt.github.deviceFlowWaiting"), parameters: session.getParameters() },
+        session
+      );
+    },
+  }).finally(() => loadingHandle?.stop());
+
+  const messageByOutcome: Record<string, string> = {
+    rotated: t("cli.prompt.regenerateToken.rotated"),
+    created: t("cli.prompt.regenerateToken.created"),
+    cancelled: t("cli.prompt.regenerateToken.cancelled"),
+  };
+  const failureMessage =
+    result.errorCode === "access_denied"
+      ? t("cli.prompt.regenerateToken.denied")
+      : result.errorCode === "expired_token"
+        ? t("cli.prompt.regenerateToken.expired")
+        : t("cli.prompt.regenerateToken.failed", { message: result.message ?? t("cli.errors.unknown") });
+  await session.showMessage({ title, message: messageByOutcome[result.outcome] ?? failureMessage });
+};
+
+const manageExistingGitServer = async (
   session: TuiSession,
   options: SshKeyStoreCliOptions,
   server: GitServerEntry,
   logBroker: LoggerBroker
 ): Promise<void> => {
   await session.showMessage({ title: server.name || server.baseUrl, message: buildServerDetails(server) });
-  await promptAndPersistGitServer(session, options, logBroker, server);
+  const action = await session.promptList<"edit" | "regenerate-token">({
+    title: server.name || server.baseUrl,
+    message: t("cli.prompt.manageServers.actionPrompt"),
+    choices: [
+      {
+        label: t("cli.prompt.manageServers.actionEdit"),
+        value: "edit",
+        description: t("cli.prompt.manageServers.actionEditDesc"),
+      },
+      {
+        label: t("cli.prompt.manageServers.actionRegenerateToken"),
+        value: "regenerate-token",
+        description: t("cli.prompt.manageServers.actionRegenerateTokenDesc"),
+      },
+    ],
+  });
+  if (action === "edit") {
+    await promptAndPersistGitServer(session, options, logBroker, server);
+  } else if (action === "regenerate-token") {
+    await regenerateGitServerToken(session, server, logBroker);
+  }
 };
 
 const manageGitServersInteractively = async (
@@ -3120,7 +3189,7 @@ const manageGitServersInteractively = async (
     }
     const server = servers.find((item) => item.id === selection);
     if (server) {
-      await editGitServer(session, options, server, logBroker);
+      await manageExistingGitServer(session, options, server, logBroker);
     }
   }
 };

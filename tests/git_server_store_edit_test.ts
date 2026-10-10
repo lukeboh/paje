@@ -76,6 +76,10 @@ const sessionMock = {
   promptInput: async () => "",
   promptPassword: async () => "",
   promptList: async (opts: { choices: Array<{ value: unknown }> }) => {
+    // Server action menu (shown after picking an existing server): edit.
+    if (opts.choices.some((choice) => choice.value === "edit")) {
+      return "edit";
+    }
     promptListCallCount += 1;
     // First visit: pick the existing server (never "__register__", which is
     // always choices[0]) to enter the edit flow. Second visit: exit.
@@ -181,6 +185,10 @@ const sessionMock2 = {
   promptInput: async () => "",
   promptPassword: async () => "",
   promptList: async (opts: { choices: Array<{ value: unknown }> }) => {
+    // Server action menu (shown after picking an existing server): edit.
+    if (opts.choices.some((choice) => choice.value === "edit")) {
+      return "edit";
+    }
     promptListCallCount2 += 1;
     if (promptListCallCount2 === 1) {
       const existingChoice = opts.choices.find((choice) => choice.value === existingServer2.id);

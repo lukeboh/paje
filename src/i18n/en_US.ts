@@ -269,6 +269,8 @@ const enUS: PtBrTranslations = {
       tokenRotateStart: "Token invalid, starting rotation for {{baseUrl}}...",
       tokenRotateSuccess: "Token rotated successfully for {{baseUrl}}.",
       tokenRotateFail: "Failed to rotate token: {{message}}",
+      tokenRegenerated: "New token generated for {{server}}.",
+      tokenRegenerateFail: "Failed to regenerate the token for {{server}}: {{message}}",
       tokenNameMissing: "Token name not provided.",
       credentialsMissing: "Username/password not provided — registration cancelled (the password is never read from a file, only from the prompt or --password).",
       tokenExpiredPrompting: "The token for {{server}} expired or was revoked and couldn't be renewed on its own. Asking for the password to generate a new one...",
@@ -395,6 +397,12 @@ const enUS: PtBrTranslations = {
         authSsh: "SSH",
         tokenPresent: "token configured",
         tokenAbsent: "no token",
+        actionPrompt: "What do you want to do with this server?",
+        actionEdit: "Update server details",
+        actionEditDesc: "Opens the pre-filled form to change URL, name, username and authentication.",
+        actionRegenerateToken: "Regenerate token",
+        actionRegenerateTokenDesc:
+          "Generates a new token without changing the rest of the registration (GitLab: rotates the current one or asks for the password; GitHub: new authorization in the browser).",
         detail: {
           name: "Name",
           baseUrl: "Base URL",
@@ -461,6 +469,15 @@ const enUS: PtBrTranslations = {
       },
       verbose: {
         title: "SSH - Details",
+      },
+      regenerateToken: {
+        title: "Regenerate token — {{server}}",
+        rotated: "Token rotated successfully. The previous token was revoked by the server.",
+        created: "New token generated and saved successfully.",
+        cancelled: "Token regeneration cancelled. The current token was kept.",
+        denied: "Authorization was denied on GitHub. The current token was kept.",
+        expired: "The code expired before authorization was completed. The current token was kept.",
+        failed: "Could not regenerate the token: {{message}}. The current token was kept.",
       },
       github: {
         title: "GitHub",

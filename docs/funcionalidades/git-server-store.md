@@ -46,7 +46,24 @@ modo de autenticação, se há token salvo).
   (opção 3) — com os campos em branco/genéricos.
 - **Selecionar um servidor existente**: mostra os detalhes salvos (inclusive
   propriedades que não aparecem no formulário — `userEmail`, `baseDir`,
-  `filter`, validade do token) e, em seguida, abre o **mesmo formulário**,
+  `filter`, validade do token) e, em seguida, pergunta o que fazer:
+  **Atualizar dados do servidor** ou **Regerar token** (`Esc` volta à lista).
+- **Regerar token**: renova apenas o token — nenhuma outra propriedade do
+  servidor é alterada, e um token ainda válido nunca é simplesmente
+  reaproveitado (o objetivo é obter um novo, ex.: para receber escopos novos
+  ou estender a validade).
+  - *GitLab*: rotaciona o token atual via
+    `POST /api/v4/personal_access_tokens/self/rotate` (sem pedir senha; o
+    token anterior é revogado pelo servidor). Se não houver token ou a
+    rotação falhar (token revogado, sem escopo `self_rotate`), pede a senha
+    uma vez e cria um novo token pelo login web, com o mesmo `tokenName` e
+    `tokenScopes` do cadastro. Cancelar a senha mantém o token atual.
+  - *GitHub*: abre uma nova autorização OAuth (device flow) no navegador,
+    já com os escopos atuais do PAJÉ, e salva o token com
+    `tokenOrigin: "oauth-device-flow"`.
+  - A lógica fica no core (`regenerateServerToken`, em `gitSyncService.ts`);
+    a apresentação só fornece o prompt de senha e a exibição do código.
+- **Atualizar dados do servidor**: abre o **mesmo formulário** do cadastro,
   agora **pré-preenchido** com os valores atuais desse servidor. O usuário
   pode visualizar, alterar qualquer campo e confirmar para persistir.
   - A gravação atualiza a entrada existente — nunca cria uma duplicata,

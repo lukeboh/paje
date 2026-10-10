@@ -267,6 +267,8 @@ const ptBR = {
       tokenRotateStart: "Token inválido, iniciando rotação para {{baseUrl}}...",
       tokenRotateSuccess: "Token rotacionado com sucesso para {{baseUrl}}.",
       tokenRotateFail: "Falha ao rotacionar token: {{message}}",
+      tokenRegenerated: "Novo token gerado para {{server}}.",
+      tokenRegenerateFail: "Falha ao regerar o token de {{server}}: {{message}}",
       tokenNameMissing: "Nome do token não informado.",
       credentialsMissing: "Usuário/senha não informados — cadastro cancelado (a senha nunca é lida de arquivo, só do prompt ou de --password).",
       tokenExpiredPrompting: "O token de {{server}} expirou ou foi revogado e não pôde ser renovado sozinho. Pedindo a senha para gerar um novo...",
@@ -393,6 +395,12 @@ const ptBR = {
         authSsh: "SSH",
         tokenPresent: "token configurado",
         tokenAbsent: "sem token",
+        actionPrompt: "O que deseja fazer com este servidor?",
+        actionEdit: "Atualizar dados do servidor",
+        actionEditDesc: "Abre o formulário pré-preenchido para alterar URL, nome, usuário e autenticação.",
+        actionRegenerateToken: "Regerar token",
+        actionRegenerateTokenDesc:
+          "Gera um novo token sem alterar o restante do cadastro (GitLab: rotaciona o atual ou pede a senha; GitHub: nova autorização no navegador).",
         detail: {
           name: "Nome",
           baseUrl: "URL base",
@@ -460,6 +468,15 @@ const ptBR = {
       },
       verbose: {
         title: "SSH - Detalhes",
+      },
+      regenerateToken: {
+        title: "Regerar token — {{server}}",
+        rotated: "Token rotacionado com sucesso. O token anterior foi revogado pelo servidor.",
+        created: "Novo token gerado e salvo com sucesso.",
+        cancelled: "Regeração de token cancelada. O token atual foi mantido.",
+        denied: "A autorização foi negada no GitHub. O token atual foi mantido.",
+        expired: "O código expirou antes da autorização ser concluída. O token atual foi mantido.",
+        failed: "Não foi possível regerar o token: {{message}}. O token atual foi mantido.",
       },
       github: {
         title: "GitHub",
