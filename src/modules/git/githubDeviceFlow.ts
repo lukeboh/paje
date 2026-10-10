@@ -6,10 +6,13 @@ import { execFile } from "node:child_process";
 // constant here instead of something that needs to be configured per user.
 export const GITHUB_OAUTH_CLIENT_ID = "Ov23li2sMJinkczX2RFj";
 
-// Matches what listGroups()/listUserProjects() need: read:org to list
-// organizations (GET /user/orgs), repo to list and clone private repos too
-// (GET /user/repos would otherwise only see public ones).
-export const GITHUB_DEVICE_FLOW_SCOPE = "repo read:org";
+// read:org lists organizations (GET /user/orgs); repo lists and clones
+// private repos (GET /user/repos would otherwise only see public ones) and
+// also covers creating releases. workflow allows pushing changes under
+// .github/workflows and write:packages allows publishing distribution
+// packages — without them a push that touches CI or a release pipeline
+// would be rejected by GitHub.
+export const GITHUB_DEVICE_FLOW_SCOPE = "repo workflow write:packages read:org";
 
 export type GitHubDeviceCodeResult = {
   deviceCode: string;

@@ -257,7 +257,7 @@ com uma senha guardada em lugar nenhum.
 3. Persiste o servidor com `type: "github"` em `~/.paje/git-servers.json`.
 4. As operações git usam URL HTTPS com `x-access-token:<token>@host` embutido (não há fluxo SSH para GitHub).
 
-> Crie o PAT em `github.com/settings/tokens` com escopos `repo` e `read:org`. Para GitHub Enterprise Server, a API é resolvida como `<baseUrl>/api/v3`.
+> Crie o PAT em `github.com/settings/tokens` com escopos `repo`, `workflow`, `write:packages` e `read:org` (`repo` cobre releases; `workflow` permite alterar `.github/workflows`; `write:packages` permite publicar pacotes). Para GitHub Enterprise Server, a API é resolvida como `<baseUrl>/api/v3`.
 
 ---
 

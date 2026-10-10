@@ -61,7 +61,7 @@ const mockFetch = async (url: string, init?: RequestInit): Promise<Response> => 
         headers: { "content-type": "application/json" },
       });
     }
-    return new Response(JSON.stringify({ access_token: "gho-device-flow-token", scope: "repo read:org" }), {
+    return new Response(JSON.stringify({ access_token: "gho-device-flow-token", scope: "repo workflow write:packages read:org" }), {
       status: 200,
       headers: { "content-type": "application/json" },
     });

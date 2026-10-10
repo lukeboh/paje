@@ -441,7 +441,7 @@ const enUS: PtBrTranslations = {
         cannotAddHost:
           "Unable to add {{server}} to ~/.ssh/known_hosts via ssh-keyscan. Host unreachable: {{server}}. Check connectivity/port 22 and permissions.",
         sshPort22Guidance:
-          "If port 22 is blocked, register again and choose \"I don't have SSH, but I have a username and password\" (--use-basic-auth) to bootstrap a token, or \"I already have a personal access token\" (--token) if you already created one.\n\nGitLab:\n  1. GitLab → Settings → Access Tokens → Add new token\n  2. Set a name (e.g. paje) and an optional expiry date\n  3. Required scopes: read_repository, read_api, self_rotate\n  4. Click \"Create personal access token\" and copy the value\n  5. Run: paje git-server-store --token <token>\n\nGitHub (coming soon):\n  1. GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)\n  2. Generate new token (classic)\n  3. Set a name and an optional expiry date\n  4. Required scopes: repo, read:user\n  5. Click \"Generate token\" and copy the value",
+          "If port 22 is blocked, register again and choose \"I don't have SSH, but I have a username and password\" (--use-basic-auth) to bootstrap a token, or \"I already have a personal access token\" (--token) if you already created one.\n\nGitLab:\n  1. GitLab → Settings → Access Tokens → Add new token\n  2. Set a name (e.g. paje) and an optional expiry date\n  3. Required scopes: read_repository, read_api, self_rotate\n  4. Click \"Create personal access token\" and copy the value\n  5. Run: paje git-server-store --token <token>\n\nGitHub (coming soon):\n  1. GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)\n  2. Generate new token (classic)\n  3. Set a name and an optional expiry date\n  4. Required scopes: repo, workflow, write:packages, read:org\n  5. Click \"Generate token\" and copy the value",
         port22Blocked: "Port 22 is unreachable for {{server}}. The SSH flow is not available.",
       },
       persistence: {
@@ -465,7 +465,7 @@ const enUS: PtBrTranslations = {
       github: {
         title: "GitHub",
         tokenLabel: "Personal Access Token (PAT)",
-        tokenDesc: "Create at: github.com/settings/tokens | Recommended scopes: repo, read:org",
+        tokenDesc: "Create at: github.com/settings/tokens | Recommended scopes: repo, workflow, write:packages, read:org",
         tokenValid: "Valid token. GitHub user: {{login}}",
         tokenInvalid: "Invalid token or insufficient permissions.",
         tokenMissing: "Token not provided.",

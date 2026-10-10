@@ -144,7 +144,7 @@ diagnóstico posterior.
 4. Persiste o servidor com `type: "github"`, `username` = login e o token.
 5. Operações git usam `x-access-token:<token>@host` na URL HTTPS.
 
-> Crie o PAT em `github.com/settings/tokens` com escopos `repo` e `read:org`.
+> Crie o PAT em `github.com/settings/tokens` com escopos `repo`, `workflow`, `write:packages` e `read:org` (`repo` cobre releases; `workflow` permite alterar `.github/workflows`; `write:packages` permite publicar pacotes).
 > Para GitHub Enterprise Server, a API é resolvida como `<baseUrl>/api/v3`.
 
 ## Saídas
