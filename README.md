@@ -72,7 +72,7 @@ O PAJÉ automatiza tarefas repetitivas de ambiente de desenvolvimento com servid
 - **Configuração por arquivo**: parâmetros em `~/.paje/env.yaml` (ou `--env-file`), com prioridade sobre padrões embutidos; criado automaticamente na primeira execução a partir de um template comentado.
 - **Editor de parâmetros na TUI (`Ctrl+E`)**: edição inline do `env.yaml` sem sair da interface, com alterações pendentes até salvar — grava preservando comentários e ordem das linhas, nunca reescrevendo o arquivo do zero.
 - **Ordem de prioridade clara**: propriedade do servidor > argumento de linha de comando > `env.yaml` > padrão embutido — cada servidor pode sobrepor filtros, diretório e e-mail individualmente.
-- **Persistência local**: servidores e tokens em `~/.paje/git-servers.json` (único segredo persistido em disco); cache da árvore em `~/.paje/git-tree-cache.json` (nunca com tokens); logs em `~/.paje/logs`.
+- **Persistência local**: servidores e tokens em `~/.paje/git-servers.json` (único segredo persistido em disco pelo PAJÉ, com permissão `0600`); cache da árvore em `~/.paje/git-tree-cache.json` (nunca com tokens); logs em `~/.paje/logs`.
 
 ### Interface
 
@@ -342,7 +342,7 @@ token-scopes: ["read_repository", "read_api", "read_virtual_registry", "self_rot
 token-expires-at: "2027-01-01"
 ```
 
-> Este arquivo não tem — e nunca teve — um campo de senha: ela só existe em memória, pedida interativamente (ou via `--password`) para o bootstrap único de um token ou chave SSH, e nunca é persistida em lugar nenhum. Tokens de acesso pessoal (GitLab/GitHub) também não ficam neste arquivo — são armazenados em `~/.paje/git-servers.json` após o registro do servidor. Use permissões restritas (`chmod 600`) para ambos os arquivos.
+> Este arquivo não tem — e nunca teve — um campo de senha: ela só existe em memória, pedida interativamente (ou via `--password`) para o bootstrap único de um token ou chave SSH, e nunca é persistida em lugar nenhum. Tokens de acesso pessoal (GitLab/GitHub) também não ficam neste arquivo — são armazenados em `~/.paje/git-servers.json` após o registro do servidor. O PAJÉ grava `git-servers.json` com permissão `0600` (e `~/.paje` com `0700`) automaticamente, corrigindo arquivos antigos; para o `env.yaml`, use também permissões restritas (`chmod 600`). O token fica no `git-servers.json` (usado pelo PAJÉ nas chamadas de API) e também é registrado no Git Credential Helper (usado pelo `git` no HTTPS) — ver `docs/arquitetura.md`, "Onde o token fica".
 
 ---
 

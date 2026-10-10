@@ -577,6 +577,57 @@ para `GitLabProject[]`, de modo que todo o restante do pipeline (árvore, filtro
 sincronização) é agnóstico do provedor. Em GitHub Enterprise Server a API é resolvida
 como `<baseUrl>/api/v3`; em github.com, `https://api.github.com`.
 
+### Onde o token fica — `git-servers.json` × Git Credential Helper
+
+O token de cada servidor existe em **dois lugares, com papéis diferentes**:
+
+| Onde | Quem usa | Para quê |
+|---|---|---|
+| `~/.paje/git-servers.json` (**fonte de verdade**) | O próprio PAJÉ | Toda chamada REST: listar grupos/projetos, validar, rotacionar e regerar o token (`GitLabApi`, `GitHubApi`, `rotatePersonalAccessToken`, `regenerateServerToken`) |
+| Git Credential Helper (`git credential approve`) | O `git` | Autenticar `clone`/`pull`/`push` por HTTPS sem embutir o token na URL do remote |
+
+**Por que o token não sai do `git-servers.json`** (avaliado e descartado):
+o PAJÉ teria de recuperá-lo com `git credential fill`, e isso não é confiável
+em todas as situações:
+
+- **Helper `cache`** guarda a credencial só em memória e a descarta após o
+  timeout (15 min por padrão) — o PAJÉ perderia o acesso à API.
+- **libsecret/keyring** em Linux sem sessão gráfica, WSL ou SSH remoto: o
+  chaveiro fica indisponível ou bloqueado e a leitura falha.
+- **O próprio git apaga a credencial**: quando uma autenticação HTTPS falha
+  (ex.: push com token vencido), o git executa `credential reject`
+  automaticamente. Sem cópia própria, o PAJÉ não teria o que rotacionar.
+- **Git Credential Manager** (Windows/github.com) pode devolver a credencial
+  OAuth dele — não a do PAJÉ, com outros escopos — ou abrir uma janela de
+  login no meio de uma leitura que deveria ser silenciosa.
+- **Helpers em nível de sistema ou por URL** (`credential.<url>.helper`, o
+  `manager` do Git for Windows em `--system`): qual helper responde depende
+  da configuração do usuário, fora do controle do PAJÉ.
+- **Dois servidores no mesmo host** com contas diferentes: o helper indexa
+  por host, e uma credencial sobrescreve a outra.
+- O helper `store` grava `~/.git-credentials` também em texto puro — mover o
+  token para lá não traria ganho de segurança.
+
+**Como o risco é mitigado em vez disso** (`persistence.ts`):
+
+- `git-servers.json` (e o legado `git-tokens.json`) são gravados com
+  permissão `0600` dentro de `~/.paje` com `0700` (`writeSecretJsonFile`),
+  por escrita atômica (arquivo temporário já `0600` + `rename`) — o token
+  nunca fica legível por outros usuários, nem por um instante, e uma queda
+  no meio da gravação não deixa o arquivo truncado.
+- Arquivos criados por versões anteriores (`0644` com o umask usual) são
+  corrigidos já na próxima **leitura** (`hardenSecretFile`), sem esperar uma
+  gravação.
+- No Windows o `chmod` não se aplica; o arquivo herda a ACL privada do
+  perfil do usuário.
+
+**Registro no helper também para servidores com SSH:** a cada carga da
+árvore (cache ou API) e a cada token novo/rotacionado, o token é registrado
+no helper **independentemente** de o host ter chave SSH. Assim um clone/push
+HTTPS (manual, ou se a chave SSH deixar de funcionar) continua autenticando,
+e uma credencial que o helper perdeu (cache expirado, `credential reject`
+após falha) é restaurada a partir do `git-servers.json` automaticamente.
+
 ### Garantia de `known_hosts` antes de qualquer operação git
 
 `ensureKnownHost`/`hasValidSshAssociation` (`core/gitSyncService.ts`) já

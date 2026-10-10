@@ -175,6 +175,8 @@ diagnóstico posterior.
 - Senhas/tokens não devem ser versionados.
 - Use `env.yaml` local com permissões restritas.
 - O token é o único segredo persistido, sempre em `~/.paje/git-servers.json`; o cache da árvore nunca contém tokens.
+- `~/.paje/git-servers.json` é gravado com permissão `0600` (diretório `~/.paje` com `0700`), por escrita atômica; arquivos antigos com permissão mais aberta são corrigidos na próxima leitura.
+- O token também é registrado no Git Credential Helper (para `clone`/`pull`/`push` por HTTPS), inclusive em hosts com chave SSH — mas o `git-servers.json` continua sendo a fonte de verdade, porque o PAJÉ precisa do token para a API e o helper não o devolve de forma confiável em todos os ambientes. Ver [arquitetura](../arquitetura.md#onde-o-token-fica--git-serversjson--git-credential-helper).
 - `~/.paje/env.yaml` é criado automaticamente na primeira execução de qualquer comando, a partir de [`env-template.yaml`](../../env-template.yaml). Comentários nunca são suprimidos em atualizações.
 
 ## Erros conhecidos

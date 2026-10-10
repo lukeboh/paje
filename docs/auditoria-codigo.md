@@ -534,6 +534,28 @@ URL continuam sendo exibidos ao usuário, como já acontecia em sessões
 headless). `tests/run-all.ts` e os dois testes de device flow definem
 `PAJE_NO_BROWSER=1`.
 
+#### ~~BUG-15~~ — `git-servers.json` com tokens em texto puro gravado legível por todos (`0644`)
+**Status: RESOLVIDO**
+
+`writeJsonFile()` (`persistence.ts`) gravava `~/.paje/git-servers.json` sem
+definir permissão; com o umask usual (`022`) o arquivo ficava `0644` e o
+diretório `~/.paje` `0755` — qualquer usuário da máquina conseguia ler os
+tokens de API de todos os servidores. Além disso, servidores cujo host tinha
+chave SSH nunca tinham o token registrado no Git Credential Helper
+(`gitSyncService.ts` pulava o `approveGitCredential` quando havia associação
+SSH), então um clone/push HTTPS nesses hosts não autenticava.
+
+Avaliou-se remover o token do `git-servers.json` e depender só do credential
+helper; a ideia foi descartada porque o PAJÉ precisa do token para a API e o
+helper não o devolve de forma confiável (ver `docs/arquitetura.md`, "Onde o
+token fica").
+
+**Correção:** `writeGitServers`/`writeGitTokens` usam `writeSecretJsonFile`
+(arquivo `0600`, diretório `0700`, gravação atômica via temp + `rename`);
+`readGitServers`/`readGitTokens` corrigem a permissão de arquivos antigos na
+leitura (`hardenSecretFile`). O token passa a ser registrado no helper também
+para hosts com SSH. Teste: `tests/git_servers_secret_storage_test.ts`.
+
 ---
 
 ### 1. BUGS / COMPORTAMENTOS INCORRETOS

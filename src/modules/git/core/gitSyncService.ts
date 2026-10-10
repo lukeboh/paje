@@ -851,15 +851,18 @@ export const createGitSyncCore = (): GitSyncCore => {
                 logger.warn(t("cli.sync.noAuthConfigured", { server: server.name }));
                 return null;
               }
-              if (!hasSshAssociation) {
-                void approveGitCredential({
-                  baseUrl: server.baseUrl,
-                  token: server.token,
-                  username: server.username,
-                  isGitHub: true,
-                  logger: (message) => logger.debug(message),
-                }).catch(() => {});
-              }
+              // Registered even when the host uses SSH: that way an HTTPS
+              // clone/push (a manual one, or a fallback if the SSH key stops
+              // working) still authenticates, and a credential the helper
+              // lost (expired cache, git's own `credential reject` after a
+              // failed auth) is restored from git-servers.json on every load.
+              void approveGitCredential({
+                baseUrl: server.baseUrl,
+                token: server.token,
+                username: server.username,
+                isGitHub: true,
+                logger: (message) => logger.debug(message),
+              }).catch(() => {});
               const api = new GitHubApi({
                 baseUrl: server.baseUrl,
                 token: server.token,
@@ -910,7 +913,9 @@ export const createGitSyncCore = (): GitSyncCore => {
               return null;
             }
 
-            if (resolvedToken && !hasSshAssociation) {
+            // Same reasoning as the GitHub branch above: always registered,
+            // SSH or not.
+            if (resolvedToken) {
               void approveGitCredential({
                 baseUrl: server.baseUrl,
                 token: resolvedToken,
@@ -994,15 +999,13 @@ export const createGitSyncCore = (): GitSyncCore => {
               const existingServers = readGitServers<GitServerEntry[]>([]);
               const merged = mergeServer(existingServers, withToken(server, healedToken));
               writeGitServers(merged.servers);
-              if (!hasSshAssociation) {
-                void approveGitCredential({
-                  baseUrl: server.baseUrl,
-                  token: healedToken,
-                  username: server.username,
-                  isGitHub: false,
-                  logger: (message) => logger.debug(message),
-                }).catch(() => {});
-              }
+              void approveGitCredential({
+                baseUrl: server.baseUrl,
+                token: healedToken,
+                username: server.username,
+                isGitHub: false,
+                logger: (message) => logger.debug(message),
+              }).catch(() => {});
 
               resolvedToken = healedToken;
               api = new GitLabApi({
@@ -1065,7 +1068,7 @@ export const createGitSyncCore = (): GitSyncCore => {
               }
             })();
             const hasSshAssociation = serverHost ? isServerSshActive(server, serverHost) : false;
-            if (server.token && !hasSshAssociation) {
+            if (server.token) {
               void approveGitCredential({
                 baseUrl: server.baseUrl,
                 token: server.token,

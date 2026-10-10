@@ -53,24 +53,75 @@ export const writeJsonFile = <T>(filePath: string, data: T): void => {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
 };
 
+// git-servers.json (and the legacy git-tokens.json) hold the API tokens in
+// plain text — they are the source of truth PAJÉ itself needs for every REST
+// call (listing groups/projects, validating, rotating), which the Git
+// Credential Helper can't reliably serve (see docs/arquitetura.md, "Onde o
+// token fica"). Since they can't move out, they're locked down instead:
+// owner-only file (0600) inside an owner-only directory (0700). On Windows
+// chmod only toggles read-only, so this is a no-op there; the file already
+// inherits the user profile's private ACL.
+const SECRET_DIR_MODE = 0o700;
+const SECRET_FILE_MODE = 0o600;
+
+const chmodIfNeeded = (target: string, mode: number): void => {
+  if (process.platform === "win32") {
+    return;
+  }
+  try {
+    if ((fs.statSync(target).mode & 0o777) !== mode) {
+      fs.chmodSync(target, mode);
+    }
+  } catch {
+    // Missing file or not ours to change — never break a read/write over it.
+  }
+};
+
+// Also called on every read, so a file written by an older PAJÉ version
+// (0644 under the usual umask) is tightened on the very next run, without
+// waiting for a write.
+export const hardenSecretFile = (filePath: string): void => {
+  chmodIfNeeded(path.dirname(filePath), SECRET_DIR_MODE);
+  chmodIfNeeded(filePath, SECRET_FILE_MODE);
+};
+
+// Written to a 0600 temp file and renamed over the target, so the token is
+// never readable by others — not even for the instant between write and
+// chmod — and a crash mid-write never leaves a truncated file behind.
+export const writeSecretJsonFile = <T>(filePath: string, data: T): void => {
+  const dir = path.dirname(filePath);
+  fs.mkdirSync(dir, { recursive: true, mode: SECRET_DIR_MODE });
+  const tempFile = `${filePath}.${process.pid}.tmp`;
+  try {
+    fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), { mode: SECRET_FILE_MODE });
+    fs.renameSync(tempFile, filePath);
+  } catch (error) {
+    fs.rmSync(tempFile, { force: true });
+    throw error;
+  }
+  hardenSecretFile(filePath);
+};
+
 export const readGitServers = <T>(fallback: T): T => {
   const { serversFile } = resolvePajePaths();
+  hardenSecretFile(serversFile);
   return readJsonFile<T>(serversFile, fallback);
 };
 
 export const writeGitServers = <T>(data: T): void => {
   const { serversFile } = resolvePajePaths();
-  writeJsonFile<T>(serversFile, data);
+  writeSecretJsonFile<T>(serversFile, data);
 };
 
 export const readGitTokens = <T>(fallback: T): T => {
   const { tokensFile } = resolvePajePaths();
+  hardenSecretFile(tokensFile);
   return readJsonFile<T>(tokensFile, fallback);
 };
 
 export const writeGitTokens = <T>(data: T): void => {
   const { tokensFile } = resolvePajePaths();
-  writeJsonFile<T>(tokensFile, data);
+  writeSecretJsonFile<T>(tokensFile, data);
 };
 
 export const readGitTreeCache = (): GitTreeCacheEntry | null => {
